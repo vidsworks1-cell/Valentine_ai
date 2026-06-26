@@ -1,0 +1,6 @@
+{
+  "name": "AI Work & Trade Hub",
+  "description": "An AI-powered dashboard that integrates automated market trading, creative content scripts, and freelance gig opportunities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
