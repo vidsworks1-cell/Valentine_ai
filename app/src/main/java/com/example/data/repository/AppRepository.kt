@@ -26,7 +26,12 @@ class AppRepository(private val db: AppDatabase) {
     val strategyDao = db.strategyDao()
     val experimentDao = db.experimentDao()
     val knowledgeDao = db.knowledgeDao()
-
+    private val taskQueueDao = db.taskQueueDao()
+    private val azaMissionDao = db.azaMissionDao()
+    private val executiveDecisionDao = db.executiveDecisionDao()
+    private val capabilityDao = db.capabilityDao()
+    private val laptopDao = db.laptopDao()
+ 
     // Observables (Flows)
     val portfolioAssets: Flow<List<PortfolioAsset>> = portfolioDao.getAllAssets()
     val contentItems: Flow<List<ContentItem>> = contentDao.getAllContent()
@@ -48,8 +53,63 @@ class AppRepository(private val db: AppDatabase) {
     val allExperimentTrades: Flow<List<ExperimentTrade>> = experimentDao.getAllExperimentTradesFlow()
     val knowledgeEntries: Flow<List<KnowledgeEntry>> = knowledgeDao.getAllKnowledgeFlow()
     val skillLibrary: Flow<List<SkillEntry>> = knowledgeDao.getAllSkillsFlow()
+    val allQueueTasks: Flow<List<TaskEntity>> = taskQueueDao.getAllTasksFlow()
+    val allMissions: Flow<List<AzaMission>> = azaMissionDao.getAllMissionsFlow()
+    val executiveDecisions: Flow<List<com.example.data.database.ExecutiveDecisionRecord>> = executiveDecisionDao.getAllDecisionsFlow()
+    val capabilityStates: Flow<List<CapabilityStateEntity>> = capabilityDao.getAllCapabilityStatesFlow()
+    val capabilityAuditLogs: Flow<List<CapabilityAuditLog>> = capabilityDao.getAllAuditLogsFlow()
+    val laptopDocuments: Flow<List<LaptopDocumentEntity>> = laptopDao.getAllDocumentsFlow()
+    val laptopExchangeHistory: Flow<List<LaptopExchangeRecord>> = laptopDao.getAllExchangeRecordsFlow()
     
     fun getTasksForObjective(objectiveId: Int): Flow<List<AzaAgentTask>> = azaGoalDao.getTasksForObjectiveFlow(objectiveId)
+
+    suspend fun getCapabilityStateByNameDirect(name: String): CapabilityStateEntity? = withContext(Dispatchers.IO) {
+        capabilityDao.getCapabilityStateByName(name)
+    }
+
+    suspend fun getAllCapabilityStatesDirect(): List<CapabilityStateEntity> = withContext(Dispatchers.IO) {
+        capabilityDao.getAllCapabilityStates()
+    }
+
+    suspend fun insertOrUpdateCapabilityState(state: CapabilityStateEntity) = withContext(Dispatchers.IO) {
+        capabilityDao.insertOrUpdateCapabilityState(state)
+    }
+
+    suspend fun updateCapabilityState(state: CapabilityStateEntity) = withContext(Dispatchers.IO) {
+        capabilityDao.updateCapabilityState(state)
+    }
+
+    suspend fun insertCapabilityAuditLog(log: CapabilityAuditLog): Long = withContext(Dispatchers.IO) {
+        capabilityDao.insertAuditLog(log)
+    }
+
+    suspend fun clearCapabilityAuditLogs() = withContext(Dispatchers.IO) {
+        capabilityDao.clearAllAuditLogs()
+    }
+
+    suspend fun getAllLaptopDocumentsDirect(): List<LaptopDocumentEntity> = withContext(Dispatchers.IO) {
+        laptopDao.getAllDocumentsDirect()
+    }
+
+    suspend fun insertLaptopDocuments(documents: List<LaptopDocumentEntity>) = withContext(Dispatchers.IO) {
+        laptopDao.insertDocuments(documents)
+    }
+
+    suspend fun clearAllLaptopDocuments() = withContext(Dispatchers.IO) {
+        laptopDao.clearAllDocuments()
+    }
+
+    suspend fun getAllLaptopExchangeRecordsDirect(): List<LaptopExchangeRecord> = withContext(Dispatchers.IO) {
+        laptopDao.getAllExchangeRecordsDirect()
+    }
+
+    suspend fun insertLaptopExchangeRecord(record: LaptopExchangeRecord): Long = withContext(Dispatchers.IO) {
+        laptopDao.insertExchangeRecord(record)
+    }
+
+    suspend fun clearAllLaptopExchangeHistory() = withContext(Dispatchers.IO) {
+        laptopDao.clearAllExchangeHistory()
+    }
     fun getTradesForExperiment(experimentId: Int): Flow<List<ExperimentTrade>> = experimentDao.getTradesForExperimentFlow(experimentId)
 
     suspend fun insertExecutionRecord(record: ExecutionRecord) = withContext(Dispatchers.IO) {
@@ -207,6 +267,10 @@ class AppRepository(private val db: AppDatabase) {
 
     suspend fun updateGig(gig: FreelanceGig) = withContext(Dispatchers.IO) {
         gigDao.updateGig(gig)
+    }
+
+    suspend fun insertGig(gig: FreelanceGig) = withContext(Dispatchers.IO) {
+        gigDao.insertGig(gig)
     }
 
     suspend fun insertTransaction(record: TransactionRecord) = withContext(Dispatchers.IO) {
@@ -427,6 +491,10 @@ class AppRepository(private val db: AppDatabase) {
     suspend fun getObjectiveByIdDirect(objectiveId: Int): AzaObjective? = withContext(Dispatchers.IO) {
         azaGoalDao.getObjectiveByIdDirect(objectiveId)
     }
+
+    suspend fun getObjectivesForMissionDirect(missionId: Int): List<AzaObjective> = withContext(Dispatchers.IO) {
+        azaGoalDao.getObjectivesForMissionDirect(missionId)
+    }
     
     suspend fun getTasksForObjectiveDirect(objectiveId: Int): List<AzaAgentTask> = withContext(Dispatchers.IO) {
         azaGoalDao.getTasksForObjectiveDirect(objectiveId)
@@ -451,6 +519,8 @@ class AppRepository(private val db: AppDatabase) {
     suspend fun clearGoalSystem() = withContext(Dispatchers.IO) {
         azaGoalDao.clearAllObjectives()
         azaGoalDao.clearAllTasks()
+        azaMissionDao.clearAllMissions()
+        taskQueueDao.clearAllTasks()
     }
 
     suspend fun decomposeObjectiveToTasks(objective: AzaObjective): List<AzaAgentTask> = withContext(Dispatchers.IO) {
@@ -617,5 +687,214 @@ class AppRepository(private val db: AppDatabase) {
 
     suspend fun clearAllSkills() = withContext(Dispatchers.IO) {
         knowledgeDao.clearAllSkills()
+    }
+
+    // Task Queue methods
+    suspend fun getQueueTasksByStatus(status: String): List<TaskEntity> = withContext(Dispatchers.IO) {
+        taskQueueDao.getTasksByStatusDirect(status)
+    }
+
+    suspend fun getQueueTaskById(id: Int): TaskEntity? = withContext(Dispatchers.IO) {
+        taskQueueDao.getTaskById(id)
+    }
+
+    suspend fun insertQueueTask(task: TaskEntity): Long = withContext(Dispatchers.IO) {
+        taskQueueDao.insertTask(task)
+    }
+
+    suspend fun insertQueueTasks(tasks: List<TaskEntity>) = withContext(Dispatchers.IO) {
+        taskQueueDao.insertTasks(tasks)
+    }
+
+    suspend fun updateQueueTask(task: TaskEntity) = withContext(Dispatchers.IO) {
+        taskQueueDao.updateTask(task)
+    }
+
+    suspend fun getQueueTasksForObjectiveDirect(objectiveId: Int): List<TaskEntity> = withContext(Dispatchers.IO) {
+        taskQueueDao.getTasksByObjectiveDirect(objectiveId)
+    }
+
+    suspend fun updateMissionProgressAndStatus(missionId: Int) = withContext(Dispatchers.IO) {
+        val objectives = azaGoalDao.getObjectivesForMissionDirect(missionId)
+        if (objectives.isEmpty()) return@withContext
+
+        var totalTasks = 0
+        var completedTasks = 0
+        var latestTaskName = "None"
+        var hasFailed = false
+        var hasRunning = false
+
+        for (obj in objectives) {
+            val tasks = taskQueueDao.getTasksByObjectiveDirect(obj.id)
+            totalTasks += tasks.size
+            completedTasks += tasks.count { it.status == "COMPLETED" || it.status == "REJECTED" }
+            if (tasks.any { it.status == "FAILED" }) {
+                hasFailed = true
+            }
+            if (tasks.any { it.status == "RUNNING" }) {
+                hasRunning = true
+            }
+            val lastActiveTask = tasks.lastOrNull { it.status == "RUNNING" || it.status == "COMPLETED" }
+            if (lastActiveTask != null) {
+                latestTaskName = lastActiveTask.title
+            }
+        }
+
+        val computedProgress = if (totalTasks > 0) {
+            (completedTasks.toFloat() / totalTasks.toFloat()) * 100f
+        } else {
+            0f
+        }
+
+        val mission = azaMissionDao.getMissionById(missionId)
+        if (mission != null) {
+            val nextStatus = when {
+                computedProgress >= 100f -> "Completed"
+                hasFailed -> "Failed"
+                hasRunning -> "Active"
+                else -> mission.status
+            }
+
+            val updatedMission = mission.copy(
+                progress = computedProgress,
+                status = nextStatus,
+                currentTask = if (computedProgress >= 100f) "Completed" else latestTaskName,
+                lastActivity = System.currentTimeMillis()
+            )
+
+            val isFinalState = nextStatus == "Completed" || nextStatus == "Failed"
+            val shouldPerformReview = isFinalState && !mission.hasReview
+            
+            val reviewedMission = if (shouldPerformReview) {
+                val delayingTasksList = mutableListOf<String>()
+                val agentSuccessCounts = mutableMapOf<String, Int>()
+                val mistakesList = mutableListOf<String>()
+                
+                for (obj in objectives) {
+                    val tasks = taskQueueDao.getTasksByObjectiveDirect(obj.id)
+                    for (t in tasks) {
+                        if (t.retryCount > 0) {
+                            delayingTasksList.add("${t.title} (${t.retryCount} retries)")
+                        }
+                        if (t.status == "COMPLETED") {
+                            agentSuccessCounts[t.assignedAgent] = (agentSuccessCounts[t.assignedAgent] ?: 0) + 1
+                        }
+                        if (t.status == "FAILED") {
+                            mistakesList.add("Task '${t.title}' failed: ${t.executionLog}")
+                        } else if (t.retryCount > 0) {
+                            mistakesList.add("Task '${t.title}' required ${t.retryCount} retries.")
+                        }
+                    }
+                }
+                
+                val bestAgentStr = agentSuccessCounts.maxByOrNull { it.value }?.key ?: "None"
+                val delayingTasksStr = if (delayingTasksList.isNotEmpty()) delayingTasksList.joinToString(", ") else "None"
+                val mistakesStr = if (mistakesList.isNotEmpty()) mistakesList.joinToString("; ") else "No mistakes detected during this mission execution cycle."
+                val lessonsLearnedStr = when {
+                    nextStatus == "Failed" -> "Prioritize risk validation constraints early, verify API dependencies and network routes before initiating live asset pipelines."
+                    delayingTasksList.isNotEmpty() -> "Calibrate dynamic retry latency backoffs. Pre-fetch trend metrics prior to dispatching active trader execution runs."
+                    else -> "Maintain current optimized decentralized planning route. Consider elevating portfolio trade exposure or increasing social publishing frequency."
+                }
+                
+                // Save Knowledge Entry
+                val kEntry = KnowledgeEntry(
+                    title = "Mission Experience: ${mission.title}",
+                    category = "Mission Review",
+                    description = "Successful: ${nextStatus == "Completed"}. Best Agent: $bestAgentStr. Lessons: $lessonsLearnedStr",
+                    evidence = "Mission review generated from execution logs of ${mission.title}. Mistakes: $mistakesStr",
+                    confidenceScore = 0.90
+                )
+                knowledgeDao.insertKnowledge(kEntry)
+                
+                updatedMission.copy(
+                    reviewWasSuccessful = nextStatus == "Completed",
+                    reviewDelayingTasks = delayingTasksStr,
+                    reviewBestAgent = bestAgentStr,
+                    reviewMistakes = mistakesStr,
+                    reviewLessonsLearned = lessonsLearnedStr,
+                    hasReview = true
+                )
+            } else {
+                updatedMission
+            }
+            azaMissionDao.updateMission(reviewedMission)
+        }
+    }
+
+    suspend fun deleteQueueTask(task: TaskEntity) = withContext(Dispatchers.IO) {
+        taskQueueDao.deleteTask(task)
+    }
+
+    suspend fun clearQueueTasks() = withContext(Dispatchers.IO) {
+        taskQueueDao.clearAllTasks()
+    }
+
+    fun getExecutionsForTaskFlow(taskId: Int): Flow<List<TaskExecution>> {
+        return taskQueueDao.getExecutionsForTaskFlow(taskId)
+    }
+
+    suspend fun insertTaskExecution(execution: TaskExecution): Long = withContext(Dispatchers.IO) {
+        taskQueueDao.insertExecution(execution)
+    }
+
+    suspend fun updateTaskExecution(execution: TaskExecution) = withContext(Dispatchers.IO) {
+        taskQueueDao.updateExecution(execution)
+    }
+
+    suspend fun clearAllExecutions() = withContext(Dispatchers.IO) {
+        taskQueueDao.clearAllExecutions()
+    }
+
+    suspend fun insertTaskDependency(dep: TaskDependency) = withContext(Dispatchers.IO) {
+        taskQueueDao.insertDependency(dep)
+    }
+
+    suspend fun getDependenciesForTask(taskId: Int): List<Int> = withContext(Dispatchers.IO) {
+        taskQueueDao.getDependenciesForTask(taskId)
+    }
+
+    suspend fun getDependentTasks(dependsOnTaskId: Int): List<Int> = withContext(Dispatchers.IO) {
+        taskQueueDao.getDependentTasks(dependsOnTaskId)
+    }
+
+    suspend fun clearAllDependencies() = withContext(Dispatchers.IO) {
+        taskQueueDao.clearAllDependencies()
+    }
+
+    // Aza Mission Operations
+    suspend fun getMissionById(id: Int): AzaMission? = withContext(Dispatchers.IO) {
+        azaMissionDao.getMissionById(id)
+    }
+
+    suspend fun getActiveMissionDirect(): AzaMission? = withContext(Dispatchers.IO) {
+        azaMissionDao.getActiveMissionDirect()
+    }
+
+    suspend fun insertMission(mission: AzaMission): Long = withContext(Dispatchers.IO) {
+        azaMissionDao.insertMission(mission)
+    }
+
+    suspend fun updateMission(mission: AzaMission) = withContext(Dispatchers.IO) {
+        azaMissionDao.updateMission(mission)
+    }
+
+    suspend fun deleteMission(mission: AzaMission) = withContext(Dispatchers.IO) {
+        azaMissionDao.deleteMission(mission)
+    }
+
+    suspend fun getPausedMissionIds(): List<Int> = withContext(Dispatchers.IO) {
+        azaMissionDao.getPausedMissionIds()
+    }
+
+    suspend fun clearAllMissions() = withContext(Dispatchers.IO) {
+        azaMissionDao.clearAllMissions()
+    }
+
+    suspend fun insertExecutiveDecision(decision: com.example.data.database.ExecutiveDecisionRecord) = withContext(Dispatchers.IO) {
+        executiveDecisionDao.insertDecision(decision)
+    }
+
+    suspend fun clearAllExecutiveDecisions() = withContext(Dispatchers.IO) {
+        executiveDecisionDao.clearAllDecisions()
     }
 }

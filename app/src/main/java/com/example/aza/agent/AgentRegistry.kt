@@ -9,11 +9,20 @@ class AgentRegistry {
     private val agents = mutableMapOf<String, AutonomousAgent>()
 
     init {
+        // Legacy compatibility agents
         register(CryptoTradingAgent())
         register(ContentCreationAgent())
         register(FreelanceAgent())
         register(ComplianceYieldAuditorAgent())
         register(WebSurferAgent())
+
+        // Modern Phase 10 independent agents
+        register(TradingAgent())
+        register(ResearchAgent())
+        register(KnowledgeAgent())
+        register(RiskAgent())
+        register(ContentAgent())
+        register(DiagnosticsAgent())
     }
 
     /**

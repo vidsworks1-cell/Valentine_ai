@@ -21,7 +21,13 @@ class SkillRegistry {
             ContentCreationAgent(),
             FreelanceAgent(),
             ComplianceYieldAuditorAgent(),
-            WebSurferAgent()
+            WebSurferAgent(),
+            TradingAgent(),
+            ResearchAgent(),
+            KnowledgeAgent(),
+            RiskAgent(),
+            ContentAgent(),
+            DiagnosticsAgent()
         )
         autoRegisterSkills(agentSuite)
     }
@@ -39,6 +45,7 @@ class SkillRegistry {
                     "freelance_writing" -> listOf("available_gigs")
                     "compliance_audit" -> listOf("transaction_records", "balance_usd")
                     "web_surfing" -> listOf("web_query")
+                    "knowledge_management" -> listOf("outcome_quality", "confidence")
                     else -> listOf("generic_input")
                 }
                 val outputs = when (cap.skill) {
@@ -48,6 +55,7 @@ class SkillRegistry {
                     "freelance_writing" -> listOf("proposal_text", "bid_status")
                     "compliance_audit" -> listOf("compliance_approved", "audited_balance")
                     "web_surfing" -> listOf("scraped_content")
+                    "knowledge_management" -> listOf("knowledge_created")
                     else -> listOf("generic_output")
                 }
                 register(

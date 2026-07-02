@@ -46,4 +46,34 @@ interface AutonomousAgent {
         context: TaskContext,
         repository: AppRepository
     ): AgentResult
+
+    /**
+     * Determines if the agent can handle the specific task.
+     */
+    fun canHandle(task: AzaAgentTask): Boolean {
+        return capabilities().any { it.skill == task.requiredSkill }
+    }
+
+    /**
+     * Cancels an ongoing task execution.
+     */
+    fun cancel(task: AzaAgentTask) {
+        // Default empty implementation
+    }
+
+    /**
+     * Estimates cost in credits/dollars for running the task.
+     */
+    fun estimateCost(task: AzaAgentTask): Double {
+        val cap = capabilities().find { it.skill == task.requiredSkill }
+        return if (task.requiredSkill == "crypto_trading") 250.0 else 0.0
+    }
+
+    /**
+     * Estimates execution time in milliseconds.
+     */
+    fun estimateTime(task: AzaAgentTask): Long {
+        val cap = capabilities().find { it.skill == task.requiredSkill }
+        return cap?.estimatedDurationMs ?: 1500L
+    }
 }

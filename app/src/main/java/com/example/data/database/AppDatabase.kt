@@ -30,9 +30,18 @@ import kotlinx.coroutines.launch
         Experiment::class,
         ExperimentTrade::class,
         KnowledgeEntry::class,
-        SkillEntry::class
+        SkillEntry::class,
+        TaskEntity::class,
+        TaskExecution::class,
+        TaskDependency::class,
+        AzaMission::class,
+        ExecutiveDecisionRecord::class,
+        CapabilityStateEntity::class,
+        CapabilityAuditLog::class,
+        LaptopDocumentEntity::class,
+        LaptopExchangeRecord::class
     ],
-    version = 12,
+    version = 18,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -49,6 +58,11 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun strategyDao(): StrategyDao
     abstract fun experimentDao(): ExperimentDao
     abstract fun knowledgeDao(): KnowledgeDao
+    abstract fun taskQueueDao(): TaskQueueDao
+    abstract fun azaMissionDao(): AzaMissionDao
+    abstract fun executiveDecisionDao(): ExecutiveDecisionDao
+    abstract fun capabilityDao(): CapabilityDao
+    abstract fun laptopDao(): LaptopDao
 
 
     companion object {
@@ -606,6 +620,67 @@ abstract class AppDatabase : RoomDatabase() {
             )
             for (skill in skills) {
                 db.knowledgeDao().insertSkill(skill)
+            }
+
+            // Prepopulate initial capabilities
+            val initialCapabilities = listOf(
+                CapabilityStateEntity(
+                    name = "Binance Capability",
+                    description = "Secure trade execution and real-time wallet/order tracking interface for digital asset trading.",
+                    supportedActions = "READ_BALANCE,READ_POSITIONS,READ_ORDERS,MARKET_INFO,EXECUTE_PAPER_TRADE,EXECUTE_REAL_TRADE",
+                    requiredPermissions = "READ,WRITE,FINANCIAL,HIGH RISK",
+                    isEnabled = true,
+                    status = "ONLINE",
+                    healthState = "HEALTHY"
+                ),
+                CapabilityStateEntity(
+                    name = "Content Capability",
+                    description = "Comprehensive multi-platform content automation and writing draft synthesis pipelines.",
+                    supportedActions = "GENERATE_IDEAS,CREATE_DRAFTS,GENERATE_SCRIPTS,PRODUCE_CAPTIONS,GENERATE_HASHTAGS,PUBLISHING_SCHEDULES,BUILD_PIPELINE",
+                    requiredPermissions = "READ,WRITE,PUBLISH",
+                    isEnabled = true,
+                    status = "ONLINE",
+                    healthState = "HEALTHY"
+                ),
+                CapabilityStateEntity(
+                    name = "YouTube Capability",
+                    description = "Video channel statistics tracking, upload packaging, playlist arrangement, and performance metrics feedback.",
+                    supportedActions = "CHANNEL_ANALYTICS,UPLOAD_PREP,METADATA_GEN,THUMBNAIL_WORKFLOW,PLAYLIST_ORG,PUBLISH_QUEUE,TRACK_PERFORMANCE",
+                    requiredPermissions = "READ,WRITE,PUBLISH",
+                    isEnabled = true,
+                    status = "ONLINE",
+                    healthState = "HEALTHY"
+                ),
+                CapabilityStateEntity(
+                    name = "Freelance Capability",
+                    description = "Automated matching, opportunity ranking, dynamic application proposal drafts, and bid telemetry reporting.",
+                    supportedActions = "MONITOR_OPPORTUNITIES,MATCH_SKILLS,RANK_OPPORTUNITIES,DRAFT_PROPOSAL,BUILD_APPLICATION_PACKAGE,TRACK_OPPORTUNITIES,LEARN_OUTCOMES",
+                    requiredPermissions = "READ,WRITE,EXECUTE",
+                    isEnabled = true,
+                    status = "ONLINE",
+                    healthState = "HEALTHY"
+                ),
+                CapabilityStateEntity(
+                    name = "Notification Capability",
+                    description = "System notifications, security thresholds, approval request triggers, and executive decision telemetry.",
+                    supportedActions = "MISSION_COMPLETED,EXEC_DECISION,SAFETY_WARNING,APPROVAL_REQUEST,MISSION_FAILURE,CAPABILITY_FAILURE,RESOURCE_WARNING",
+                    requiredPermissions = "READ,WRITE,EXECUTE",
+                    isEnabled = true,
+                    status = "ONLINE",
+                    healthState = "HEALTHY"
+                ),
+                CapabilityStateEntity(
+                    name = "Laptop Agent Capability",
+                    description = "Bidirectional local network interface for secure document retrieval, sync status orchestration, and unified file exchange with the Laptop Host agent.",
+                    supportedActions = "RETRIEVE_DOCUMENTS,EXCHANGE_DATA,GET_SYNC_STATUS,PING_HOST,DOWNLOAD_DOCUMENT",
+                    requiredPermissions = "READ,WRITE,EXECUTE",
+                    isEnabled = true,
+                    status = "ONLINE",
+                    healthState = "HEALTHY"
+                )
+            )
+            for (cap in initialCapabilities) {
+                db.capabilityDao().insertOrUpdateCapabilityState(cap)
             }
         }
     }

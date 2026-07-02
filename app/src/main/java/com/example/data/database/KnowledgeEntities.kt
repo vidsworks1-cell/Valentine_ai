@@ -19,7 +19,8 @@ data class KnowledgeEntry(
     val confidenceScore: Double, // 0.0 to 1.0
     val dateCreated: Long = System.currentTimeMillis(),
     val timesConfirmed: Int = 1,
-    val isConfirmed: Boolean = true
+    val isConfirmed: Boolean = true,
+    val userRating: String? = null
 )
 
 @Entity(tableName = "skill_library")

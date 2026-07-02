@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 @Entity(tableName = "aza_objectives")
 data class AzaObjective(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val missionId: Int? = null,
     val objective: String,
     val title: String = objective,
     val targetPlatform: String = "ALL", // YOUTUBE, TIKTOK, CRYPTO, FREELANCE, ALL
@@ -86,6 +87,9 @@ interface AzaGoalDao {
 
     @Update
     suspend fun updateTask(task: AzaAgentTask)
+
+    @Query("SELECT * FROM aza_objectives WHERE missionId = :missionId")
+    suspend fun getObjectivesForMissionDirect(missionId: Int): List<AzaObjective>
 
     @Query("DELETE FROM aza_objectives")
     suspend fun clearAllObjectives()
