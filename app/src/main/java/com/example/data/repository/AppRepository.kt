@@ -31,8 +31,16 @@ class AppRepository(private val db: AppDatabase) {
     private val executiveDecisionDao = db.executiveDecisionDao()
     private val capabilityDao = db.capabilityDao()
     private val laptopDao = db.laptopDao()
+    private val binanceDao = db.binanceDao()
+    val marketIntelligenceDao = db.marketIntelligenceDao()
+    val portfolioPositionDao = db.portfolioPositionDao()
  
     // Observables (Flows)
+    val allPositions: Flow<List<BinancePositionEntity>> = portfolioPositionDao.getAllPositionsFlow()
+    val allReviews: Flow<List<PositionReviewEntity>> = portfolioPositionDao.getAllReviewsFlow()
+    val allAlerts: Flow<List<PositionAlertEntity>> = portfolioPositionDao.getAllAlertsFlow()
+    val marketOpportunities: Flow<List<com.example.data.database.OpportunityEntity>> = marketIntelligenceDao.getAllOpportunitiesFlow()
+    val tradeProposals: Flow<List<com.example.data.database.TradeProposalEntity>> = marketIntelligenceDao.getAllProposalsFlow()
     val portfolioAssets: Flow<List<PortfolioAsset>> = portfolioDao.getAllAssets()
     val contentItems: Flow<List<ContentItem>> = contentDao.getAllContent()
     val freelanceGigs: Flow<List<FreelanceGig>> = gigDao.getAllGigs()
@@ -60,6 +68,8 @@ class AppRepository(private val db: AppDatabase) {
     val capabilityAuditLogs: Flow<List<CapabilityAuditLog>> = capabilityDao.getAllAuditLogsFlow()
     val laptopDocuments: Flow<List<LaptopDocumentEntity>> = laptopDao.getAllDocumentsFlow()
     val laptopExchangeHistory: Flow<List<LaptopExchangeRecord>> = laptopDao.getAllExchangeRecordsFlow()
+    val binanceOrders: Flow<List<BinanceOrderEntity>> = binanceDao.getAllBinanceOrdersFlow()
+    val binanceTrades: Flow<List<BinanceTradeEntity>> = binanceDao.getAllBinanceTradesFlow()
     
     fun getTasksForObjective(objectiveId: Int): Flow<List<AzaAgentTask>> = azaGoalDao.getTasksForObjectiveFlow(objectiveId)
 
@@ -85,6 +95,31 @@ class AppRepository(private val db: AppDatabase) {
 
     suspend fun clearCapabilityAuditLogs() = withContext(Dispatchers.IO) {
         capabilityDao.clearAllAuditLogs()
+    }
+
+    // Binance operations
+    suspend fun getAllBinanceOrdersDirect(): List<BinanceOrderEntity> = withContext(Dispatchers.IO) {
+        binanceDao.getAllBinanceOrdersDirect()
+    }
+
+    suspend fun insertBinanceOrders(orders: List<BinanceOrderEntity>) = withContext(Dispatchers.IO) {
+        binanceDao.insertBinanceOrders(orders)
+    }
+
+    suspend fun clearAllBinanceOrders() = withContext(Dispatchers.IO) {
+        binanceDao.clearAllBinanceOrders()
+    }
+
+    suspend fun getAllBinanceTradesDirect(): List<BinanceTradeEntity> = withContext(Dispatchers.IO) {
+        binanceDao.getAllBinanceTradesDirect()
+    }
+
+    suspend fun insertBinanceTrades(trades: List<BinanceTradeEntity>) = withContext(Dispatchers.IO) {
+        binanceDao.insertBinanceTrades(trades)
+    }
+
+    suspend fun clearAllBinanceTrades() = withContext(Dispatchers.IO) {
+        binanceDao.clearAllBinanceTrades()
     }
 
     suspend fun getAllLaptopDocumentsDirect(): List<LaptopDocumentEntity> = withContext(Dispatchers.IO) {
@@ -132,12 +167,20 @@ class AppRepository(private val db: AppDatabase) {
         strategyDao.getActiveStrategyDirect()
     }
 
+    suspend fun getAllStrategiesDirect(): List<StrategyEntity> = withContext(Dispatchers.IO) {
+        strategyDao.getAllStrategiesDirect()
+    }
+
     suspend fun getStrategyByNameDirect(name: String): StrategyEntity? = withContext(Dispatchers.IO) {
         strategyDao.getStrategyByNameDirect(name)
     }
 
     suspend fun insertStrategy(strategy: StrategyEntity) = withContext(Dispatchers.IO) {
         strategyDao.insertStrategy(strategy)
+    }
+
+    suspend fun insertStrategies(strategies: List<StrategyEntity>) = withContext(Dispatchers.IO) {
+        strategyDao.insertStrategies(strategies)
     }
 
     suspend fun updateStrategy(strategy: StrategyEntity) = withContext(Dispatchers.IO) {
@@ -890,11 +933,105 @@ class AppRepository(private val db: AppDatabase) {
         azaMissionDao.clearAllMissions()
     }
 
-    suspend fun insertExecutiveDecision(decision: com.example.data.database.ExecutiveDecisionRecord) = withContext(Dispatchers.IO) {
+    suspend fun insertExecutiveDecision(decision: com.example.data.database.ExecutiveDecisionRecord): Long = withContext(Dispatchers.IO) {
         executiveDecisionDao.insertDecision(decision)
     }
 
     suspend fun clearAllExecutiveDecisions() = withContext(Dispatchers.IO) {
         executiveDecisionDao.clearAllDecisions()
+    }
+
+    // Market Intelligence Helpers
+    suspend fun getAllOpportunitiesDirect(): List<com.example.data.database.OpportunityEntity> = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.getAllOpportunitiesDirect()
+    }
+
+    suspend fun getOpportunityById(id: Int): com.example.data.database.OpportunityEntity? = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.getOpportunityById(id)
+    }
+
+    suspend fun insertOpportunity(opportunity: com.example.data.database.OpportunityEntity): Long = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.insertOpportunity(opportunity)
+    }
+
+    suspend fun updateOpportunity(opportunity: com.example.data.database.OpportunityEntity) = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.updateOpportunity(opportunity)
+    }
+
+    suspend fun clearAllOpportunities() = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.clearAllOpportunities()
+    }
+
+    suspend fun getAllProposalsDirect(): List<com.example.data.database.TradeProposalEntity> = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.getAllProposalsDirect()
+    }
+
+    suspend fun getProposalById(id: Int): com.example.data.database.TradeProposalEntity? = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.getProposalById(id)
+    }
+
+    suspend fun insertProposal(proposal: com.example.data.database.TradeProposalEntity): Long = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.insertProposal(proposal)
+    }
+
+    suspend fun updateProposal(proposal: com.example.data.database.TradeProposalEntity) = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.updateProposal(proposal)
+    }
+
+    suspend fun clearAllProposals() = withContext(Dispatchers.IO) {
+        marketIntelligenceDao.clearAllProposals()
+    }
+
+    // Phase 17: Portfolio Position Helpers
+    suspend fun getAllPositionsDirect(): List<BinancePositionEntity> = withContext(Dispatchers.IO) {
+        portfolioPositionDao.getAllPositionsDirect()
+    }
+
+    suspend fun getPositionBySymbol(symbol: String): BinancePositionEntity? = withContext(Dispatchers.IO) {
+        portfolioPositionDao.getPositionBySymbol(symbol)
+    }
+
+    suspend fun insertPosition(position: BinancePositionEntity) = withContext(Dispatchers.IO) {
+        portfolioPositionDao.insertPosition(position)
+    }
+
+    suspend fun updatePosition(position: BinancePositionEntity) = withContext(Dispatchers.IO) {
+        portfolioPositionDao.updatePosition(position)
+    }
+
+    suspend fun deletePosition(symbol: String) = withContext(Dispatchers.IO) {
+        portfolioPositionDao.deletePosition(symbol)
+    }
+
+    suspend fun clearAllPositions() = withContext(Dispatchers.IO) {
+        portfolioPositionDao.clearAllPositions()
+    }
+
+    suspend fun getAllReviewsDirect(): List<PositionReviewEntity> = withContext(Dispatchers.IO) {
+        portfolioPositionDao.getAllReviewsDirect()
+    }
+
+    suspend fun insertReview(review: PositionReviewEntity): Long = withContext(Dispatchers.IO) {
+        portfolioPositionDao.insertReview(review)
+    }
+
+    suspend fun clearAllReviews() = withContext(Dispatchers.IO) {
+        portfolioPositionDao.clearAllReviews()
+    }
+
+    suspend fun getAllAlertsDirect(): List<PositionAlertEntity> = withContext(Dispatchers.IO) {
+        portfolioPositionDao.getAllAlertsDirect()
+    }
+
+    suspend fun insertAlert(alert: PositionAlertEntity): Long = withContext(Dispatchers.IO) {
+        portfolioPositionDao.insertAlert(alert)
+    }
+
+    suspend fun markAlertAsRead(id: Int) = withContext(Dispatchers.IO) {
+        portfolioPositionDao.markAlertAsRead(id)
+    }
+
+    suspend fun clearAllAlerts() = withContext(Dispatchers.IO) {
+        portfolioPositionDao.clearAllAlerts()
     }
 }

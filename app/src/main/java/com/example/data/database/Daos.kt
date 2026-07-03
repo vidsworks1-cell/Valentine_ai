@@ -132,4 +132,32 @@ interface AzaLearningRecordDao {
     suspend fun clearAllLearningRecords()
 }
 
+@Dao
+interface BinanceDao {
+    @Query("SELECT * FROM binance_orders ORDER BY timestamp DESC")
+    fun getAllBinanceOrdersFlow(): Flow<List<BinanceOrderEntity>>
+
+    @Query("SELECT * FROM binance_orders ORDER BY timestamp DESC")
+    suspend fun getAllBinanceOrdersDirect(): List<BinanceOrderEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBinanceOrders(orders: List<BinanceOrderEntity>)
+
+    @Query("DELETE FROM binance_orders")
+    suspend fun clearAllBinanceOrders()
+
+    @Query("SELECT * FROM binance_trades ORDER BY timestamp DESC")
+    fun getAllBinanceTradesFlow(): Flow<List<BinanceTradeEntity>>
+
+    @Query("SELECT * FROM binance_trades ORDER BY timestamp DESC")
+    suspend fun getAllBinanceTradesDirect(): List<BinanceTradeEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBinanceTrades(trades: List<BinanceTradeEntity>)
+
+    @Query("DELETE FROM binance_trades")
+    suspend fun clearAllBinanceTrades()
+}
+
+
 

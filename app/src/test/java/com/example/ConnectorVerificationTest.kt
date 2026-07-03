@@ -239,6 +239,9 @@ class ConnectorVerificationTest {
     fun testBinanceDynamicPolicy_AutonomousVsApproval() = runBlocking {
         println("--- TEST: Binance Dynamic Policy Enforcement ---")
 
+        // Enable real order placement temporarily to test live trade policies
+        com.example.aza.connector.BinanceConnector.setOrderPlacementEnabled(true)
+
         // 1. Enable Live mode & approval policy
         val state = repository.getCapabilityStateByNameDirect(binanceCap.name)
         assertNotNull(state)
@@ -265,6 +268,9 @@ class ConnectorVerificationTest {
         assertTrue(approvedResult.success)
         assertEquals("FILLED", approvedResult.outputData["status"])
         assertEquals("LIVE_REAL", approvedResult.outputData["mode"])
+
+        // Reset real order placement back to disabled
+        com.example.aza.connector.BinanceConnector.setOrderPlacementEnabled(false)
     }
 
     @Test
@@ -327,15 +333,15 @@ class ConnectorVerificationTest {
 
         val capabilityName = binanceCap.name
         
-        // Execute an unsupported action 3 times, causing failures.
-        // Or send an action that fails naturally.
+        // 1. Enable Live mode but with empty credentials, so supported actions fail!
         val stateBefore = repository.getCapabilityStateByNameDirect(capabilityName)
         assertNotNull(stateBefore)
-        assertTrue(stateBefore!!.isEnabled)
-        assertEquals("ONLINE", stateBefore.status)
+        repository.insertOrUpdateCapabilityState(
+            stateBefore!!.copy(operatingMode = "LIVE", apiKey = "", apiSecret = "", isEnabled = true, status = "ONLINE", errorCount = 0, healthState = "HEALTHY")
+        )
 
         // Failure 1
-        var result1 = registry.executeActionSecurely(capabilityName, "INVALID_ACTION", emptyMap(), null) { println(it) }
+        var result1 = registry.executeActionSecurely(capabilityName, "READ_BALANCE", emptyMap(), null) { println(it) }
         assertFalse(result1.success)
 
         val stateAfter1 = repository.getCapabilityStateByNameDirect(capabilityName)
@@ -344,7 +350,7 @@ class ConnectorVerificationTest {
         assertTrue(stateAfter1!!.isEnabled)
 
         // Failure 2
-        var result2 = registry.executeActionSecurely(capabilityName, "INVALID_ACTION", emptyMap(), null) { println(it) }
+        var result2 = registry.executeActionSecurely(capabilityName, "READ_BALANCE", emptyMap(), null) { println(it) }
         assertFalse(result2.success)
 
         val stateAfter2 = repository.getCapabilityStateByNameDirect(capabilityName)
@@ -353,7 +359,7 @@ class ConnectorVerificationTest {
         assertTrue(stateAfter2!!.isEnabled)
 
         // Failure 3 - Watchdog should activate!
-        var result3 = registry.executeActionSecurely(capabilityName, "INVALID_ACTION", emptyMap(), null) { println(it) }
+        var result3 = registry.executeActionSecurely(capabilityName, "READ_BALANCE", emptyMap(), null) { println(it) }
         assertFalse(result3.success)
 
         val stateAfter3 = repository.getCapabilityStateByNameDirect(capabilityName)
