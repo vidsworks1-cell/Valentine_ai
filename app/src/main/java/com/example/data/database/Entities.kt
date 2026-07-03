@@ -104,4 +104,31 @@ data class AzaLearningRecord(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "binance_orders")
+data class BinanceOrderEntity(
+    @PrimaryKey val orderId: String,
+    val symbol: String,
+    val side: String,
+    val type: String,
+    val price: Double,
+    val origQty: Double,
+    val executedQty: Double,
+    val status: String,
+    val timestamp: Long
+)
+
+@Entity(tableName = "binance_trades")
+data class BinanceTradeEntity(
+    @PrimaryKey val id: String,
+    val orderId: String,
+    val symbol: String,
+    val price: Double,
+    val qty: Double,
+    val commission: Double,
+    val commissionAsset: String,
+    val timestamp: Long,
+    val isBuyer: Boolean
+)
+
+
 

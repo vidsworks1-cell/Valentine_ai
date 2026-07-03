@@ -13,6 +13,9 @@ interface StrategyDao {
     @Query("SELECT * FROM strategy_metadata ORDER BY ranking ASC, strategyName ASC")
     fun getAllStrategiesFlow(): Flow<List<StrategyEntity>>
 
+    @Query("SELECT * FROM strategy_metadata ORDER BY ranking ASC, strategyName ASC")
+    suspend fun getAllStrategiesDirect(): List<StrategyEntity>
+
     @Query("SELECT * FROM strategy_metadata WHERE strategyName = :name LIMIT 1")
     suspend fun getStrategyByNameDirect(name: String): StrategyEntity?
 

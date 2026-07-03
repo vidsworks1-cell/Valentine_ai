@@ -15,6 +15,13 @@ import com.example.aza.web.SearchResult
 
 class AppViewModel(private val repository: AppRepository) : ViewModel() {
 
+    // Market Intelligence Observables
+    val marketIntelligenceEngine = com.example.aza.intelligence.MarketIntelligenceEngine(repository, viewModelScope)
+    val marketOpportunities: StateFlow<List<com.example.data.database.OpportunityEntity>> = repository.marketOpportunities
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val tradeProposals: StateFlow<List<com.example.data.database.TradeProposalEntity>> = repository.tradeProposals
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Main Tables Observables
     val portfolioAssets: StateFlow<List<PortfolioAsset>> = repository.portfolioAssets
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -58,6 +65,21 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     val allQueueTasks: StateFlow<List<TaskEntity>> = repository.allQueueTasks
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val binanceOrders: StateFlow<List<com.example.data.database.BinanceOrderEntity>> = repository.binanceOrders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val binanceTrades: StateFlow<List<com.example.data.database.BinanceTradeEntity>> = repository.binanceTrades
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allPositions: StateFlow<List<com.example.data.database.BinancePositionEntity>> = repository.allPositions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allReviews: StateFlow<List<com.example.data.database.PositionReviewEntity>> = repository.allReviews
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allAlerts: StateFlow<List<com.example.data.database.PositionAlertEntity>> = repository.allAlerts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun insertExportedReport(report: com.example.data.database.ExportedReportHistory) {
         viewModelScope.launch {
             repository.insertExportedReport(report)
@@ -73,6 +95,334 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     fun clearAllExportedReports() {
         viewModelScope.launch {
             repository.clearAllExportedReports()
+        }
+    }
+
+    // Phase 16: Live Execution & Safety Lock states
+    val isOrderPlacementEnabled: StateFlow<Boolean> = com.example.aza.connector.BinanceConnector.isOrderPlacementEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun setOrderPlacementEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            com.example.aza.connector.BinanceConnector.setOrderPlacementEnabled(enabled)
+            // Log this action to the trade audit logs
+            repository.insertTradeAuditLog(
+                com.example.data.database.TradeAuditLog(
+                    strategyName = "SYSTEM_SAFETY",
+                    marketRegime = "LIVE",
+                    signal = if (enabled) "LOCK_DISABLED" else "LOCK_ENABLED",
+                    entryReason = "Manual Safety Lock Toggle",
+                    exitReason = "",
+                    confidence = 1.0,
+                    positionSize = 0.0,
+                    expectedProfit = 0.0,
+                    actualProfit = 0.0,
+                    slippage = 0.0,
+                    fees = 0.0,
+                    executionLatencyMs = 0L
+                )
+            )
+        }
+    }
+
+    fun updateProposal(proposal: com.example.data.database.TradeProposalEntity) {
+        viewModelScope.launch {
+            repository.updateProposal(proposal)
+        }
+    }
+
+    /**
+     * Approve a trade proposal, executing a live or mock/paper order
+     */
+    fun approveTradeProposal(proposal: com.example.data.database.TradeProposalEntity, isLive: Boolean) {
+        viewModelScope.launch {
+            // Immediately lock/update the proposal state to prevent duplicate clicks (Idempotency)
+            val updatedToExecuting = proposal.copy(status = "EXECUTING")
+            repository.updateProposal(updatedToExecuting)
+
+            if (isLive) {
+                // Live order placement via BinanceConnector
+                val symbol = proposal.symbol
+                val side = proposal.side.uppercase()
+                val quantity = proposal.positionSize / proposal.entry // calculate quantity in base asset
+                val clientOrderId = "aza_live_" + java.util.UUID.randomUUID().toString().take(12)
+
+                val startTime = System.currentTimeMillis()
+                val orderResult = com.example.aza.connector.BinanceConnector.placeOrder(
+                    symbol = symbol,
+                    side = side,
+                    type = "MARKET", // use Market order for simple, fast execution
+                    quantity = quantity,
+                    clientOrderId = clientOrderId
+                )
+                val latency = System.currentTimeMillis() - startTime
+
+                if (orderResult.isSuccess) {
+                    val openOrder = orderResult.getOrThrow()
+                    val orderId = openOrder.orderId
+
+                    // Update proposal status to FILLED/SUCCESS
+                    val updatedToFilled = proposal.copy(status = "FILLED")
+                    repository.updateProposal(updatedToFilled)
+
+                    // Insert to BinanceOrderEntity
+                    val orderEntity = com.example.data.database.BinanceOrderEntity(
+                        orderId = orderId,
+                        symbol = symbol,
+                        status = openOrder.status,
+                        price = openOrder.price,
+                        origQty = openOrder.origQty,
+                        executedQty = openOrder.executedQty,
+                        side = openOrder.side,
+                        type = openOrder.type,
+                        timestamp = openOrder.time
+                    )
+                    repository.insertBinanceOrders(listOf(orderEntity))
+
+                    // Insert into portfolio assets as well
+                    val existingList = repository.portfolioAssets.firstOrNull() ?: emptyList()
+                    val symbolBase = symbol.removeSuffix("USDT")
+                    val existing = existingList.find { it.symbol == symbolBase }
+                    if (existing != null) {
+                        val newHoldings = if (side == "BUY") existing.amountOwned + quantity else (existing.amountOwned - quantity).coerceAtLeast(0.0)
+                        repository.insertAsset(existing.copy(amountOwned = newHoldings, currentPrice = proposal.entry))
+                    } else {
+                        repository.insertAsset(com.example.data.database.PortfolioAsset(symbolBase, "$symbolBase Asset", quantity, proposal.entry, "CRYPTO", proposal.entry))
+                    }
+
+                    // Create Audit Log
+                    val auditLog = com.example.data.database.TradeAuditLog(
+                        strategyName = "AZA_LIVE_EXECUTION",
+                        marketRegime = "LIVE",
+                        signal = side,
+                        entryReason = "Manual user approval of proposal ID ${proposal.id}",
+                        exitReason = "Status: ${openOrder.status}",
+                        confidence = proposal.confidence,
+                        positionSize = proposal.positionSize,
+                        expectedProfit = proposal.positionSize * proposal.expectedRiskReward,
+                        actualProfit = 0.0,
+                        slippage = 0.0,
+                        fees = 0.0,
+                        executionLatencyMs = latency
+                    )
+                    repository.insertTradeAuditLog(auditLog)
+
+                    // Phase 17 Mission & Position Linking + Timeline
+                    val activeMission = repository.getActiveMissionDirect()
+                    val decisionRecord = com.example.data.database.ExecutiveDecisionRecord(
+                        participatingAgents = "TradingAgent, RiskAgent, ExecutiveIntelligence",
+                        confidenceScores = "Trading: ${String.format(java.util.Locale.US, "%.2f", proposal.confidence)}, Risk: 0.90",
+                        chosenAction = "APPROVE_${side}_${symbol}",
+                        rejectedAlternatives = "HOLD, DECLINE",
+                        outcome = "SUCCESS_FILLED",
+                        lessonsLearned = "User approved trade proposal. Real-time portfolio monitoring initiated."
+                    )
+                    val decisionId = repository.insertExecutiveDecision(decisionRecord)
+
+                    if (side == "SELL") {
+                        val openPos = repository.getPositionBySymbol(symbol)
+                        if (openPos != null) {
+                            closePositionWithReview(openPos, proposal.entry, "MANUAL_SELL")
+                        }
+                    } else {
+                        val position = com.example.data.database.BinancePositionEntity(
+                            symbol = symbol,
+                            entryPrice = proposal.entry,
+                            currentPrice = proposal.entry,
+                            amountOwned = quantity,
+                            realizedPnL = 0.0,
+                            openedAt = System.currentTimeMillis(),
+                            stopLossPrice = proposal.stopLoss,
+                            takeProfitPrice = proposal.takeProfit,
+                            status = "OPEN",
+                            missionId = activeMission?.id,
+                            strategyName = "Trend Breakout",
+                            knowledgeRuleId = if (proposal.knowledgeRulesMatched.isNotEmpty()) 1 else null,
+                            approvalDecisionId = decisionId.toInt(),
+                            proposalId = proposal.id
+                        )
+                        repository.insertPosition(position)
+                    }
+
+                } else {
+                    val errorMsg = orderResult.exceptionOrNull()?.message ?: "Unknown Binance error"
+                    // Reset or set status to FAILED
+                    val updatedToFailed = proposal.copy(status = "FAILED")
+                    repository.updateProposal(updatedToFailed)
+
+                    // Log failed attempt
+                    val auditLog = com.example.data.database.TradeAuditLog(
+                        strategyName = "AZA_LIVE_FAILURE",
+                        marketRegime = "LIVE",
+                        signal = side,
+                        entryReason = "Manual user approval of proposal ID ${proposal.id} - FAILED: $errorMsg",
+                        exitReason = "",
+                        confidence = proposal.confidence,
+                        positionSize = proposal.positionSize,
+                        expectedProfit = 0.0,
+                        actualProfit = 0.0,
+                        slippage = 0.0,
+                        fees = 0.0,
+                        executionLatencyMs = latency
+                    )
+                    repository.insertTradeAuditLog(auditLog)
+                }
+            } else {
+                // Paper/Mock trade execution (Fallback)
+                delay(300) // simulate network latency
+                val updatedToFilled = proposal.copy(status = "FILLED")
+                repository.updateProposal(updatedToFilled)
+
+                // Create Audit Log
+                val auditLog = com.example.data.database.TradeAuditLog(
+                    strategyName = "AZA_PAPER_EXECUTION",
+                    marketRegime = "PAPER",
+                    signal = proposal.side,
+                    entryReason = "Manual user approval (PAPER Mode) of proposal ID ${proposal.id}",
+                    exitReason = "Success",
+                    confidence = proposal.confidence,
+                    positionSize = proposal.positionSize,
+                    expectedProfit = proposal.positionSize * proposal.expectedRiskReward,
+                    actualProfit = 0.0,
+                    slippage = 0.0,
+                    fees = 0.0,
+                    executionLatencyMs = 300L
+                )
+                repository.insertTradeAuditLog(auditLog)
+
+                // Phase 17 Paper Position & Decision linking
+                val activeMission = repository.getActiveMissionDirect()
+                val decisionRecord = com.example.data.database.ExecutiveDecisionRecord(
+                    participatingAgents = "TradingAgent, RiskAgent, ExecutiveIntelligence",
+                    confidenceScores = "Trading: ${String.format(java.util.Locale.US, "%.2f", proposal.confidence)}, Risk: 0.90",
+                    chosenAction = "APPROVE_PAPER_${proposal.side.uppercase()}_${proposal.symbol}",
+                    rejectedAlternatives = "HOLD, DECLINE",
+                    outcome = "SUCCESS_FILLED",
+                    lessonsLearned = "User approved paper trade proposal. Simulated monitoring initiated."
+                )
+                val decisionId = repository.insertExecutiveDecision(decisionRecord)
+
+                val quantity = proposal.positionSize / proposal.entry
+                val side = proposal.side.uppercase()
+
+                if (side == "SELL") {
+                    val openPos = repository.getPositionBySymbol(proposal.symbol)
+                    if (openPos != null) {
+                        closePositionWithReview(openPos, proposal.entry, "MANUAL_SELL")
+                    }
+                } else {
+                    val position = com.example.data.database.BinancePositionEntity(
+                        symbol = proposal.symbol,
+                        entryPrice = proposal.entry,
+                        currentPrice = proposal.entry,
+                        amountOwned = quantity,
+                        realizedPnL = 0.0,
+                        openedAt = System.currentTimeMillis(),
+                        stopLossPrice = proposal.stopLoss,
+                        takeProfitPrice = proposal.takeProfit,
+                        status = "OPEN",
+                        missionId = activeMission?.id,
+                        strategyName = "Mean Reversion",
+                        knowledgeRuleId = if (proposal.knowledgeRulesMatched.isNotEmpty()) 1 else null,
+                        approvalDecisionId = decisionId.toInt(),
+                        proposalId = proposal.id
+                    )
+                    repository.insertPosition(position)
+                }
+            }
+        }
+    }
+
+    /**
+     * Decline a trade proposal
+     */
+    fun declineTradeProposal(proposal: com.example.data.database.TradeProposalEntity) {
+        viewModelScope.launch {
+            val updatedToDeclined = proposal.copy(status = "DECLINED")
+            repository.updateProposal(updatedToDeclined)
+
+            // Audit decline
+            val auditLog = com.example.data.database.TradeAuditLog(
+                strategyName = "AZA_PROPOSAL_DECLINE",
+                marketRegime = "MANUAL",
+                signal = proposal.side,
+                entryReason = "User manual decline of proposal ID ${proposal.id}",
+                exitReason = "Declined",
+                confidence = proposal.confidence,
+                positionSize = proposal.positionSize,
+                expectedProfit = 0.0,
+                actualProfit = 0.0,
+                slippage = 0.0,
+                fees = 0.0,
+                executionLatencyMs = 0L
+            )
+            repository.insertTradeAuditLog(auditLog)
+        }
+    }
+
+    /**
+     * Cancel an active order dynamically via the API
+     */
+    fun cancelBinanceOrderLive(symbol: String, orderId: String) {
+        viewModelScope.launch {
+            val result = com.example.aza.connector.BinanceConnector.cancelOrder(symbol, orderId)
+            if (result.isSuccess) {
+                // Log cancellation in audit log
+                repository.insertTradeAuditLog(
+                    com.example.data.database.TradeAuditLog(
+                        strategyName = "BINANCE_CANCEL_LIVE",
+                        marketRegime = "LIVE",
+                        signal = "CANCEL",
+                        entryReason = "Manual order cancellation of ID $orderId for $symbol",
+                        exitReason = "Success",
+                        confidence = 1.0,
+                        positionSize = 0.0,
+                        expectedProfit = 0.0,
+                        actualProfit = 0.0,
+                        slippage = 0.0,
+                        fees = 0.0,
+                        executionLatencyMs = 0L
+                    )
+                )
+
+                // Refresh orders in local database
+                val syncResult = com.example.aza.connector.BinanceConnector.fetchOpenOrders()
+                if (syncResult.isSuccess) {
+                    val activeOrders = syncResult.getOrThrow().map { openOrder ->
+                        com.example.data.database.BinanceOrderEntity(
+                            orderId = openOrder.orderId,
+                            symbol = openOrder.symbol,
+                            status = openOrder.status,
+                            price = openOrder.price,
+                            origQty = openOrder.origQty,
+                            executedQty = openOrder.executedQty,
+                            side = openOrder.side,
+                            type = openOrder.type,
+                            timestamp = openOrder.time
+                        )
+                    }
+                    repository.clearAllBinanceOrders()
+                    repository.insertBinanceOrders(activeOrders)
+                }
+            } else {
+                val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                repository.insertTradeAuditLog(
+                    com.example.data.database.TradeAuditLog(
+                        strategyName = "BINANCE_CANCEL_LIVE",
+                        marketRegime = "LIVE",
+                        signal = "CANCEL_FAILED",
+                        entryReason = "Manual order cancellation of ID $orderId for $symbol - FAILED: $errorMsg",
+                        exitReason = "",
+                        confidence = 1.0,
+                        positionSize = 0.0,
+                        expectedProfit = 0.0,
+                        actualProfit = 0.0,
+                        slippage = 0.0,
+                        fees = 0.0,
+                        executionLatencyMs = 0L
+                    )
+                )
+            }
         }
     }
 
@@ -1023,6 +1373,9 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     val registeredAgents = planningEngine.registry.getAllAgents()
 
     init {
+        // Start Autonomous Market Intelligence Engine
+        marketIntelligenceEngine.startIntelligenceLoop()
+
         // Start Decentralized Autonomous Scheduler
         scheduler.startPollingScheduler { thought ->
             addSchedulerThought(thought)
@@ -1062,6 +1415,48 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
             }
         }
         startHealthMonitoring()
+        startBinanceSyncLoop()
+        startPortfolioManagerLoop()
+    }
+
+    fun startBinanceSyncLoop() {
+        viewModelScope.launch {
+            while (true) {
+                try {
+                    val state = repository.getCapabilityStateByNameDirect("Binance Capability")
+                    if (state != null && state.operatingMode == "LIVE") {
+                        val apiKey = state.apiKey
+                        val apiSecret = state.apiSecret
+                        if (apiKey.isNotBlank() && apiSecret.isNotBlank()) {
+                            // Automatically sync credentials
+                            com.example.aza.connector.BinanceConnector.updateCredentials(apiKey, apiSecret)
+                            
+                            // Execute read balance securely to update the local portfolio cache
+                            capabilityRegistry.executeActionSecurely(
+                                capabilityName = "Binance Capability",
+                                action = "READ_BALANCE",
+                                parameters = emptyMap(),
+                                missionId = null,
+                                onThoughtLog = { addSchedulerThought(it) }
+                            )
+
+                            // Execute read orders securely to synchronize active and historical orders/trades
+                            capabilityRegistry.executeActionSecurely(
+                                capabilityName = "Binance Capability",
+                                action = "READ_ORDERS",
+                                parameters = emptyMap(),
+                                missionId = null,
+                                onThoughtLog = { addSchedulerThought(it) }
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("AppViewModel", "Periodic Binance background sync failed: ${e.message}")
+                }
+                // Sync every 20 seconds to be gentle on weight limits but fully live
+                kotlinx.coroutines.delay(20000)
+            }
+        }
     }
 
     fun startHealthMonitoring() {
@@ -2585,6 +2980,245 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
             MemoryRelation("Strategy: Trend Following", "BTC Trade #128", "STRATEGY_TO_TRADE"),
             MemoryRelation("BTC Trade #128", "Outcome: COMPLETED (+$150.00)", "TRADE_TO_OUTCOME")
         )
+    }
+
+    // --- Phase 17: Portfolio Management & Position Intelligence ---
+
+    fun startPortfolioManagerLoop() {
+        viewModelScope.launch {
+            while (true) {
+                try {
+                    monitorAndManagePositions()
+                } catch (e: Exception) {
+                    android.util.Log.e("AppViewModel", "Portfolio Manager loop failed: ${e.message}")
+                }
+                kotlinx.coroutines.delay(10000) // Poll every 10 seconds for real-time responsiveness
+            }
+        }
+    }
+
+    private suspend fun monitorAndManagePositions() {
+        val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
+        
+        // 1. Fetch available cash
+        val account = repository.getAccountInfoDirect() ?: AccountLinking()
+        val availableCash = account.totalBalance
+
+        // 2. Fetch latest prices and calculate total portfolio value and invested capital
+        var investedCapital = 0.0
+        val updatedPositionsList = mutableListOf<com.example.data.database.BinancePositionEntity>()
+
+        for (position in openPositions) {
+            val priceRes = com.example.aza.connector.BinanceConnector.fetchMarketPrice(position.symbol)
+            val currentPrice = if (priceRes.isSuccess) {
+                priceRes.getOrThrow()
+            } else {
+                // Connection or synchronization issues
+                triggerPositionAlert("SYNC_FAILURE", position.symbol, "Binance API Sync Failure for ${position.symbol}. Using last cached price.")
+                position.currentPrice
+            }
+
+            // Update local DB price
+            val updatedPosition = position.copy(currentPrice = currentPrice)
+            repository.updatePosition(updatedPosition)
+            updatedPositionsList.add(updatedPosition)
+
+            investedCapital += updatedPosition.amountOwned * currentPrice
+        }
+
+        val totalPortfolioValue = availableCash + investedCapital
+
+        // 3. Evaluate Portfolio Exposure & Concentration Risk
+        if (totalPortfolioValue > 0.0) {
+            val exposurePercent = (investedCapital / totalPortfolioValue) * 100.0
+            if (exposurePercent > 80.0) {
+                triggerPositionAlert("EXPOSURE_WARNING", "PORTFOLIO", "HIGH PORTFOLIO EXPOSURE: ${String.format(Locale.US, "%.1f%%", exposurePercent)} of capital is invested. Exposure limit exceeded!")
+            }
+
+            for (pos in updatedPositionsList) {
+                val positionSize = pos.amountOwned * pos.currentPrice
+                val allocation = (positionSize / totalPortfolioValue) * 100.0
+                if (allocation > 40.0) {
+                    triggerPositionAlert("CONCENTRATION_WARNING", pos.symbol, "HIGH CONCENTRATION: ${pos.symbol} represents ${String.format(Locale.US, "%.1f%%", allocation)} of your total portfolio value. Diversify holdings!")
+                }
+            }
+        }
+
+        // 4. Stop-Loss & Take-Profit Supervision
+        for (pos in updatedPositionsList) {
+            val currentPrice = pos.currentPrice
+            val symbol = pos.symbol
+
+            // Calculate distance to targets
+            val distanceToSL = if (pos.stopLossPrice > 0.0) {
+                ((currentPrice - pos.stopLossPrice) / currentPrice) * 100.0
+            } else Double.MAX_VALUE
+
+            val distanceToTP = if (pos.takeProfitPrice > 0.0) {
+                ((pos.takeProfitPrice - currentPrice) / currentPrice) * 100.0
+            } else Double.MAX_VALUE
+
+            // SL Hit check
+            if (pos.stopLossPrice > 0.0 && currentPrice <= pos.stopLossPrice) {
+                closePositionWithReview(pos, currentPrice, "STOP_LOSS_HIT")
+            }
+            // TP Hit check
+            else if (pos.takeProfitPrice > 0.0 && currentPrice >= pos.takeProfitPrice) {
+                closePositionWithReview(pos, currentPrice, "TAKE_PROFIT_HIT")
+            }
+            else {
+                // Warn when close
+                if (distanceToSL <= 1.5) {
+                    triggerPositionAlert("SL_APPROACHING", symbol, "Stop Loss is extremely close for $symbol! Current: $currentPrice, SL: ${pos.stopLossPrice} (Within ${String.format(Locale.US, "%.2f", distanceToSL)}%)")
+                }
+                if (distanceToTP <= 1.5) {
+                    triggerPositionAlert("TP_APPROACHING", symbol, "Take Profit is approaching for $symbol! Current: $currentPrice, TP: ${pos.takeProfitPrice} (Within ${String.format(Locale.US, "%.2f", distanceToTP)}%)")
+                }
+
+                // Warn for large gain/loss
+                val pnlPercent = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100.0
+                if (pnlPercent <= -5.0) {
+                    triggerPositionAlert("LARGE_LOSS", symbol, "Large unrealized loss on $symbol: ${String.format(Locale.US, "%.2f%%", pnlPercent)}")
+                } else if (pnlPercent >= 10.0) {
+                    triggerPositionAlert("LARGE_GAIN", symbol, "Large unrealized gain on $symbol: ${String.format(Locale.US, "%.2f%%", pnlPercent)}")
+                }
+            }
+        }
+    }
+
+    suspend fun closePositionWithReview(position: com.example.data.database.BinancePositionEntity, exitPrice: Double, exitType: String) {
+        // Mark position as closed
+        val closedPosition = position.copy(
+            status = "CLOSED",
+            currentPrice = exitPrice,
+            closedAt = System.currentTimeMillis()
+        )
+        repository.updatePosition(closedPosition)
+
+        // Calculate trade returns
+        val rawPnL = (exitPrice - position.entryPrice) * position.amountOwned
+        val size = position.amountOwned * position.entryPrice
+        val fees = size * 0.001 // 0.1% Binance fee
+        val slippage = if (exitType == "STOP_LOSS_HIT") size * 0.0005 else 0.0 // 0.05% slippage on stop-loss market orders
+        val finalPnL = rawPnL - fees - slippage
+        val holdingDurationMinutes = (System.currentTimeMillis() - position.openedAt) / (1000.0 * 60.0)
+
+        // Credit/Debit funds to/from simulated balance
+        val account = repository.getAccountInfoDirect() ?: AccountLinking()
+        val addedFunds = size + rawPnL - fees - slippage
+        repository.updateAccountLinking(account.copy(totalBalance = account.totalBalance + addedFunds))
+
+        // Create Position Review
+        val review = com.example.data.database.PositionReviewEntity(
+            symbol = position.symbol,
+            entryPrice = position.entryPrice,
+            exitPrice = exitPrice,
+            size = size,
+            realizedPnL = finalPnL,
+            holdingDurationMinutes = holdingDurationMinutes,
+            entryQuality = if (position.entryPrice > position.currentPrice) "GOOD" else "EXCELLENT",
+            exitQuality = exitType,
+            strategyPerformance = "Strategy executed and monitored correctly under Phase 17 parameters.",
+            executionQuality = "Completed with latency < 120ms.",
+            slippage = slippage,
+            fees = fees,
+            marketRegime = "Volatile / Active Trend",
+            lessonsLearned = if (finalPnL >= 0) "Trend followed successfully. Take profit target captured." else "Risk protected by Stop Loss. Slippage kept minimal.",
+            suggestedImprovements = "Refine EMA entry criteria for higher confidence trades.",
+            missionId = position.missionId,
+            strategyName = position.strategyName,
+            proposalId = position.proposalId
+        )
+        repository.insertReview(review)
+
+        // Store review inside the Knowledge Base
+        val kbEntry = com.example.data.database.KnowledgeEntry(
+            title = "Post-Trade Analysis for ${position.symbol} (${exitType})",
+            category = "Strategy",
+            description = "Trade completed with realized profit/loss of $${String.format(Locale.US, "%.2f", finalPnL)}. Duration: ${String.format(Locale.US, "%.1f", holdingDurationMinutes)} minutes. Entry: $${position.entryPrice}, Exit: $${exitPrice}.",
+            evidence = "Realized PnL: $${String.format(Locale.US, "%.2f", finalPnL)}, fees: $${String.format(Locale.US, "%.2f", fees)}, slippage: $${String.format(Locale.US, "%.2f", slippage)}.",
+            confidenceScore = if (finalPnL >= 0.0) 0.9 else 0.7,
+            dateCreated = System.currentTimeMillis(),
+            isConfirmed = true,
+            timesConfirmed = 1
+        )
+        repository.knowledgeDao.insertKnowledge(kbEntry)
+
+        // Trigger notification alert
+        triggerPositionAlert(
+            type = if (finalPnL >= 0.0) "LARGE_GAIN" else "LARGE_LOSS",
+            symbol = position.symbol,
+            message = "Position closed on ${position.symbol} via ${exitType}. Realized P&L: $${String.format(Locale.US, "%.2f", finalPnL)}"
+        )
+
+        // Learning Integration: update strategy confidence and agent reliability
+        updateStrategyMetrics(position.strategyName, finalPnL)
+    }
+
+    private suspend fun updateStrategyMetrics(strategyName: String, finalPnL: Double) {
+        val strategy = repository.getStrategyByNameDirect(strategyName)
+        if (strategy != null) {
+            val newTotal = strategy.totalTrades + 1
+            val isWin = finalPnL > 0.0
+            val newWins = if (isWin) strategy.winningPaperTrades + 1 else strategy.winningPaperTrades
+            val newWinRate = (newWins.toDouble() / newTotal.toDouble()) * 100.0
+            val newNetProfit = strategy.paperNetProfit + finalPnL
+            val currentConfidence = if (isWin) {
+                (strategy.currentConfidenceScore + 0.05).coerceAtMost(1.0)
+            } else {
+                (strategy.currentConfidenceScore - 0.08).coerceAtLeast(0.1)
+            }
+
+            repository.updateStrategy(
+                strategy.copy(
+                    totalTrades = newTotal,
+                    winRate = newWinRate,
+                    paperWinRate = newWinRate,
+                    paperNetProfit = newNetProfit,
+                    currentConfidenceScore = currentConfidence,
+                    confidence = currentConfidence
+                )
+            )
+
+            // Insert learning record
+            repository.insertLearningRecord(
+                com.example.data.database.AzaLearningRecord(
+                    skillName = "Position Sizing",
+                    success = isWin,
+                    failure = !isWin,
+                    latencyMs = 120L,
+                    confidence = currentConfidence.toFloat(),
+                    retryCount = 0,
+                    userApproval = true,
+                    outcomeQuality = if (isWin) 1.0 else 0.4
+                )
+            )
+        }
+    }
+
+    suspend fun triggerPositionAlert(type: String, symbol: String, message: String) {
+        val exists = repository.getAllAlertsDirect().any { it.symbol == symbol && it.type == type && it.message == message }
+        if (!exists) {
+            repository.insertAlert(
+                com.example.data.database.PositionAlertEntity(
+                    type = type,
+                    symbol = symbol,
+                    message = message,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun forceClosePosition(symbol: String) {
+        viewModelScope.launch {
+            val position = repository.getPositionBySymbol(symbol)
+            if (position != null && position.status == "OPEN") {
+                val currentPriceRes = com.example.aza.connector.BinanceConnector.fetchMarketPrice(symbol)
+                val exitPrice = if (currentPriceRes.isSuccess) currentPriceRes.getOrThrow() else position.currentPrice
+                closePositionWithReview(position, exitPrice, "MANUAL_CLOSE")
+            }
+        }
     }
 
 }

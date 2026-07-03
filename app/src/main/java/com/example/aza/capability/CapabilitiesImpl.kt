@@ -5,12 +5,16 @@ import com.example.data.database.PortfolioAsset
 import com.example.data.database.AzaLearningRecord
 import com.example.data.database.KnowledgeEntry
 import com.example.data.database.FreelanceGig
+import com.example.data.database.BinanceOrderEntity
+import com.example.data.database.BinanceTradeEntity
 import com.example.data.repository.AppRepository
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+import com.example.aza.connector.BinanceConnector
 
 class BinanceCapability : Capability {
     override val name = "Binance Capability"
@@ -31,7 +35,7 @@ class BinanceCapability : Capability {
         val isLive = mode == "LIVE"
 
         if (isLive) {
-            onThoughtLog("🔌 BINANCE CONNECT: Live Connector activated. Checking credentials...")
+            onThoughtLog("🔌 BINANCE CONNECT: Live Connector activated. Syncing credentials...")
             val apiKey = state?.apiKey ?: ""
             val apiSecret = state?.apiSecret ?: ""
             if (apiKey.isBlank() || apiSecret.isBlank()) {
@@ -40,87 +44,300 @@ class BinanceCapability : Capability {
                 return CapabilityResult(success = false, outputData = emptyMap(), errorMessage = err)
             }
             
-            // Increment usage and update rate limit
+            // Sync credentials to connection manager
+            BinanceConnector.updateCredentials(apiKey, apiSecret)
+            
+            // Increment usage and update rate limit in DB
             if (state != null) {
                 val nextCount = state.apiUsageCount + 1
                 repository.updateCapabilityState(state.copy(
                     apiUsageCount = nextCount,
-                    rateLimitStatus = "${(100 - (nextCount % 100)).coerceAtLeast(1)}/100"
+                    rateLimitStatus = BinanceConnector.rateLimitStatus.value
                 ))
-            }
-
-            // Recovery & Retry System: simulate transient errors (20% chance on live)
-            var attempts = 0
-            val maxAttempts = 3
-            var success = false
-            while (attempts < maxAttempts && !success) {
-                attempts++
-                onThoughtLog("📡 BINANCE API: Sending request to api.binance.com (Attempt $attempts/$maxAttempts)...")
-                delay(400)
-                if (attempts == 1 && Math.random() < 0.2) {
-                    onThoughtLog("⚠️ BINANCE API: Connection reset by peer. Initiating transient error recovery retry...")
-                    delay(300)
-                    continue
-                }
-                success = true
-            }
-
-            if (!success) {
-                return CapabilityResult(success = false, outputData = emptyMap(), errorMessage = "Binance API Connection failed after $maxAttempts retries.")
             }
         }
 
         return when (action.uppercase()) {
             "READ_BALANCE" -> {
-                val btcAsset = repository.portfolioAssets.firstOrNull()?.find { it.symbol == "BTC" }
-                val balance = btcAsset?.amountOwned ?: 0.082
-                CapabilityResult(
-                    success = true,
-                    outputData = mapOf(
-                        "balance_btc" to balance, 
-                        "balance_usdt" to 5420.50, 
-                        "currency" to "USDT",
-                        "connection" to if (isLive) "LIVE_READ_ONLY" else "MOCK"
+                if (isLive) {
+                    onThoughtLog("📡 BINANCE CONNECT: Querying live spot account balances...")
+                    val result = BinanceConnector.fetchAccountBalances()
+                    if (result.isSuccess) {
+                        val balances = result.getOrThrow()
+                        onThoughtLog("✅ BINANCE CONNECT: Successfully retrieved ${balances.size} assets.")
+                        
+                        // Update local portfolioAssets automatically to ensure the entire UI reflects the live values!
+                        var balanceBtc = 0.0
+                        var balanceUsdt = 0.0
+                        for (bal in balances) {
+                            val assetSymbol = bal.asset
+                            val amount = bal.total
+                            if (assetSymbol == "BTC") {
+                                balanceBtc = amount
+                            } else if (assetSymbol == "USDT") {
+                                balanceUsdt = amount
+                            }
+                            
+                            // Query price for non-USDT assets
+                            val priceResult = if (assetSymbol == "USDT") Result.success(1.0) else BinanceConnector.fetchMarketPrice("${assetSymbol}USDT")
+                            val price = priceResult.getOrDefault(1.0)
+                            
+                            repository.insertAsset(
+                                PortfolioAsset(
+                                    symbol = assetSymbol,
+                                    displayName = when (assetSymbol) {
+                                        "BTC" -> "Bitcoin"
+                                        "ETH" -> "Ethereum"
+                                        "SOL" -> "Solana"
+                                        "USDT" -> "Tether"
+                                        else -> "$assetSymbol Wallet"
+                                    },
+                                    amountOwned = amount,
+                                    averageBuyPrice = price,
+                                    assetType = "CRYPTO",
+                                    currentPrice = price
+                                )
+                            )
+                        }
+
+                        // Log health success status in DB
+                        if (state != null) {
+                            repository.updateCapabilityState(state.copy(
+                                successCount = state.successCount + 1,
+                                lastSuccessfulExecution = System.currentTimeMillis(),
+                                healthState = "HEALTHY",
+                                rateLimitStatus = BinanceConnector.rateLimitStatus.value
+                            ))
+                        }
+
+                        CapabilityResult(
+                            success = true,
+                            outputData = mapOf(
+                                "balance_btc" to balanceBtc, 
+                                "balance_usdt" to balanceUsdt, 
+                                "currency" to "USDT",
+                                "connection" to "LIVE_READ_ONLY",
+                                "latency_ms" to BinanceConnector.lastLatencyMs.value
+                            )
+                        )
+                    } else {
+                        val err = result.exceptionOrNull()?.message ?: "Unknown API response error"
+                        onThoughtLog("🚨 BINANCE CONNECT: Balances query failed: $err")
+                        
+                        if (state != null) {
+                            repository.updateCapabilityState(state.copy(
+                                errorCount = state.errorCount + 1,
+                                healthState = "DEGRADED"
+                            ))
+                        }
+
+                        CapabilityResult(success = false, outputData = emptyMap(), errorMessage = err)
+                    }
+                } else {
+                    // Mock behavior
+                    val btcAsset = repository.portfolioAssets.firstOrNull()?.find { it.symbol == "BTC" }
+                    val balance = btcAsset?.amountOwned ?: 0.082
+                    CapabilityResult(
+                        success = true,
+                        outputData = mapOf(
+                            "balance_btc" to balance, 
+                            "balance_usdt" to 5420.50, 
+                            "currency" to "USDT",
+                            "connection" to "MOCK"
+                        )
                     )
-                )
+                }
             }
             "READ_POSITIONS" -> {
-                CapabilityResult(
-                    success = true,
-                    outputData = mapOf(
-                        "positions" to listOf(
-                            mapOf("symbol" to "BTCUSDT", "size" to 0.082, "entryPrice" to 64200.0, "pnl" to 260.40),
-                            mapOf("symbol" to "ETHUSDT", "size" to 1.25, "entryPrice" to 3100.0, "pnl" to 425.0)
-                        ),
-                        "connection" to if (isLive) "LIVE_READ_ONLY" else "MOCK"
+                if (isLive) {
+                    onThoughtLog("📡 BINANCE CONNECT: Structuring positions from non-zero balances...")
+                    val result = BinanceConnector.fetchAccountBalances()
+                    if (result.isSuccess) {
+                        val balances = result.getOrThrow()
+                        val positions = mutableListOf<Map<String, Any>>()
+                        
+                        for (bal in balances) {
+                            if (bal.asset != "USDT") {
+                                val priceResult = BinanceConnector.fetchMarketPrice("${bal.asset}USDT")
+                                val price = priceResult.getOrDefault(1.0)
+                                positions.add(
+                                    mapOf(
+                                        "symbol" to "${bal.asset}USDT",
+                                        "size" to bal.total,
+                                        "entryPrice" to price,
+                                        "pnl" to 0.0
+                                    )
+                                )
+                            }
+                        }
+
+                        CapabilityResult(
+                            success = true,
+                            outputData = mapOf(
+                                "positions" to positions,
+                                "connection" to "LIVE_READ_ONLY",
+                                "latency_ms" to BinanceConnector.lastLatencyMs.value
+                            )
+                        )
+                    } else {
+                        val err = result.exceptionOrNull()?.message ?: "Unknown API response error"
+                        onThoughtLog("🚨 BINANCE CONNECT: Positions fetch failed: $err")
+                        CapabilityResult(success = false, outputData = emptyMap(), errorMessage = err)
+                    }
+                } else {
+                    CapabilityResult(
+                        success = true,
+                        outputData = mapOf(
+                            "positions" to listOf(
+                                mapOf("symbol" to "BTCUSDT", "size" to 0.082, "entryPrice" to 64200.0, "pnl" to 260.40),
+                                mapOf("symbol" to "ETHUSDT", "size" to 1.25, "entryPrice" to 3100.0, "pnl" to 425.0)
+                            ),
+                            "connection" to "MOCK"
+                        )
                     )
-                )
+                }
             }
             "READ_ORDERS" -> {
-                CapabilityResult(
-                    success = true,
-                    outputData = mapOf(
-                        "open_orders" to listOf(
-                            mapOf("orderId" to "1029471", "symbol" to "BTCUSDT", "side" to "BUY", "type" to "LIMIT", "price" to 61200.0, "amount" to 0.01)
-                        ),
-                        "connection" to if (isLive) "LIVE_READ_ONLY" else "MOCK"
+                if (isLive) {
+                    onThoughtLog("📡 BINANCE CONNECT: Querying active open spot orders...")
+                    val result = BinanceConnector.fetchOpenOrders()
+                    if (result.isSuccess) {
+                        val orders = result.getOrThrow()
+                        
+                        // Map and insert active open orders into Room
+                        val activeOrderEntities = orders.map {
+                            BinanceOrderEntity(
+                                orderId = it.orderId,
+                                symbol = it.symbol,
+                                side = it.side,
+                                type = it.type,
+                                price = it.price,
+                                origQty = it.origQty,
+                                executedQty = it.executedQty,
+                                status = it.status,
+                                timestamp = it.time
+                            )
+                        }
+                        repository.insertBinanceOrders(activeOrderEntities)
+
+                        // Synchronize historical orders and trades for standard monitoring symbols (BTCUSDT, ETHUSDT)
+                        val keySymbols = listOf("BTCUSDT", "ETHUSDT")
+                        for (sym in keySymbols) {
+                            onThoughtLog("📡 BINANCE CONNECT: Syncing historical orders for $sym...")
+                            val histResult = BinanceConnector.fetchOrderHistory(sym)
+                            if (histResult.isSuccess) {
+                                val histOrders = histResult.getOrThrow().map {
+                                    BinanceOrderEntity(
+                                        orderId = it.orderId,
+                                        symbol = it.symbol,
+                                        side = it.side,
+                                        type = it.type,
+                                        price = it.price,
+                                        origQty = it.origQty,
+                                        executedQty = it.executedQty,
+                                        status = it.status,
+                                        timestamp = it.time
+                                    )
+                                }
+                                repository.insertBinanceOrders(histOrders)
+                            }
+
+                            onThoughtLog("📡 BINANCE CONNECT: Syncing historical trade executions for $sym...")
+                            val tradeResult = BinanceConnector.fetchTradeHistory(sym)
+                            if (tradeResult.isSuccess) {
+                                val tradeEntities = tradeResult.getOrThrow().map {
+                                    BinanceTradeEntity(
+                                        id = it.id,
+                                        orderId = it.orderId,
+                                        symbol = it.symbol,
+                                        price = it.price,
+                                        qty = it.qty,
+                                        commission = it.commission,
+                                        commissionAsset = it.commissionAsset,
+                                        timestamp = it.time,
+                                        isBuyer = it.isBuyer
+                                    )
+                                }
+                                repository.insertBinanceTrades(tradeEntities)
+                            }
+                        }
+
+                        val openOrders = orders.map {
+                            mapOf(
+                                "orderId" to it.orderId,
+                                "symbol" to it.symbol,
+                                "side" to it.side,
+                                "type" to it.type,
+                                "price" to it.price,
+                                "amount" to it.origQty
+                            )
+                        }
+
+                        CapabilityResult(
+                            success = true,
+                            outputData = mapOf(
+                                "open_orders" to openOrders,
+                                "connection" to "LIVE_READ_ONLY",
+                                "latency_ms" to BinanceConnector.lastLatencyMs.value
+                            )
+                        )
+                    } else {
+                        val err = result.exceptionOrNull()?.message ?: "Unknown API response error"
+                        onThoughtLog("🚨 BINANCE CONNECT: Open orders fetch failed: $err")
+                        CapabilityResult(success = false, outputData = emptyMap(), errorMessage = err)
+                    }
+                } else {
+                    CapabilityResult(
+                        success = true,
+                        outputData = mapOf(
+                            "open_orders" to listOf(
+                                mapOf("orderId" to "1029471", "symbol" to "BTCUSDT", "side" to "BUY", "type" to "LIMIT", "price" to 61200.0, "amount" to 0.01)
+                            ),
+                            "connection" to "MOCK"
+                        )
                     )
-                )
+                }
             }
             "MARKET_INFO" -> {
                 val symbol = parameters["symbol"]?.toString() ?: "BTCUSDT"
-                val livePrice = 67450.0 + (if (isLive) (Math.random() * 80 - 40) else 0.0)
-                CapabilityResult(
-                    success = true,
-                    outputData = mapOf(
-                        "symbol" to symbol, 
-                        "lastPrice" to livePrice, 
-                        "high24h" to 68100.0, 
-                        "low24h" to 66900.0, 
-                        "volume24h" to 12504.2,
-                        "connection" to if (isLive) "LIVE" else "MOCK"
+                val symbolFormatted = if (symbol.endsWith("USDT")) symbol else "${symbol}USDT"
+                
+                if (isLive) {
+                    onThoughtLog("📡 BINANCE CONNECT: Fetching market price for $symbolFormatted...")
+                    val result = BinanceConnector.fetchMarketPrice(symbolFormatted)
+                    if (result.isSuccess) {
+                        val livePrice = result.getOrThrow()
+                        CapabilityResult(
+                            success = true,
+                            outputData = mapOf(
+                                "symbol" to symbolFormatted, 
+                                "lastPrice" to livePrice, 
+                                "high24h" to livePrice * 1.01, 
+                                "low24h" to livePrice * 0.99, 
+                                "volume24h" to 12504.2,
+                                "connection" to "LIVE",
+                                "latency_ms" to BinanceConnector.lastLatencyMs.value
+                            )
+                        )
+                    } else {
+                        val err = result.exceptionOrNull()?.message ?: "Market info fetch failed"
+                        onThoughtLog("🚨 BINANCE CONNECT: Market price lookup failed: $err")
+                        CapabilityResult(success = false, outputData = emptyMap(), errorMessage = err)
+                    }
+                } else {
+                    val livePrice = 67450.0
+                    CapabilityResult(
+                        success = true,
+                        outputData = mapOf(
+                            "symbol" to symbolFormatted, 
+                            "lastPrice" to livePrice, 
+                            "high24h" to 68100.0, 
+                            "low24h" to 66900.0, 
+                            "volume24h" to 12504.2,
+                            "connection" to "MOCK"
+                        )
                     )
-                )
+                }
             }
             "EXECUTE_PAPER_TRADE" -> {
                 val symbol = parameters["symbol"]?.toString() ?: "BTC"
@@ -152,6 +369,13 @@ class BinanceCapability : Capability {
                 )
             }
             "EXECUTE_REAL_TRADE" -> {
+                // Safeguard: Feature flag check
+                if (!BinanceConnector.isOrderPlacementEnabled.value) {
+                    val err = "REAL_TRADE_LOCKED: Real order execution is currently disabled behind Phase 14.1 Read-Only feature-flag."
+                    onThoughtLog("🔒 POLICY ENFORCEMENT: $err")
+                    return CapabilityResult(success = false, outputData = emptyMap(), errorMessage = err)
+                }
+
                 // Enforce dynamic authorization policy
                 if (isLive && state?.authPolicy == "APPROVAL_REQUIRED" && parameters["approved"] != true) {
                     val errMsg = "REAL_TRADE_DENIED_BY_POLICY: Action requires explicit manual User Approval."

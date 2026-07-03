@@ -39,9 +39,16 @@ import kotlinx.coroutines.launch
         CapabilityStateEntity::class,
         CapabilityAuditLog::class,
         LaptopDocumentEntity::class,
-        LaptopExchangeRecord::class
+        LaptopExchangeRecord::class,
+        BinanceOrderEntity::class,
+        BinanceTradeEntity::class,
+        OpportunityEntity::class,
+        TradeProposalEntity::class,
+        BinancePositionEntity::class,
+        PositionReviewEntity::class,
+        PositionAlertEntity::class
     ],
-    version = 18,
+    version = 21,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -63,6 +70,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun executiveDecisionDao(): ExecutiveDecisionDao
     abstract fun capabilityDao(): CapabilityDao
     abstract fun laptopDao(): LaptopDao
+    abstract fun binanceDao(): BinanceDao
+    abstract fun marketIntelligenceDao(): MarketIntelligenceDao
+    abstract fun portfolioPositionDao(): PortfolioPositionDao
 
 
     companion object {
