@@ -36,7 +36,7 @@ interface TradingStrategy {
     fun shouldExit(market: String, prices: List<Double>, currentPosition: Double): Boolean
     fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double
     fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double
-    fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double): Double
+    fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double> = emptyList()): Double
 
     fun evaluate(
         market: String,

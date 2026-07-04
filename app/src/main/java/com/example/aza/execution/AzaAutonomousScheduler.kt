@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import java.util.*
 
@@ -25,6 +26,7 @@ class AzaAutonomousScheduler(
     val resourceManager = com.example.aza.executive.ResourceManager(repository)
     val consensusEngine = com.example.aza.executive.ConfidenceConsensusEngine(repository, planningEngine.coordinator.learningEngine, planningEngine.registry)
     val executivePlanner = com.example.aza.executive.ExecutivePlanner(repository, planningEngine.coordinator.learningEngine)
+    val executiveBrain = com.example.aza.executive.ExecutiveBrain(repository)
     data class SchedulerDiagnostics(
         val isHealthy: Boolean,
         val networkStatus: String,
@@ -162,6 +164,22 @@ class AzaAutonomousScheduler(
                         resourceManager.autoResumeSuspendedTasks(onLog)
                         executivePlanner.superviseAndOptimize(onLog)
 
+                        // Phase 19 Autonomous Executive Brain & Continuous Operations
+                        val activeMissions = repository.allMissions.firstOrNull() ?: emptyList()
+                        val knowledgeList = repository.getAllKnowledgeDirect()
+                        val contentList = repository.contentItems.firstOrNull() ?: emptyList()
+                        val freelanceList = repository.freelanceGigs.firstOrNull() ?: emptyList()
+                        val metrics = resourceManager.currentMetrics.value
+                        executiveBrain.runContinuousDecisionCycle(
+                            schedulerDiagnostics = currentDiag,
+                            resourceMetrics = metrics,
+                            activeMissions = activeMissions,
+                            knowledgeList = knowledgeList,
+                            contentList = contentList,
+                            freelanceList = freelanceList,
+                            onLog = onLog
+                        )
+
                         val runnableTasks = repository.getQueueTasksByStatus("QUEUED") + repository.getQueueTasksByStatus("RETRY")
                         if (runnableTasks.isNotEmpty()) {
                             onLog("⚡ SCHEDULER QUEUE: Detected ${runnableTasks.size} tasks in queue. Searching for ready candidates...")
@@ -257,6 +275,64 @@ class AzaAutonomousScheduler(
             )
             repository.updateQueueTask(blockedTask)
             return
+        }
+
+        // Phase 18: Policy-Based Autonomy Interception
+        val lowerSkill = task.requiredSkill.lowercase(Locale.US)
+        val capabilityName = when {
+            lowerSkill.contains("trading") || lowerSkill.contains("crypto") || lowerSkill.contains("binance") -> "Binance Capability"
+            lowerSkill.contains("content") || lowerSkill.contains("social") || lowerSkill.contains("write") || lowerSkill.contains("draft") || lowerSkill.contains("script") -> "Content Capability"
+            lowerSkill.contains("youtube") || lowerSkill.contains("video") -> "YouTube Capability"
+            lowerSkill.contains("freelance") || lowerSkill.contains("proposal") || lowerSkill.contains("gig") -> "Freelance Capability"
+            else -> null
+        }
+
+        if (capabilityName != null) {
+            val state = repository.getCapabilityStateByNameDirect(capabilityName)
+            if (state != null) {
+                val policy = state.authPolicy
+                val needsApproval = when {
+                    policy == "APPROVAL_REQUIRED" -> true
+                    capabilityName == "Binance Capability" && policy == "RISK_LIMIT" && task.estimatedBudget > 1000.0 -> {
+                        onLog("⚠️ POLICY ENFORCEMENT: Budget $${task.estimatedBudget} exceeds risk limit of $1000.0 for Binance Capability.")
+                        true
+                    }
+                    capabilityName == "YouTube Capability" && policy == "DRAFT_ONLY" && task.title.lowercase(Locale.US).contains("publish") -> {
+                        onLog("⚠️ POLICY ENFORCEMENT: 'Draft Only' policy prevents publishing action for YouTube Capability.")
+                        true
+                    }
+                    capabilityName == "YouTube Capability" && policy == "APPROVAL_BEFORE_PUBLISH" && task.title.lowercase(Locale.US).contains("publish") -> {
+                        onLog("⚠️ POLICY ENFORCEMENT: 'Approval Before Publishing' is required for YouTube Capability.")
+                        true
+                    }
+                    capabilityName == "Freelance Capability" && policy == "DRAFT_ONLY" && task.title.lowercase(Locale.US).contains("submit") -> {
+                        onLog("⚠️ POLICY ENFORCEMENT: 'Draft Only' policy prevents proposal submission for Freelance Capability.")
+                        true
+                    }
+                    capabilityName == "Freelance Capability" && policy == "APPROVAL_BEFORE_SUBMIT" && task.title.lowercase(Locale.US).contains("submit") -> {
+                        onLog("⚠️ POLICY ENFORCEMENT: 'Approval Before Submission' is required for Freelance Capability.")
+                        true
+                    }
+                    else -> false
+                }
+
+                if (needsApproval) {
+                    onLog("🔒 POLICY SECURITY LOCK: Task '${task.title}' requires Human Approval under configured '$policy' policy. Moving task to BLOCKED status.")
+                    val blockedTask = task.copy(
+                        status = "BLOCKED",
+                        updatedAt = System.currentTimeMillis(),
+                        executionLog = "Blocked: Requires human authorization under policy '$policy'."
+                    )
+                    repository.updateQueueTask(blockedTask)
+                    repository.insertChatMessage(
+                        com.example.data.database.ChatMessage(
+                            sender = "SECURITY WATCHDOG",
+                            text = "🔒 **AUTHORIZATION REQUIRED:** Task **${task.title}** on **$capabilityName** was intercepted under policy **$policy**. Please review and authorize this action."
+                        )
+                    )
+                    return
+                }
+            }
         }
 
         // Dynamic resource consumption during execution

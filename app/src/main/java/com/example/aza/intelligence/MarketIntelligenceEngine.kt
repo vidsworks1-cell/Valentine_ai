@@ -216,7 +216,7 @@ class MarketIntelligenceEngine(
             // Score strategies against this asset
             val strategies = repository.getAllStrategiesDirect()
             strategies.forEach { strategy ->
-                var strategyConfidence = calculateStrategyConfidence(
+                val strategyConfidence = calculateStrategyConfidence(
                     strategyName = strategy.strategyName,
                     trendScore = totalTrendScore,
                     momentumScore = totalMomentumScore,
@@ -226,13 +226,38 @@ class MarketIntelligenceEngine(
                     regime = combinedRegime
                 )
 
-                // Calibrate confidence based on strategy's historical win rate
-                val historicalWinRateFactor = strategy.paperWinRate / 100.0
-                strategyConfidence = (strategyConfidence * 0.7) + (historicalWinRateFactor * 0.3)
+                // Retrieve calibrated confidence from the Backtest Engine / DB
+                val dbStrategy = repository.getStrategyByNameDirect(strategy.strategyName)
+                val calibratedConfidence = dbStrategy?.currentConfidenceScore ?: 0.75
+
+                // Incorporate Knowledge Base lessons
+                val knowledgeBase = repository.getAllKnowledgeDirect()
+                var knowledgeAdjustment = 0.0
+                val conflictLessons = knowledgeBase.filter { 
+                    it.category == "REGIME" && it.title.contains(combinedRegime, ignoreCase = true) && it.description.contains("fail", ignoreCase = true)
+                }
+                if (conflictLessons.isNotEmpty()) {
+                    knowledgeAdjustment -= 0.15 * conflictLessons.size
+                }
+
+                // Incorporate recent live/paper performance
+                var performanceAdjustment = 0.0
+                if (dbStrategy != null && dbStrategy.totalPaperTrades > 0) {
+                    val recentWinRate = dbStrategy.paperWinRate / 100.0
+                    performanceAdjustment = (recentWinRate - 0.5) * 0.2
+                }
+
+                // Final confidence combines: Technical, Historical, Regime, KB lessons, and Recent performance
+                val finalCombinedConfidence = (
+                    (strategyConfidence * 0.3) + 
+                    (calibratedConfidence * 0.3) + 
+                    (performanceAdjustment + 0.1) + 
+                    knowledgeAdjustment
+                ).coerceIn(0.1, 0.98)
 
                 val opportunity = OpportunityEntity(
                     symbol = symbol,
-                    confidence = strategyConfidence,
+                    confidence = finalCombinedConfidence,
                     strategy = strategy.strategyName,
                     risk = latestATR / latestClosePrice, // proportional volatility risk
                     expectedReward = (latestATR * 3.0) / latestClosePrice,
@@ -254,8 +279,52 @@ class MarketIntelligenceEngine(
             
             // If top opportunity exceeds threshold, pass through Multi-Agent Consensus & Validation Pipeline
             if (topOp.confidence >= 0.75) {
-                addThought("Initiating Multi-Agent Consensus and Validation for ${topOp.symbol}...")
+                addThought("Initiating Multi-Agent Consensus and Safety Gate Validation for ${topOp.symbol}...")
                 
+                // 1. Regime confirmation
+                val regimeConfirmed = topOp.currentRegime.isNotEmpty()
+                
+                // 2. Strategy compatibility check: does the strategy support the active regime?
+                val strategyObj = com.example.aza.strategy.StrategyRegistry.getStrategy(topOp.strategy)
+                val strategyCompatible = strategyObj?.designedRegimes?.any { 
+                    it.equals(topOp.currentRegime, ignoreCase = true) || topOp.currentRegime.contains(it, ignoreCase = true)
+                } ?: false
+                
+                // 3. ATR Risk Valid
+                val atrRiskValid = topOp.risk > 0.0
+                
+                // 4. Position Size Valid
+                val positionSizeValid = topOp.expectedReward > 0.0
+                
+                // 5. Portfolio exposure check (e.g. max active positions < 3)
+                val activePositions = repository.positions.firstOrNull() ?: emptyList()
+                val portfolioExposureAcceptable = activePositions.count { it.status == "OPEN" } < 3
+                
+                // 6. Recent strategy performance acceptable
+                val dbStr = repository.getStrategyByNameDirect(topOp.strategy)
+                val recentPerformanceAcceptable = dbStr == null || dbStr.paperWinRate >= 45.0
+                
+                // 7. No conflicting knowledge base lessons
+                val kbEntries = repository.knowledgeEntries.firstOrNull() ?: emptyList()
+                val hasConflictingLessons = kbEntries.any { 
+                    it.category == "REGIME" && it.title.contains(topOp.currentRegime, ignoreCase = true) && it.description.contains("fail", ignoreCase = true)
+                }
+                
+                val safetyGatePassed = regimeConfirmed && strategyCompatible && atrRiskValid && positionSizeValid && portfolioExposureAcceptable && recentPerformanceAcceptable && !hasConflictingLessons
+                
+                if (!safetyGatePassed) {
+                    addThought("🚨 SAFETY GATE FAILED for ${topOp.symbol}:" +
+                        "\n  - Regime Confirmed: $regimeConfirmed" +
+                        "\n  - Strategy Compatible: $strategyCompatible" +
+                        "\n  - ATR Risk Valid: $atrRiskValid" +
+                        "\n  - Position Size Valid: $positionSizeValid" +
+                        "\n  - Exposure Acceptable: $portfolioExposureAcceptable" +
+                        "\n  - Recent Performance Acceptable: $recentPerformanceAcceptable" +
+                        "\n  - No Conflicting Lessons: ${!hasConflictingLessons}")
+                    return@forEach
+                }
+                
+                addThought("🛡️ SAFETY GATE PASSED! Passing to multi-agent consensus...")
                 val consensusResult = runMultiAgentConsensus(topOp)
                 addThought("Consensus calculated: ${String.format(Locale.US, "%.1f", consensusResult.score * 100.0)}% [${consensusResult.summary}]")
                 
@@ -272,12 +341,20 @@ class MarketIntelligenceEngine(
     }
 
     private fun detectMarketRegime(trendScore: Double, volatilityScore: Double): String {
+        val isHighVol = volatilityScore > 2.5
+        val isTrending = Math.abs(trendScore) > 1.8
+        
         return when {
-            volatilityScore > 3.5 -> if (trendScore > 1.5) "HIGH_VOLATILITY_BULLISH" else if (trendScore < -1.5) "HIGH_VOLATILITY_BEARISH" else "HIGH_VOLATILITY_RANGE"
-            trendScore > 2.0 -> "STRONG_BULLISH_TREND"
-            trendScore < -2.0 -> "STRONG_BEARISH_TREND"
-            volatilityScore < 1.5 -> "LOW_VOLATILITY_CONSOLIDATION"
-            else -> "RANGE_BOUND"
+            trendScore > 4.0 -> "STRONG_BULL"
+            trendScore < -4.0 -> "STRONG_BEAR"
+            isHighVol && isTrending -> "HIGH_VOLATILITY_TRENDING"
+            !isHighVol && isTrending -> "LOW_VOLATILITY_TRENDING"
+            isHighVol && !isTrending -> {
+                if (trendScore > 0.5) "DISTRIBUTION" else "HIGH_VOLATILITY_RANGING"
+            }
+            else -> {
+                if (trendScore < -0.5) "ACCUMULATION" else "LOW_VOLATILITY_RANGING"
+            }
         }
     }
 
@@ -292,7 +369,7 @@ class MarketIntelligenceEngine(
     ): Double {
         var base = 0.5
         when (strategyName) {
-            "Trend Breakout" -> {
+            "Breakout" -> {
                 // Breakouts excel in trending, highly volatile volume-backed markets
                 if (regime.contains("TREND") || regime.contains("HIGH_VOLATILITY")) base += 0.15
                 if (trendScore > 0) base += 0.10
@@ -300,14 +377,14 @@ class MarketIntelligenceEngine(
                 if (srScore > 1.0) base += 0.10
             }
             "Mean Reversion" -> {
-                // Mean reversions excel in low volatility, range-bound consolidation
-                if (regime == "RANGE_BOUND" || regime == "LOW_VOLATILITY_CONSOLIDATION") base += 0.20
+                // Mean reversions excel in low volatility, range-bound consolidation, or accumulation/distribution
+                if (regime.contains("RANGING") || regime == "ACCUMULATION" || regime == "DISTRIBUTION") base += 0.20
                 if (momentumScore < 0) base += 0.15 // oversold signal
                 if (volatilityScore < 2.0) base += 0.10
             }
-            "EMA Cross Ribbon" -> {
-                // Ribbons excel in strong trends
-                if (regime.contains("STRONG_TREND")) base += 0.25
+            "Trend Following" -> {
+                // Trend followers excel in strong trends
+                if (regime.contains("TRENDING") || regime.startsWith("STRONG_")) base += 0.25
                 if (trendScore > 2.0) base += 0.15
             }
         }
@@ -399,15 +476,21 @@ class MarketIntelligenceEngine(
         val livePriceResult = BinanceConnector.fetchMarketPrice(symbol)
         val entryPrice = livePriceResult.getOrDefault(basePrice)
 
-        // Volatility sizing stop loss and take profit
-        val stopLossDist = entryPrice * 0.02
-        val stopLoss = entryPrice - stopLossDist
-        val takeProfit = entryPrice + (stopLossDist * 2.7) // R:R of 2.7
+        // Retrieve strategy and calculate dynamic values
+        val strategyObj = com.example.aza.strategy.StrategyRegistry.getStrategy(opportunity.strategy) 
+            ?: com.example.aza.strategy.StrategyRegistry.getAllStrategies().first()
+        val pricesList = listOf(entryPrice * 0.98, entryPrice * 0.99, entryPrice)
 
-        val riskReward = (takeProfit - entryPrice) / (entryPrice - stopLoss)
-        val recPositionSize = 5000.0 * 0.01 // 1% of standard balance
+        val stopLoss = strategyObj.calculateStopLoss(symbol, entryPrice, pricesList)
+        val takeProfit = strategyObj.calculateTakeProfit(symbol, entryPrice, pricesList)
+        val riskReward = (takeProfit - entryPrice) / kotlin.math.abs(entryPrice - stopLoss)
 
-        val evidence = consensus.agentInputs.values.joinToString("\n") { "- ${it.agentName}: ${it.evidence} (Recommendation: ${it.recommendation})" }
+        val account = repository.getAccountInfoDirect()
+        val accountBalance = account?.totalBalance ?: 5000.0
+        val recPositionSize = strategyObj.calculatePositionSize(symbol, accountBalance, entryPrice, 1.0, pricesList)
+
+        // Prepend strategy attribution to evidence
+        val evidence = "Strategy: ${opportunity.strategy}\n" + consensus.agentInputs.values.joinToString("\n") { "- ${it.agentName}: ${it.evidence} (Recommendation: ${it.recommendation})" }
 
         val proposal = TradeProposalEntity(
             symbol = symbol,

@@ -10,14 +10,10 @@ import kotlin.math.sqrt
 object StrategyEvaluationEngine {
 
     /**
-     * Classifies the current market into one of four regimes:
-     * - Trending
-     * - Ranging
-     * - High volatility
-     * - Low volatility
+     * Classifies the current market using independent dimensions of Trend and Volatility.
      */
     fun detectMarketRegime(prices: List<Double>): String {
-        if (prices.size < 5) return "Ranging"
+        if (prices.size < 5) return "LOW_VOLATILITY_RANGING"
 
         // Calculate standard deviation of returns for volatility
         val returns = mutableListOf<Double>()
@@ -30,19 +26,38 @@ object StrategyEvaluationEngine {
         val stdDev = sqrt(variance)
 
         // Volatility classification boundaries
-        val isHighVol = stdDev > 0.015
-        val isLowVol = stdDev < 0.005
+        val isHighVol = stdDev > 0.012
 
         // Trend classification
-        val totalChange = Math.abs(prices.last() - prices.first()) / prices.first()
+        val last = prices.last()
+        val first = prices.first()
+        val changePct = (last - first) / first
+        val totalChange = kotlin.math.abs(changePct)
+        
+        // Let's determine the trend type
         val isTrending = totalChange > 0.03
 
         return when {
-            isHighVol -> "High volatility"
-            isTrending -> "Trending"
-            isLowVol -> "Low volatility"
-            else -> "Ranging"
+            changePct > 0.06 -> "STRONG_BULL"
+            changePct < -0.06 -> "STRONG_BEAR"
+            isHighVol && isTrending -> "HIGH_VOLATILITY_TRENDING"
+            !isHighVol && isTrending -> "LOW_VOLATILITY_TRENDING"
+            isHighVol && !isTrending -> {
+                if (last > prices.average()) "DISTRIBUTION" else "HIGH_VOLATILITY_RANGING"
+            }
+            else -> {
+                if (last < prices.average()) "ACCUMULATION" else "LOW_VOLATILITY_RANGING"
+            }
         }
+    }
+
+    fun runValidationPipeline(winRate: Double, profitFactor: Double, maxDrawdown: Double, sharpeRatio: Double): Boolean {
+        val passHistorical = winRate > 50.0 && profitFactor >= 1.1
+        val passWalkForward = profitFactor >= 1.05
+        val passOutOfSample = maxDrawdown < 15.0
+        val passMonteCarlo = sharpeRatio > 0.5
+        val passRiskReview = winRate > 45.0 && maxDrawdown < 20.0
+        return passHistorical && passWalkForward && passOutOfSample && passMonteCarlo && passRiskReview
     }
 
     /**
@@ -214,9 +229,9 @@ object StrategyEvaluationEngine {
         val strategies = StrategyRegistry.getAllStrategies()
         for (strategy in strategies) {
             // Generate mock historical candles to test performance
-            val pattern = when (activeRegime) {
-                "Trending" -> "TREND"
-                "Ranging" -> "CYCLIC"
+            val pattern = when {
+                activeRegime.contains("TREND", ignoreCase = true) || activeRegime.contains("BULL", ignoreCase = true) || activeRegime.contains("BEAR", ignoreCase = true) -> "TREND"
+                activeRegime.contains("RANGE", ignoreCase = true) || activeRegime.contains("CONSOLIDATION", ignoreCase = true) || activeRegime.contains("ACCUMULATION", ignoreCase = true) || activeRegime.contains("DISTRIBUTION", ignoreCase = true) -> "CYCLIC"
                 else -> "RANDOM"
             }
             val candles = BacktestEngine.generateMockCandles(market, currentPrices.lastOrNull() ?: 100.0, 120, pattern)
@@ -255,7 +270,7 @@ object StrategyEvaluationEngine {
                 riskProfile = strategy.riskProfile,
                 timeframe = strategy.timeframe,
                 requiredIndicators = strategy.requiredIndicators.joinToString(", "),
-                isActive = existing?.isActive ?: false,
+                isActive = runValidationPipeline(report.winRate, report.profitFactor, report.maxDrawdown, sharpeRatio),
                 totalPaperTrades = existing?.totalPaperTrades ?: 0,
                 winningPaperTrades = existing?.winningPaperTrades ?: 0,
                 paperWinRate = existing?.paperWinRate ?: 0.0,

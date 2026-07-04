@@ -32,6 +32,17 @@ object StrategyIndicators {
         val stdDev = sqrt(variance)
         return Triple(sma, sma + 2 * stdDev, sma - 2 * stdDev)
     }
+
+    fun calculateATR(prices: List<Double>, period: Int = 14): Double {
+        if (prices.size < 2) return 0.0
+        val diffs = mutableListOf<Double>()
+        for (i in 1 until prices.size) {
+            diffs.add(abs(prices[i] - prices[i - 1]))
+        }
+        if (diffs.isEmpty()) return 0.0
+        val takePeriod = if (diffs.size < period) diffs.size else period
+        return diffs.takeLast(takePeriod).average()
+    }
 }
 
 class TrendFollowingStrategy(
@@ -47,7 +58,7 @@ class TrendFollowingStrategy(
     override val timeframe = "4H"
     override val requiredIndicators = listOf("EMA (12, 26, 200)", "RSI (14)")
 
-    override val designedRegimes = listOf("Trending", "Low volatility")
+    override val designedRegimes = listOf("Trending", "Low volatility", "HIGH_VOLATILITY_TRENDING", "LOW_VOLATILITY_TRENDING", "STRONG_BULL", "STRONG_BEAR")
     override fun getParameters(): Map<String, Double> = mapOf(
         "emaShortPeriod" to emaShortPeriod.toDouble(),
         "emaLongPeriod" to emaLongPeriod.toDouble(),
@@ -84,17 +95,28 @@ class TrendFollowingStrategy(
     }
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
-        return entryPrice * 0.98 // 2% SL
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val multiplier = 2.0
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.02
+        return entryPrice - slDist
     }
 
     override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
-        return entryPrice * 1.05 // 5% TP
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val multiplier = 2.0
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.02
+        val rewardRatio = 2.5
+        return entryPrice + (slDist * rewardRatio)
     }
 
-    override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double): Double {
+    override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double>): Double {
         val amountToRisk = accountBalance * (riskPercent / 100.0)
-        val maxLossPerUnit = entryPrice * 0.02
-        return amountToRisk / maxLossPerUnit
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val stopLossDist = if (atr > 0.0) atr * 2.0 else entryPrice * 0.02
+        val rawSize = amountToRisk / stopLossDist
+        val maxUnits = (accountBalance * 0.15) / entryPrice
+        val minUnits = (accountBalance * 0.01) / entryPrice
+        return rawSize.coerceIn(minUnits, maxUnits)
     }
 
     override fun evaluate(market: String, prices: List<Double>, accountBalance: Double, riskPercent: Double): TradeProposal {
@@ -115,7 +137,7 @@ class TrendFollowingStrategy(
         val entry = lastPrice
         val sl = calculateStopLoss(market, entry, prices)
         val tp = calculateTakeProfit(market, entry, prices)
-        val size = calculatePositionSize(market, accountBalance, entry, riskPercent)
+        val size = calculatePositionSize(market, accountBalance, entry, riskPercent, prices)
         val rrr = 2.5
 
         val explanation = when (signal) {
@@ -139,7 +161,7 @@ class BreakoutStrategy(
     override val timeframe = "1H"
     override val requiredIndicators = listOf("Bollinger Bands", "Average True Range (ATR)")
 
-    override val designedRegimes = listOf("Trending", "High volatility")
+    override val designedRegimes = listOf("Trending", "High volatility", "HIGH_VOLATILITY_TRENDING", "LOW_VOLATILITY_TRENDING", "STRONG_BULL", "STRONG_BEAR")
     override fun getParameters(): Map<String, Double> = mapOf(
         "period" to period.toDouble()
     )
@@ -168,17 +190,28 @@ class BreakoutStrategy(
     }
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
-        return entryPrice * 0.96 // 4% SL
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val multiplier = 1.5
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.04
+        return entryPrice - slDist
     }
 
     override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
-        return entryPrice * 1.10 // 10% TP
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val multiplier = 1.5
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.04
+        val rewardRatio = 3.0
+        return entryPrice + (slDist * rewardRatio)
     }
 
-    override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double): Double {
+    override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double>): Double {
         val amountToRisk = accountBalance * (riskPercent / 100.0)
-        val maxLossPerUnit = entryPrice * 0.04
-        return amountToRisk / maxLossPerUnit
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val stopLossDist = if (atr > 0.0) atr * 1.5 else entryPrice * 0.04
+        val rawSize = amountToRisk / stopLossDist
+        val maxUnits = (accountBalance * 0.15) / entryPrice
+        val minUnits = (accountBalance * 0.01) / entryPrice
+        return rawSize.coerceIn(minUnits, maxUnits)
     }
 
     override fun evaluate(market: String, prices: List<Double>, accountBalance: Double, riskPercent: Double): TradeProposal {
@@ -197,7 +230,7 @@ class BreakoutStrategy(
         val entry = lastPrice
         val sl = calculateStopLoss(market, entry, prices)
         val tp = calculateTakeProfit(market, entry, prices)
-        val size = calculatePositionSize(market, accountBalance, entry, riskPercent)
+        val size = calculatePositionSize(market, accountBalance, entry, riskPercent, prices)
         val rrr = 2.5
 
         val explanation = when (signal) {
@@ -219,7 +252,7 @@ class MeanReversionStrategy(
     override val version = "1.0.2"
     override val description = "Exploits temporary overbought/oversold price extensions to return to structural equilibrium."
 
-    override val designedRegimes = listOf("Ranging", "Low volatility")
+    override val designedRegimes = listOf("Ranging", "Low volatility", "HIGH_VOLATILITY_RANGING", "LOW_VOLATILITY_RANGING", "ACCUMULATION", "DISTRIBUTION")
     override fun getParameters(): Map<String, Double> = mapOf(
         "rsiPeriod" to rsiPeriod.toDouble(),
         "oversoldThreshold" to oversoldThreshold,
@@ -253,17 +286,28 @@ class MeanReversionStrategy(
     }
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
-        return entryPrice * 0.97 // 3% SL
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val multiplier = 2.5
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.03
+        return entryPrice - slDist
     }
 
     override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
-        return entryPrice * 1.06 // 6% TP
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val multiplier = 2.5
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.03
+        val rewardRatio = 1.8
+        return entryPrice + (slDist * rewardRatio)
     }
 
-    override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double): Double {
+    override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double>): Double {
         val amountToRisk = accountBalance * (riskPercent / 100.0)
-        val maxLossPerUnit = entryPrice * 0.03
-        return amountToRisk / maxLossPerUnit
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val stopLossDist = if (atr > 0.0) atr * 2.5 else entryPrice * 0.03
+        val rawSize = amountToRisk / stopLossDist
+        val maxUnits = (accountBalance * 0.15) / entryPrice
+        val minUnits = (accountBalance * 0.01) / entryPrice
+        return rawSize.coerceIn(minUnits, maxUnits)
     }
 
     override fun evaluate(market: String, prices: List<Double>, accountBalance: Double, riskPercent: Double): TradeProposal {
@@ -282,7 +326,7 @@ class MeanReversionStrategy(
         val entry = lastPrice
         val sl = calculateStopLoss(market, entry, prices)
         val tp = calculateTakeProfit(market, entry, prices)
-        val size = calculatePositionSize(market, accountBalance, entry, riskPercent)
+        val size = calculatePositionSize(market, accountBalance, entry, riskPercent, prices)
         val rrr = 2.0
 
         val explanation = when (signal) {

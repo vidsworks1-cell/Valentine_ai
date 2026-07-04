@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
         PositionReviewEntity::class,
         PositionAlertEntity::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

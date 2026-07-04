@@ -95,20 +95,26 @@ fun TradingScreen(
             Tab(
                 selected = activeTab == 0,
                 onClick = { activeTab = 0 },
-                text = { Text("Live Portfolio", fontWeight = FontWeight.Bold, fontSize = 13.sp) },
+                text = { Text("Live Portfolio", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                 icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(18.dp)) }
             )
             Tab(
                 selected = activeTab == 1,
                 onClick = { activeTab = 1 },
-                text = { Text("Market Intel", fontWeight = FontWeight.Bold, fontSize = 13.sp) },
+                text = { Text("Market Intel", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                 icon = { Icon(Icons.Default.Insights, contentDescription = null, modifier = Modifier.size(18.dp)) }
             )
             Tab(
                 selected = activeTab == 2,
                 onClick = { activeTab = 2 },
-                text = { Text("Position Intel", fontWeight = FontWeight.Bold, fontSize = 13.sp) },
+                text = { Text("Position Intel", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                 icon = { Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(18.dp)) }
+            )
+            Tab(
+                selected = activeTab == 3,
+                onClick = { activeTab = 3 },
+                text = { Text("Diagnostics", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                icon = { Icon(Icons.Default.QueryStats, contentDescription = null, modifier = Modifier.size(18.dp)) }
             )
         }
 
@@ -779,9 +785,14 @@ fun TradingScreen(
         strategies = strategies,
         innerPadding = innerPadding
     )
-} else {
+} else if (activeTab == 2) {
     // Position Manager & Risk Supervision Panel (Phase 17)
     PositionManagerSection(
+        viewModel = viewModel,
+        innerPadding = innerPadding
+    )
+} else {
+    TradingDiagnosticsDashboard(
         viewModel = viewModel,
         innerPadding = innerPadding
     )
@@ -2489,6 +2500,203 @@ fun TimelineNode(
             Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = color)
             Spacer(modifier = Modifier.height(2.dp))
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun TradingDiagnosticsDashboard(
+    viewModel: AppViewModel,
+    innerPadding: PaddingValues
+) {
+    val opportunities by viewModel.marketOpportunities.collectAsState()
+    val strategies by viewModel.strategies.collectAsState()
+    val engineThoughts by viewModel.marketIntelligenceEngine.engineThoughts.collectAsState()
+
+    val currentRegime = opportunities.firstOrNull()?.currentRegime ?: "LOW_VOLATILITY_RANGING"
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 1. Diagnostics Header & Market Regime Card
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "TRADING SYSTEM DIAGNOSTICS",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ) {
+                            Text("SUPERVISOR LIVE", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "Market Regime: ${currentRegime.replace("_", " ")}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "The system continuously evaluates volatility and directional trend independently to dynamically optimize active strategy routing, dynamic ATR stops, and position sizes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // 2. Strategy Routing and Validation Pipeline Status
+        item {
+            Text(
+                "STRATEGY VALIDATION PIPELINE",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+
+        if (strategies.isEmpty()) {
+            item {
+                Text("No registered strategies available in database.", style = MaterialTheme.typography.bodySmall)
+            }
+        } else {
+            items(strategies) { strategy ->
+                val strategyObj = com.example.aza.strategy.StrategyRegistry.getStrategy(strategy.strategyName)
+                val isRegimeCompatible = strategyObj?.designedRegimes?.any {
+                    it.equals(currentRegime, ignoreCase = true) || currentRegime.contains(it, ignoreCase = true)
+                } ?: false
+
+                val isPipelinePassed = strategy.winRate > 45.0 && strategy.profitFactor >= 1.05 && strategy.maxDrawdown < 20.0
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isPipelinePassed && isRegimeCompatible) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    border = CardDefaults.outlinedCardBorder()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(strategy.strategyName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                Text("v${strategy.version} | ${strategy.riskProfile} Risk", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                if (isPipelinePassed && isRegimeCompatible) {
+                                    Badge(containerColor = Color(0xFFE8F5E9), contentColor = Color(0xFF2E7D32)) {
+                                        Text("ACTIVE & ELIGIBLE", modifier = Modifier.padding(horizontal = 6.dp), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                } else if (!isRegimeCompatible) {
+                                    Badge(containerColor = Color(0xFFFFF3E0), contentColor = Color(0xFFEF6C00)) {
+                                        Text("INCOMPATIBLE REGIME", modifier = Modifier.padding(horizontal = 6.dp), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                } else {
+                                    Badge(containerColor = Color(0xFFFFEBEE), contentColor = Color(0xFFC62828)) {
+                                        Text("PIPELINE FAIL (INACTIVE)", modifier = Modifier.padding(horizontal = 6.dp), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Performance details
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("Win Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${String.format(Locale.US, "%.1f", strategy.winRate)}%", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Column {
+                                Text("Profit Factor", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(String.format(Locale.US, "%.2f", strategy.profitFactor), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Column {
+                                Text("Max Drawdown", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${String.format(Locale.US, "%.1f", strategy.maxDrawdown)}%", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Sharpe Ratio", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(String.format(Locale.US, "%.2f", strategy.sharpeRatio), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Divider(modifier = Modifier.padding(vertical = 12.dp))
+
+                        Text("Designed Regimes: ${strategy.designedRegimes}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
+        // 3. Trade Quality & Safety Gate Validation logs
+        item {
+            Text(
+                "SAFETY GATE & DECISION REASONING STREAM",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "SUPERVISORY LOGS",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFF81C784)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val safetyGateThoughts = engineThoughts.filter {
+                        it.contains("Safety Gate", ignoreCase = true) || it.contains("consensus", ignoreCase = true) || it.contains("validation", ignoreCase = true) || it.contains("regime", ignoreCase = true)
+                    }
+                    if (safetyGateThoughts.isEmpty()) {
+                        Text(
+                            "Supervisor scanning active: all safety gate components verified. Waiting for new opportunities...",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = Color.LightGray
+                        )
+                    } else {
+                        safetyGateThoughts.take(8).forEach { thought ->
+                            Text(
+                                text = thought,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = Color.White,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

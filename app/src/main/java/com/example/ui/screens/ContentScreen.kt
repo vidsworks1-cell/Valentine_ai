@@ -433,8 +433,7 @@ fun ContentScreen(
                                         if (item.status != "PUBLISHED") {
                                             Button(
                                                 onClick = {
-                                                    val nextState = if (item.status == "DRAFT") "SCHEDULED" else "PUBLISHED"
-                                                    viewModel.updateContentStatus(item, nextState)
+                                                    viewModel.runContentPipelineStep(item.id)
                                                 },
                                                 colors = ButtonDefaults.buttonColors(
                                                     containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
@@ -444,7 +443,13 @@ fun ContentScreen(
                                                 shape = RoundedCornerShape(8.dp)
                                             ) {
                                                 Text(
-                                                    text = if (item.status == "DRAFT") "Schedule Video" else "Publish Now! 🚀",
+                                                    text = when (item.status.uppercase(java.util.Locale.US)) {
+                                                        "DRAFT" -> "Generate Outline 📝"
+                                                        "OUTLINE" -> "Generate Script 🎬"
+                                                        "SCRIPTING" -> "Approve & Edit ✂️"
+                                                        "EDITING" -> "Publish Now! 🚀"
+                                                        else -> "Advance Pipeline"
+                                                    },
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold
                                                 )

@@ -20,7 +20,12 @@ data class AzaMission(
     val reviewBestAgent: String = "",
     val reviewMistakes: String = "",
     val reviewLessonsLearned: String = "",
-    val hasReview: Boolean = false
+    val hasReview: Boolean = false,
+    val category: String = "Custom", // Trading, Content Creation, YouTube Growth, Freelance, Research, Learning, Custom
+    val schedule: String = "One-Shot", // Daily, Weekly, Recurring, One-Shot
+    val budget: Double = 0.0,
+    val deadline: String = "",
+    val successCriteria: String = ""
 )
 
 @Dao

@@ -352,36 +352,29 @@ fun GigScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.End
                                 ) {
-                                    if (gig.status == "AVAILABLE") {
+                                    val currentStatus = gig.status.uppercase(java.util.Locale.US)
+                                    if (currentStatus == "AVAILABLE" || currentStatus == "DRAFTING") {
                                         Button(
                                             onClick = {
                                                 if (accountInfo?.isFreelanceLinked == true) {
-                                                    viewModel.runGigProposalGenerator(gig)
+                                                    viewModel.runFreelanceProposalPipeline(gig.id)
                                                 } else {
                                                     Toast.makeText(context, "Please link your profile in Account tab first!", Toast.LENGTH_LONG).show()
                                                 }
                                             },
                                             modifier = Modifier.fillMaxWidth().height(44.dp),
                                             colors = ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.primary,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                                containerColor = if (currentStatus == "AVAILABLE") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
+                                                contentColor = Color.White
                                             ),
                                             shape = RoundedCornerShape(10.dp),
-                                            enabled = !isGeneratingProposal && accountInfo?.isFreelanceLinked == true
+                                            enabled = accountInfo?.isFreelanceLinked == true
                                         ) {
-                                            if (isGeneratingProposal) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(16.dp),
-                                                    color = MaterialTheme.colorScheme.onPrimary,
-                                                    strokeWidth = 2.dp
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text("Formulating Custom Case by Gemini...", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                            } else {
-                                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Tailor AI Cover Letter & Submit", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                            }
+                                            val btnIcon = if (currentStatus == "AVAILABLE") Icons.Default.AutoAwesome else Icons.Default.Send
+                                            val btnText = if (currentStatus == "AVAILABLE") "Formulate Lead Proposal Draft" else "Submit Custom Response Cover Letter"
+                                            Icon(btnIcon, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(btnText, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                         }
                                     } else if (gig.status == "APPLIED") {
                                         Button(
