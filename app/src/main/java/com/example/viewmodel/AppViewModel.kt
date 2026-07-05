@@ -22,6 +22,12 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     private val _engineValidationReport = MutableStateFlow<com.example.aza.strategy.EngineValidationReport?>(null)
     val engineValidationReport = _engineValidationReport.asStateFlow()
 
+    private val _validationSymbol = MutableStateFlow("BTCUSDT")
+    val validationSymbol = _validationSymbol.asStateFlow()
+
+    private val _validationTimeframe = MutableStateFlow("1h")
+    val validationTimeframe = _validationTimeframe.asStateFlow()
+
 
     // Market Intelligence Observables
     val marketIntelligenceEngine = com.example.aza.intelligence.MarketIntelligenceEngine(repository, viewModelScope)
@@ -2699,12 +2705,6 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     }
 
     // --- Strategy & Backtesting Research Platform API ---
-
-    private val _validationSymbol = MutableStateFlow("BTCUSDT")
-    val validationSymbol = _validationSymbol.asStateFlow()
-
-    private val _validationTimeframe = MutableStateFlow("1h")
-    val validationTimeframe = _validationTimeframe.asStateFlow()
 
     fun selectValidationSymbol(symbol: String) {
         _validationSymbol.value = symbol

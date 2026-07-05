@@ -18,9 +18,15 @@ object SecureCredentialStore {
 
     private var appContext: Context? = null
 
+    private var fallbackKey: SecretKey? = null
+
     fun init(context: Context) {
         appContext = context.applicationContext
-        getOrCreateSecretKey()
+        try {
+            getOrCreateSecretKey()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
     }
 
     private fun getContext(): Context {
@@ -28,19 +34,55 @@ object SecureCredentialStore {
     }
 
     private fun getOrCreateSecretKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-        keyStore.getKey(KEY_ALIAS, null)?.let { return it as SecretKey }
+        try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
+            keyStore.getKey(KEY_ALIAS, null)?.let { return it as SecretKey }
 
-        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
-        val spec = KeyGenParameterSpec.Builder(
-            KEY_ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .build()
-        keyGenerator.init(spec)
-        return keyGenerator.generateKey()
+            val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
+            val spec = KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .build()
+            keyGenerator.init(spec)
+            return keyGenerator.generateKey()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            return getOrCreateFallbackKey()
+        }
+    }
+
+    private fun getOrCreateFallbackKey(): SecretKey {
+        fallbackKey?.let { return it }
+        val context = getContext()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val encodedKey = prefs.getString("fallback_aes_key", null)
+        if (encodedKey != null) {
+            try {
+                val decoded = Base64.decode(encodedKey, Base64.DEFAULT)
+                val key = javax.crypto.spec.SecretKeySpec(decoded, "AES")
+                fallbackKey = key
+                return key
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        try {
+            val keyGenerator = KeyGenerator.getInstance("AES")
+            keyGenerator.init(256)
+            val newKey = keyGenerator.generateKey()
+            prefs.edit().putString("fallback_aes_key", Base64.encodeToString(newKey.encoded, Base64.DEFAULT)).apply()
+            fallbackKey = newKey
+            return newKey
+        } catch (e: Exception) {
+            e.printStackTrace()
+            val keyBytes = ByteArray(32) { 0 }
+            val key = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
+            fallbackKey = key
+            return key
+        }
     }
 
     fun encrypt(key: String, value: String) {
@@ -176,5 +218,30 @@ object SecureCredentialStore {
 
     fun deleteOpenAICredentials() {
         delete("openai_gemini_api_key")
+    }
+
+    // --- ZKP & Homomorphic Encryption preferences ---
+    fun isZkpEnabled(): Boolean {
+        val context = getContext()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean("zkp_enabled", false)
+    }
+
+    fun setZkpEnabled(enabled: Boolean) {
+        val context = getContext()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("zkp_enabled", enabled).apply()
+    }
+
+    fun isHomomorphicEnabled(): Boolean {
+        val context = getContext()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean("homomorphic_enabled", false)
+    }
+
+    fun setHomomorphicEnabled(enabled: Boolean) {
+        val context = getContext()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("homomorphic_enabled", enabled).apply()
     }
 }

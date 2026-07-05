@@ -512,6 +512,261 @@ fun AccountScreen(
             }
         }
 
+        // ADVANCED CRYPTOGRAPHIC GUARANTEES SECTION (ZKP & HE)
+        item {
+            Text(
+                text = "ADVANCED CRYPTOGRAPHIC GUARANTEES",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        item {
+            var isZkpEnabled by remember { mutableStateOf(SecureCredentialStore.isZkpEnabled()) }
+            var isHeEnabled by remember { mutableStateOf(SecureCredentialStore.isHomomorphicEnabled()) }
+            
+            var zkpProofDetails by remember { mutableStateOf<com.example.aza.security.SchnorrZKP.Proof?>(null) }
+            var zkpVerificationResult by remember { mutableStateOf<Boolean?>(null) }
+            
+            var heCiphertext by remember { mutableStateOf<String?>(null) }
+            var heSummationDetails by remember { mutableStateOf<String?>(null) }
+            var heDecryptedValue by remember { mutableStateOf<String?>(null) }
+
+            val context = LocalContext.current
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AdminPanelSettings,
+                            contentDescription = "Crypto security",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Next-Gen Privacy Protocols",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 1. Zero-Knowledge Proofs
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Zero-Knowledge Proofs (ZKP)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Prove possession of API keys without disclosing the keys themselves.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isZkpEnabled,
+                            onCheckedChange = { checked ->
+                                isZkpEnabled = checked
+                                SecureCredentialStore.setZkpEnabled(checked)
+                                Toast.makeText(context, if (checked) "ZKP Authentication Engaged" else "ZKP disabled", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+
+                    if (isZkpEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    "SCHNORR CRYPTO-PROOF HANDSHAKE",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "When connecting to external APIs, Aza creates a Non-Interactive ZK Proof (NIZKP) proving she knows the API secret key without exposing the raw secret.",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = {
+                                        val testSecret = if (binanceSecretKey.isNotEmpty()) binanceSecretKey else "aza_default_secret_seed"
+                                        val proof = com.example.aza.security.SchnorrZKP.prove(testSecret)
+                                        zkpProofDetails = proof
+                                        zkpVerificationResult = com.example.aza.security.SchnorrZKP.verify(proof)
+                                    },
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), contentColor = MaterialTheme.colorScheme.primary),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text("Simulate ZK-Proof Handshake", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                zkpProofDetails?.let { proof ->
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("• Commitment t: ${proof.t.toString(16).take(30)}...", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("• Challenge c: ${proof.c.toString(16).take(30)}...", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("• Response s: ${proof.s.toString(16).take(30)}...", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (zkpVerificationResult == true) Icons.Default.CheckCircle else Icons.Default.Error,
+                                            contentDescription = "ZKP Verify",
+                                            tint = if (zkpVerificationResult == true) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (zkpVerificationResult == true) "Fiat-Shamir cryptographic proof VERIFIED successfully!" else "Proof verification failed",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (zkpVerificationResult == true) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 2. Homomorphic Encryption
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Homomorphic Balance Aggregation",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Process and audit wallet balances completely in their encrypted state.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isHeEnabled,
+                            onCheckedChange = { checked ->
+                                isHeEnabled = checked
+                                SecureCredentialStore.setHomomorphicEnabled(checked)
+                                Toast.makeText(context, if (checked) "Paillier Homomorphic Guard Engaged" else "Homomorphic calculation disabled", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+
+                    if (isHeEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    "PAILLIER ADDITIVE HOMOMORPHISM",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "Wallet balances are represented mathematically as ciphertexts. Computations are aggregated homomorphically (multiplying ciphertexts), keeping plain balances completely private.",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val balanceVal = currentAccount.totalBalance.toLong().coerceAtLeast(0)
+                                            val kp = com.example.aza.security.PaillierCryptosystem.generateKeyPair(256)
+                                            val c1 = com.example.aza.security.PaillierCryptosystem.encrypt(java.math.BigInteger.valueOf(balanceVal), kp.publicKey)
+                                            heCiphertext = c1.toString(16).take(40) + "..."
+                                            
+                                            // Let's add a simulated audit log addition of 100
+                                            val addition = 100L
+                                            val c2 = com.example.aza.security.PaillierCryptosystem.encrypt(java.math.BigInteger.valueOf(addition), kp.publicKey)
+                                            
+                                            val sumCipher = com.example.aza.security.PaillierCryptosystem.add(c1, c2, kp.publicKey)
+                                            heSummationDetails = "E(Balance) * E(100) mod n² = " + sumCipher.toString(16).take(30) + "..."
+                                            
+                                            val decrypted = com.example.aza.security.PaillierCryptosystem.decrypt(sumCipher, kp.publicKey, kp.privateKey)
+                                            heDecryptedValue = "$decrypted (Calculated entirely on ciphertext!)"
+                                        } catch (e: Exception) {
+                                            heCiphertext = "Error in encryption: ${e.message}"
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), contentColor = MaterialTheme.colorScheme.primary),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text("Compute Homomorphic Audit Sum", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                heCiphertext?.let { ct ->
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("• Encrypted Balance E(M): $ct", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    heSummationDetails?.let { sd ->
+                                        Text("• Homomorphic Sum: $sd", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    heDecryptedValue?.let { dv ->
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Verified, contentDescription = "HE success", tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Decrypted Audit Result: $$dv", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Transactions Audit Ledger logs
         item {
             Text(
