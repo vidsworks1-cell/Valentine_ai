@@ -3066,7 +3066,7 @@ fun AzaScreen(
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text("History Length (Candles):", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 2.dp)) {
-                                        listOf(50, 100, 200).forEach { cnt ->
+                                        listOf(100, 300, 500, 1000).forEach { cnt ->
                                             val isSel = backtestCandleCount == cnt
                                             Box(
                                                 modifier = Modifier
@@ -3222,6 +3222,30 @@ fun AzaScreen(
                                             )
                                         }
                                     }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+                                val totalTrades = activeReport.totalTrades
+                                val (badgeText, badgeColor, badgeBg) = when {
+                                    totalTrades >= 30 -> Triple("✅ STATISTICALLY SIGNIFICANT SAMPLE (N = $totalTrades >= 30 TRADES)", Color(0xFF2E7D32), Color(0xFFE8F5E9))
+                                    totalTrades >= 10 -> Triple("⚠️ MODERATE SAMPLE SIZE (10 <= N = $totalTrades < 30 TRADES)", Color(0xFFEF6C00), Color(0xFFFFF3E0))
+                                    else -> Triple("❌ INSUFFICIENT SAMPLE SIZE (N = $totalTrades < 10 TRADES) - RUN WITH MORE CANDLES", Color(0xFFC62828), Color(0xFFFFEBEE))
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(badgeBg)
+                                        .border(1.dp, badgeColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = badgeText,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = badgeColor,
+                                        modifier = Modifier.align(Alignment.Center)
+                                    )
                                 }
 
                                 if (showLedgerReport) {

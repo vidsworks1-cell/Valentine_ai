@@ -297,7 +297,7 @@ class MarketIntelligenceEngine(
                 val positionSizeValid = topOp.expectedReward > 0.0
                 
                 // 5. Portfolio exposure check (e.g. max active positions < 3)
-                val activePositions = repository.positions.firstOrNull() ?: emptyList()
+                val activePositions = repository.getAllPositionsDirect()
                 val portfolioExposureAcceptable = activePositions.count { it.status == "OPEN" } < 3
                 
                 // 6. Recent strategy performance acceptable
@@ -305,7 +305,7 @@ class MarketIntelligenceEngine(
                 val recentPerformanceAcceptable = dbStr == null || dbStr.paperWinRate >= 45.0
                 
                 // 7. No conflicting knowledge base lessons
-                val kbEntries = repository.knowledgeEntries.firstOrNull() ?: emptyList()
+                val kbEntries = repository.getAllKnowledgeDirect()
                 val hasConflictingLessons = kbEntries.any { 
                     it.category == "REGIME" && it.title.contains(topOp.currentRegime, ignoreCase = true) && it.description.contains("fail", ignoreCase = true)
                 }
@@ -321,7 +321,7 @@ class MarketIntelligenceEngine(
                         "\n  - Exposure Acceptable: $portfolioExposureAcceptable" +
                         "\n  - Recent Performance Acceptable: $recentPerformanceAcceptable" +
                         "\n  - No Conflicting Lessons: ${!hasConflictingLessons}")
-                    return@forEach
+                    return@withContext
                 }
                 
                 addThought("🛡️ SAFETY GATE PASSED! Passing to multi-agent consensus...")

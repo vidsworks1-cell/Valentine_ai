@@ -36,8 +36,8 @@ class BinanceCapability : Capability {
 
         if (isLive) {
             onThoughtLog("🔌 BINANCE CONNECT: Live Connector activated. Syncing credentials...")
-            val apiKey = state?.apiKey ?: ""
-            val apiSecret = state?.apiSecret ?: ""
+            val apiKey = try { com.example.aza.security.SecureCredentialStore.getBinanceApiKey() } catch(e: Exception) { "" }.ifBlank { state?.apiKey ?: "" }
+            val apiSecret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }.ifBlank { state?.apiSecret ?: "" }
             if (apiKey.isBlank() || apiSecret.isBlank()) {
                 val err = "API Credentials missing or invalid. Please update keys in the Secure Operations Center."
                 onThoughtLog("🚨 BINANCE CONNECT: $err")
@@ -443,7 +443,7 @@ class ContentCapability : Capability {
         
         if (isLive) {
             onThoughtLog("🔌 CONTENT CONNECT: Live AI Writing Engine connector activated.")
-            val apiKey = state?.apiKey ?: ""
+            val apiKey = try { com.example.aza.security.SecureCredentialStore.getOpenAICredentials() } catch(e: Exception) { "" }.ifBlank { state?.apiKey ?: "" }
             if (apiKey.isBlank()) {
                 val err = "API Credentials missing. Live content optimizer requires valid model subscription."
                 onThoughtLog("🚨 CONTENT CONNECT: $err")
@@ -557,7 +557,7 @@ class YouTubeCapability : Capability {
 
         if (isLive) {
             onThoughtLog("🔌 YOUTUBE CONNECT: Live YouTube Data API v3 connector active.")
-            val apiKey = state?.apiKey ?: ""
+            val apiKey = try { com.example.aza.security.SecureCredentialStore.getYouTubeOAuthToken() } catch(e: Exception) { "" }.ifBlank { state?.apiKey ?: "" }
             if (apiKey.isBlank()) {
                 val err = "API Credentials missing or invalid. YouTube integration requires valid Google OAuth / API credentials."
                 onThoughtLog("🚨 YOUTUBE CONNECT: $err")
@@ -716,7 +716,7 @@ class FreelanceCapability : Capability {
 
         if (isLive) {
             onThoughtLog("🔌 FREELANCE CONNECT: Upwork / Freelancer REST live connector active.")
-            val apiKey = state?.apiKey ?: ""
+            val apiKey = try { com.example.aza.security.SecureCredentialStore.decrypt("freelance_api_key") ?: "" } catch(e: Exception) { "" }.ifBlank { state?.apiKey ?: "" }
             if (apiKey.isBlank()) {
                 val err = "API Credentials missing. Live opportunity search requires valid token authentication."
                 onThoughtLog("🚨 FREELANCE CONNECT: $err")

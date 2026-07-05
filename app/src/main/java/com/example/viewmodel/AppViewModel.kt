@@ -15,6 +15,14 @@ import com.example.aza.web.SearchResult
 
 class AppViewModel(private val repository: AppRepository) : ViewModel() {
 
+    // Engine Validation States
+    private val _isEngineValidating = MutableStateFlow(false)
+    val isEngineValidating = _isEngineValidating.asStateFlow()
+
+    private val _engineValidationReport = MutableStateFlow<com.example.aza.strategy.EngineValidationReport?>(null)
+    val engineValidationReport = _engineValidationReport.asStateFlow()
+
+
     // Market Intelligence Observables
     val marketIntelligenceEngine = com.example.aza.intelligence.MarketIntelligenceEngine(repository, viewModelScope)
     val marketOpportunities: StateFlow<List<com.example.data.database.OpportunityEntity>> = repository.marketOpportunities
@@ -1217,11 +1225,47 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
         viewModelScope.launch {
             val state = repository.getCapabilityStateByNameDirect(name)
             if (state != null) {
+                // Securely save credentials using Keystore-backed SecureCredentialStore
+                when (name) {
+                    "Binance Capability" -> {
+                        com.example.aza.security.SecureCredentialStore.saveBinanceCredentials(
+                            apiKey = apiKey,
+                            secretKey = apiSecret,
+                            env = com.example.aza.security.SecureCredentialStore.getBinanceEnv(),
+                            tradingMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
+                        )
+                    }
+                    "YouTube Capability" -> {
+                        com.example.aza.security.SecureCredentialStore.saveYouTubeCredentials(
+                            token = apiKey,
+                            refreshToken = apiSecret,
+                            channelId = com.example.aza.security.SecureCredentialStore.getYouTubeChannelId(),
+                            channelName = com.example.aza.security.SecureCredentialStore.getYouTubeChannelName(),
+                            subscribers = com.example.aza.security.SecureCredentialStore.getYouTubeSubscribers(),
+                            views = com.example.aza.security.SecureCredentialStore.getYouTubeViews(),
+                            videos = com.example.aza.security.SecureCredentialStore.getYouTubeVideos(),
+                            playlists = com.example.aza.security.SecureCredentialStore.getYouTubePlaylists()
+                        )
+                    }
+                    "Content Capability" -> {
+                        com.example.aza.security.SecureCredentialStore.saveOpenAICredentials(apiKey)
+                    }
+                    "Freelance Capability" -> {
+                        com.example.aza.security.SecureCredentialStore.encrypt("freelance_api_key", apiKey)
+                    }
+                    else -> {
+                        com.example.aza.security.SecureCredentialStore.encrypt(name + "_api_key", apiKey)
+                        if (apiSecret.isNotBlank()) {
+                            com.example.aza.security.SecureCredentialStore.encrypt(name + "_api_secret", apiSecret)
+                        }
+                    }
+                }
+
                 repository.updateCapabilityState(state.copy(
-                    apiKey = apiKey,
-                    apiSecret = apiSecret
+                    apiKey = if (apiKey.isBlank()) "" else "[SECURED_KEYSTORE]",
+                    apiSecret = if (apiSecret.isBlank()) "" else "[SECURED_KEYSTORE]"
                 ))
-                addSchedulerThought("🔒 CAPABILITY CONFIG: Credentials updated for '$name' securely.")
+                addSchedulerThought("🔒 CAPABILITY CONFIG: Credentials updated for '$name' securely via Android Keystore.")
             }
         }
     }
@@ -1444,6 +1488,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
         startHealthMonitoring()
         startBinanceSyncLoop()
         startPortfolioManagerLoop()
+        runEngineValidationSuite()
     }
 
     fun startBinanceSyncLoop() {
@@ -2655,6 +2700,54 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
 
     // --- Strategy & Backtesting Research Platform API ---
 
+    private val _validationSymbol = MutableStateFlow("BTCUSDT")
+    val validationSymbol = _validationSymbol.asStateFlow()
+
+    private val _validationTimeframe = MutableStateFlow("1h")
+    val validationTimeframe = _validationTimeframe.asStateFlow()
+
+    fun selectValidationSymbol(symbol: String) {
+        _validationSymbol.value = symbol
+    }
+
+    fun selectValidationTimeframe(timeframe: String) {
+        _validationTimeframe.value = timeframe
+    }
+
+    fun runEngineValidationSuite() {
+        viewModelScope.launch {
+            _isEngineValidating.value = true
+            val sym = _validationSymbol.value
+            val tf = _validationTimeframe.value
+            addThought("⚙️ ENGINE VALIDATION: Fetching Binance historical spot data for $sym ($tf) and initiating Walk-Forward historical replay...")
+            try {
+                val report = withContext(Dispatchers.Default) {
+                    com.example.aza.strategy.EngineValidationSuite.runValidationSuite(symbol = sym, timeframe = tf)
+                }
+                _engineValidationReport.value = report
+                
+                // Automatically suspend strategies failing out-of-sample qualification thresholds
+                for (res in report.strategyResults) {
+                    val isPassed = res.failedThresholds.isEmpty()
+                    val entity = repository.getStrategyByNameDirect(res.strategyName)
+                    if (entity != null) {
+                        if (isPassed != entity.isActive) {
+                            val updated = entity.copy(isActive = isPassed)
+                            repository.updateStrategy(updated)
+                            addThought("⚙️ STRATEGY REGISTRY: Updated status of [${res.strategyName}] to: ${if (isPassed) "✅ ACTIVE" else "❌ SUSPENDED"} based on walk-forward criteria.")
+                        }
+                    }
+                }
+                
+                addThought("📊 ENGINE VALIDATION: Walk-forward replay complete for $sym ($tf)! Evaluated ${report.totalStrategiesEvaluated} strategies. Passed: ${report.passedStrategiesCount}, Failed/Suspended: ${report.failedStrategiesCount}.")
+            } catch (e: Exception) {
+                addThought("⚠️ ENGINE VALIDATION ERROR: Failed to execute stress test: ${e.localizedMessage}")
+            } finally {
+                _isEngineValidating.value = false
+            }
+        }
+    }
+
     private val _isBacktesting = MutableStateFlow(false)
     val isBacktesting = _isBacktesting.asStateFlow()
 
@@ -2667,7 +2760,7 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
     private val _backtestMarket = MutableStateFlow("BTC")
     val backtestMarket = _backtestMarket.asStateFlow()
 
-    private val _backtestCandleCount = MutableStateFlow(100)
+    private val _backtestCandleCount = MutableStateFlow(500)
     val backtestCandleCount = _backtestCandleCount.asStateFlow()
 
     private val _backtestPattern = MutableStateFlow("TREND")

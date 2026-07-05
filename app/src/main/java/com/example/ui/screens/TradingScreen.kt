@@ -3,9 +3,12 @@ package com.example.ui.screens
 import com.example.aza.connector.BinanceConnector
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,6 +35,12 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.data.database.PortfolioAsset
 import com.example.viewmodel.AppViewModel
 import java.util.Locale
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import kotlin.math.abs
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -2505,6 +2514,129 @@ fun TimelineNode(
 }
 
 @Composable
+fun ChoiceChip(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .border(1.dp, if (isSelected) Color.Transparent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+fun EquityCurveChart(
+    points: List<Double>,
+    modifier: Modifier = Modifier,
+    lineColor: Color = Color(0xFF4CAF50),
+    fillColor: Color = Color(0xFF4CAF50).copy(alpha = 0.15f)
+) {
+    if (points.isEmpty()) return
+    val minVal = points.minOrNull() ?: 0.0
+    val maxVal = points.maxOrNull() ?: 1.0
+    val range = maxVal - minVal
+
+    Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+        val path = Path()
+        val fillPath = Path()
+
+        for (i in points.indices) {
+            val x = (i.toFloat() / (points.size - 1)) * width
+            val normalizedY = if (range > 0) ((points[i] - minVal) / range).toFloat() else 0.5f
+            val y = height - (normalizedY * (height - 10.dp.toPx()) + 5.dp.toPx())
+
+            if (i == 0) {
+                path.moveTo(x, y)
+                fillPath.moveTo(x, height)
+                fillPath.lineTo(x, y)
+            } else {
+                path.lineTo(x, y)
+                fillPath.lineTo(x, y)
+            }
+            if (i == points.size - 1) {
+                fillPath.lineTo(x, height)
+                fillPath.close()
+            }
+        }
+
+        drawPath(path = fillPath, color = fillColor)
+        drawPath(
+            path = path,
+            color = lineColor,
+            style = Stroke(
+                width = 2.dp.toPx(),
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round
+            )
+        )
+    }
+}
+
+@Composable
+fun DrawdownCurveChart(
+    points: List<Double>,
+    modifier: Modifier = Modifier,
+    lineColor: Color = Color(0xFFE57373),
+    fillColor: Color = Color(0xFFE57373).copy(alpha = 0.15f)
+) {
+    if (points.isEmpty()) return
+    val maxVal = points.maxOrNull() ?: 1.0
+    val minVal = 0.0
+    val range = maxVal - minVal
+
+    Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+        val path = Path()
+        val fillPath = Path()
+
+        for (i in points.indices) {
+            val x = (i.toFloat() / (points.size - 1)) * width
+            val normalizedY = if (range > 0) ((points[i] - minVal) / range).toFloat() else 0.0f
+            val y = normalizedY * (height - 10.dp.toPx()) + 5.dp.toPx()
+
+            if (i == 0) {
+                path.moveTo(x, y)
+                fillPath.moveTo(x, 0f)
+                fillPath.lineTo(x, y)
+            } else {
+                path.lineTo(x, y)
+                fillPath.lineTo(x, y)
+            }
+            if (i == points.size - 1) {
+                fillPath.lineTo(x, 0f)
+                fillPath.close()
+            }
+        }
+
+        drawPath(path = fillPath, color = fillColor)
+        drawPath(
+            path = path,
+            color = lineColor,
+            style = Stroke(
+                width = 2.dp.toPx(),
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round
+            )
+        )
+    }
+}
+
+@Composable
 fun TradingDiagnosticsDashboard(
     viewModel: AppViewModel,
     innerPadding: PaddingValues
@@ -2512,6 +2644,10 @@ fun TradingDiagnosticsDashboard(
     val opportunities by viewModel.marketOpportunities.collectAsState()
     val strategies by viewModel.strategies.collectAsState()
     val engineThoughts by viewModel.marketIntelligenceEngine.engineThoughts.collectAsState()
+    val isEngineValidating by viewModel.isEngineValidating.collectAsState()
+    val engineValidationReport by viewModel.engineValidationReport.collectAsState()
+    val validationSymbol by viewModel.validationSymbol.collectAsState()
+    val validationTimeframe by viewModel.validationTimeframe.collectAsState()
 
     val currentRegime = opportunities.firstOrNull()?.currentRegime ?: "LOW_VOLATILITY_RANGING"
 
@@ -2558,6 +2694,438 @@ fun TradingDiagnosticsDashboard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+
+        // MULTI-REGIME ENGINE VALIDATION SECTION
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                "QUANT REPLAY & WALK-FORWARD VALIDATION",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Replays genuine historical Binance candles candle-by-candle with exchange fee and slippage models",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Selector for symbol
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Symbol:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Row(
+                            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT").forEach { sym ->
+                                ChoiceChip(
+                                    text = sym,
+                                    isSelected = (validationSymbol == sym),
+                                    onClick = { viewModel.selectValidationSymbol(sym) }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Selector for timeframe
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Timeframe:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Row(
+                            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf("5m", "15m", "1h", "4h", "1d").forEach { tf ->
+                                ChoiceChip(
+                                    text = tf,
+                                    isSelected = (validationTimeframe == tf),
+                                    onClick = { viewModel.selectValidationTimeframe(tf) }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = { viewModel.runEngineValidationSuite() },
+                        enabled = !isEngineValidating,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 10.dp)
+                    ) {
+                        if (isEngineValidating) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(16.dp).padding(end = 8.dp)
+                            )
+                            Text("Replaying Historical Binance Candles...", style = MaterialTheme.typography.labelMedium)
+                        } else {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Refresh,
+                                contentDescription = "Run Walk-Forward",
+                                modifier = Modifier.size(16.dp).padding(end = 6.dp)
+                            )
+                            Text("Execute Historical Walk-Forward Replay", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (isEngineValidating) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    "Executing high-fidelity historical replay...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    "Splitting: 50% Training | 25% Validation | 25% Testing",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    } else if (engineValidationReport != null) {
+                        val report = engineValidationReport!!
+                        
+                        // Summary Bar
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Evaluated", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${report.totalStrategiesEvaluated}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Passed", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
+                                    Text("${report.passedStrategiesCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                }
+                            }
+                            Card(
+                                modifier = Modifier.weight(1f),
+                                colors = CardDefaults.cardColors(containerColor = if (report.failedStrategiesCount > 0) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Suspended", style = MaterialTheme.typography.labelSmall, color = if (report.failedStrategiesCount > 0) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${report.failedStrategiesCount}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = if (report.failedStrategiesCount > 0) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text("QUANT REPLAY STRATEGY LEADERBOARD", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Render strategies sorted by performance score or Net Profit
+                        val sortedResults = report.strategyResults.sortedByDescending { it.expectancy }
+                        sortedResults.forEach { result ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
+                                border = BorderStroke(1.dp, if (result.failedThresholds.isEmpty()) Color(0xFF81C784).copy(alpha = 0.3f) else Color(0xFFE57373).copy(alpha = 0.3f))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(result.strategyName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                        if (result.failedThresholds.isEmpty()) {
+                                            Badge(containerColor = Color(0xFFE8F5E9), contentColor = Color(0xFF2E7D32)) {
+                                                Text("QUALIFIED & ACTIVE", modifier = Modifier.padding(horizontal = 6.dp), style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        } else {
+                                            Badge(containerColor = Color(0xFFFFEBEE), contentColor = Color(0xFFC62828)) {
+                                                Text("SUSPENDED & DEQUALIFIED", modifier = Modifier.padding(horizontal = 6.dp), style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Key Metrics Row 1
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Column {
+                                            Text("Total Trades", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("${result.totalTrades}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column {
+                                            Text("Overall WR", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("${String.format(Locale.US, "%.1f", result.winRate)}%", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column {
+                                            Text("Profit Factor", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(String.format(Locale.US, "%.2f", result.profitFactor), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text("Expectancy", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("${if (result.expectancy >= 0) "+" else ""}$${String.format(Locale.US, "%.1f", result.expectancy)} USD", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (result.expectancy >= 0) Color(0xFF2E7D32) else Color(0xFFC62828))
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Key Metrics Row 2
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Column {
+                                            Text("Max Drawdown", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("${String.format(Locale.US, "%.1f", result.maxDrawdown)}%", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (result.maxDrawdown < 15.0) Color(0xFF2E7D32) else Color(0xFFC62828))
+                                        }
+                                        Column {
+                                            Text("Sharpe Ratio", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(String.format(Locale.US, "%.2f", result.sharpeRatio), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column {
+                                            Text("Avg Risk/Reward", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("1 : ${String.format(Locale.US, "%.2f", result.avgRiskReward)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text("Net Profit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            val netP = result.regimePerformance.sumOf { it.netProfit }
+                                            Text("${if (netP >= 0) "+" else ""}$${String.format(Locale.US, "%,.1f", netP)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (netP >= 0) Color(0xFF2E7D32) else Color(0xFFC62828))
+                                        }
+                                    }
+
+                                    // WALK-FORWARD PERIOD SPLITS
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text("WALK-FORWARD STAGE PERFORMANCE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Card(
+                                            modifier = Modifier.weight(1f),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                        ) {
+                                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("Training Period", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text("${String.format(Locale.US, "%.1f", result.trainingWinRate)}% WR", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                        Card(
+                                            modifier = Modifier.weight(1f),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                        ) {
+                                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("Validation Set", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text("${String.format(Locale.US, "%.1f", result.validationWinRate)}% WR", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                                            }
+                                        }
+                                        Card(
+                                            modifier = Modifier.weight(1f),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                        ) {
+                                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("Testing Set", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text("${String.format(Locale.US, "%.1f", result.testingWinRate)}% WR", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = if (result.testingWinRate >= 45.0) Color(0xFF2E7D32) else Color(0xFFC62828))
+                                            }
+                                        }
+                                    }
+
+                                    // ADDITIONAL QUANT METRICS
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text("Sortino Ratio", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(String.format(Locale.US, "%.2f", result.sortinoRatio), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column {
+                                            Text("Avg Holding Time", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("${String.format(Locale.US, "%.1f", result.avgHoldingTimeMin)} min", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                        }
+                                        Column {
+                                            Text("Largest Win", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("+$${String.format(Locale.US, "%.1f", result.largestWin)}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                        }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text("Largest Loss", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("-$${String.format(Locale.US, "%.1f", java.lang.Math.abs(result.largestLoss))}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                                        }
+                                    }
+
+                                    // VISUAL PORTFOLIO CURVES
+                                    if (result.equityCurve.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text("EQUITY PATH GROWTH (Validation + Testing)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        EquityCurveChart(
+                                            points = result.equityCurve,
+                                            modifier = Modifier.fillMaxWidth().height(80.dp)
+                                        )
+                                    }
+
+                                    if (result.drawdownCurve.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text("DRAWDOWN PROFILE PATH (%)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        DrawdownCurveChart(
+                                            points = result.drawdownCurve,
+                                            modifier = Modifier.fillMaxWidth().height(60.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Primary Cause of Loss
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                            .padding(10.dp)
+                                    ) {
+                                        Column {
+                                            Text("PRIMARY CAUSE OF LOSING TRADES:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(result.primaryCauseOfLoss, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+
+                                    // Failure breakdown detailed list
+                                    if (result.failureCauseBreakdown.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text("FAILURE CLASSIFICATIONS & COUNTS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        result.failureCauseBreakdown.forEach { (cause, count) ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(cause, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(MaterialTheme.colorScheme.errorContainer)
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("$count Trades", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Failed Thresholds & Auto Recommendation
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (result.failedThresholds.isEmpty()) Color(0xFFE8F5E9) else Color(0xFFFFF3E0))
+                                            .border(1.dp, (if (result.failedThresholds.isEmpty()) Color(0xFF81C784) else Color(0xFFFFB74D)).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                            .padding(10.dp)
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = if (result.failedThresholds.isEmpty()) "QUALIFICATION STATUS:" else "SYSTEM DE-QUALIFICATION ACTION:",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (result.failedThresholds.isEmpty()) Color(0xFF2E7D32) else Color(0xFFD84315)
+                                            )
+                                            if (result.failedThresholds.isNotEmpty()) {
+                                                Text(
+                                                    text = "Fails: ${result.failedThresholds.joinToString(", ")}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFBF360C)
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                            }
+                                            Text(result.recommendation, style = MaterialTheme.typography.bodySmall, color = if (result.failedThresholds.isEmpty()) Color(0xFF1B5E20) else Color(0xFFD84315))
+                                        }
+                                    }
+
+                                    // Regime Breakdowns
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Regime-Specific Performance Breakdown:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    result.regimePerformance.forEach { r ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(r.regimeName.replace("_", " "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                "${r.totalTrades} Trades | WR: ${String.format(Locale.US, "%.1f", r.winRate)}% | Net: ${if (r.netProfit >= 0) "+" else ""}$${String.format(Locale.US, "%.1f", r.netProfit)} USD",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (r.netProfit >= 0) Color(0xFF2E7D32) else Color(0xFFC62828)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "No validation report available. Tap above to fetch Binance spot historical candles and execute walk-forward validation.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
         }

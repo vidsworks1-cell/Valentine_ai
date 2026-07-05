@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.aza.security.SecureCredentialStore.init(applicationContext)
         enableEdgeToEdge()
 
         setContent {

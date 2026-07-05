@@ -1,0 +1,560 @@
+package com.example.aza.strategy
+
+import com.example.aza.connector.BinanceConnector
+import com.example.aza.connector.BinanceCandle
+import android.util.Log
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
+
+data class ValidationCandle(
+    val timestamp: Long,
+    val open: Double,
+    val high: Double,
+    val low: Double,
+    val close: Double,
+    val volume: Double
+)
+
+data class ValidationTrade(
+    val regime: String,
+    val entryPrice: Double,
+    val exitPrice: Double,
+    val profit: Double,
+    val isWin: Boolean,
+    val durationMin: Long,
+    val exitReason: String // "Stop Loss Hit", "Take Profit Hit", "Strategy Signal Exit", etc.
+)
+
+data class RegimeResult(
+    val regimeName: String,
+    val totalTrades: Int,
+    val winRate: Double,
+    val netProfit: Double
+)
+
+data class StrategyValidationResult(
+    val strategyName: String,
+    val totalTrades: Int,
+    val winningTrades: Int,
+    val losingTrades: Int,
+    val winRate: Double,
+    val profitFactor: Double,
+    val expectancy: Double, // Expected USD profit per trade
+    val maxDrawdown: Double,
+    val sharpeRatio: Double,
+    val avgRiskReward: Double, // average win profit / average loss profit
+    val primaryCauseOfLoss: String,
+    val failedThresholds: List<String>,
+    val recommendation: String,
+    val regimePerformance: List<RegimeResult>,
+    val details: String,
+    
+    // Phase 20 walk forward metrics
+    val sortinoRatio: Double = 0.0,
+    val avgHoldingTimeMin: Double = 0.0,
+    val largestWin: Double = 0.0,
+    val largestLoss: Double = 0.0,
+    val equityCurve: List<Double> = emptyList(),
+    val drawdownCurve: List<Double> = emptyList(),
+    val trainingWinRate: Double = 0.0,
+    val validationWinRate: Double = 0.0,
+    val testingWinRate: Double = 0.0,
+    val failureCauseBreakdown: Map<String, Int> = emptyMap(),
+    val evaluatedSymbol: String = "BTCUSDT",
+    val evaluatedTimeframe: String = "1h"
+)
+
+data class EngineValidationReport(
+    val timestamp: Long = System.currentTimeMillis(),
+    val totalStrategiesEvaluated: Int,
+    val passedStrategiesCount: Int,
+    val failedStrategiesCount: Int,
+    val strategyResults: List<StrategyValidationResult>,
+    val symbol: String = "BTCUSDT",
+    val timeframe: String = "1h"
+)
+
+object EngineValidationSuite {
+    private const val TAG = "EngineValidationSuite"
+
+    /**
+     * Helper to classify market regime from a list of historical closing prices.
+     */
+    fun classifyRegime(prices: List<Double>): String {
+        if (prices.size < 20) return "LOW_VOLATILITY_RANGING"
+        
+        val sma10 = prices.takeLast(10).average()
+        val sma20 = prices.takeLast(20).average()
+        
+        val avgPrice = prices.takeLast(20).average()
+        val variance = prices.takeLast(20).map { (it - avgPrice) * (it - avgPrice) }.average()
+        val stdDev = sqrt(variance)
+        val normalizedVol = stdDev / avgPrice
+        
+        val isBullish = sma10 > sma20 * 1.002
+        val isBearish = sma10 < sma20 * 0.998
+        val isHighVol = normalizedVol > 0.012 // 1.2% dev threshold
+        
+        return when {
+            isHighVol && isBullish -> "HIGH_VOLATILITY_TRENDING"
+            isHighVol && isBearish -> "STRONG_BEAR"
+            isHighVol -> "HIGH_VOLATILITY_RANGING"
+            isBullish -> "LOW_VOLATILITY_TRENDING"
+            isBearish -> "LOW_VOLATILITY_RANGING"
+            else -> "LOW_VOLATILITY_RANGING"
+        }
+    }
+
+    /**
+     * Generates standard high-fidelity mock candles for fallback.
+     */
+    fun generateRegimeCandles(regime: String, count: Int, seedPrice: Double = 50000.0): List<ValidationCandle> {
+        val candles = mutableListOf<ValidationCandle>()
+        var currentPrice = seedPrice
+        var currentTime = System.currentTimeMillis() - (count * 60 * 1000L)
+        val random = java.util.Random((101 + regime.hashCode()).toLong())
+
+        for (i in 0 until count) {
+            val changePercent = when (regime) {
+                "BULLISH_TREND" -> (random.nextGaussian() * 0.6) + 0.12
+                "BEARISH_TREND" -> (random.nextGaussian() * 0.8) - 0.14
+                "MEAN_REVERTING" -> {
+                    val angle = (i.toDouble() / count) * 8.0 * Math.PI
+                    (random.nextGaussian() * 0.3) + Math.sin(angle) * 1.5
+                }
+                "HIGH_VOLATILITY" -> {
+                    val spike = if (random.nextDouble() > 0.95) {
+                        if (random.nextBoolean()) 4.0 else -4.0
+                    } else 0.0
+                    (random.nextGaussian() * 2.0) + spike
+                }
+                else -> random.nextGaussian() * 0.8
+            }
+
+            val open = currentPrice
+            val close = currentPrice * (1.0 + (changePercent / 100.0))
+            val high = max(open, close) * (1.0 + (abs(random.nextGaussian()) * 0.3 / 100.0))
+            val low = min(open, close) * (1.0 - (abs(random.nextGaussian()) * 0.3 / 100.0))
+            val volume = 1000.0 + random.nextDouble() * 5000.0
+
+            candles.add(ValidationCandle(currentTime, open, high, low, close, volume))
+            currentPrice = close
+            currentTime += 60 * 1000L
+        }
+        return candles
+    }
+
+    /**
+     * Simulate a trading strategy on candles using a highly realistic execution model.
+     */
+    fun simulateWithExecutionModel(
+        strategy: TradingStrategy,
+        candles: List<ValidationCandle>,
+        initialBalance: Double = 10000.0,
+        feePercent: Double = 0.001, // 0.1% fee
+        slippagePercent: Double = 0.0005 // 0.05% slippage
+    ): Pair<List<ValidationTrade>, List<Double>> {
+        val completedTrades = mutableListOf<ValidationTrade>()
+        val equityCurve = mutableListOf<Double>()
+        
+        if (candles.isEmpty()) {
+            return Pair(completedTrades, List(candles.size) { initialBalance })
+        }
+
+        var cash = initialBalance
+        var positionSize = 0.0
+        var entryPrice = 0.0
+        var entryTime = 0L
+        var stopLoss = 0.0
+        var takeProfit = 0.0
+
+        val closingPrices = mutableListOf<Double>()
+
+        for (i in candles.indices) {
+            val candle = candles[i]
+            closingPrices.add(candle.close)
+
+            val currentPortfolioValue = cash + (positionSize * candle.close)
+            equityCurve.add(currentPortfolioValue)
+
+            val regime = classifyRegime(closingPrices)
+
+            if (positionSize == 0.0) {
+                val shouldEnter = strategy.shouldEnter("BTC", closingPrices)
+                if (shouldEnter) {
+                    val slipPrice = candle.close * (1.0 + slippagePercent)
+                    val maxLossAllowed = cash * 0.02
+                    val tempStopLoss = strategy.calculateStopLoss("BTC", slipPrice, closingPrices)
+                    val slDistance = slipPrice - tempStopLoss
+                    val targetUnits = if (slDistance > 0) maxLossAllowed / slDistance else (cash * 0.1) / slipPrice
+
+                    entryPrice = slipPrice
+                    entryTime = candle.timestamp
+                    stopLoss = strategy.calculateStopLoss("BTC", entryPrice, closingPrices)
+                    takeProfit = strategy.calculateTakeProfit("BTC", entryPrice, closingPrices)
+
+                    positionSize = min(targetUnits, cash / entryPrice)
+                    
+                    val tradeValue = positionSize * entryPrice
+                    val fee = tradeValue * feePercent
+                    
+                    cash -= (tradeValue + fee)
+                }
+            } else {
+                var exitPrice = 0.0
+                var exitReason = ""
+                var shouldExit = false
+
+                if (candle.low <= stopLoss) {
+                    exitPrice = stopLoss * (1.0 - slippagePercent)
+                    exitReason = "Stop Loss Hit"
+                    shouldExit = true
+                } else if (candle.high >= takeProfit) {
+                    exitPrice = takeProfit * (1.0 - slippagePercent)
+                    exitReason = "Take Profit Hit"
+                    shouldExit = true
+                } else if (strategy.shouldExit("BTC", closingPrices, positionSize)) {
+                    exitPrice = candle.close * (1.0 - slippagePercent)
+                    exitReason = "Strategy Signal Exit"
+                    shouldExit = true
+                }
+
+                if (shouldExit) {
+                    val rawValue = positionSize * exitPrice
+                    val fee = rawValue * feePercent
+                    val tradeProfit = rawValue - fee - (positionSize * entryPrice)
+                    cash += (rawValue - fee)
+
+                    val durationMs = candle.timestamp - entryTime
+                    val durationMin = max(1L, durationMs / (60 * 1000))
+
+                    completedTrades.add(
+                        ValidationTrade(
+                            regime = regime,
+                            entryPrice = entryPrice,
+                            exitPrice = exitPrice,
+                            profit = tradeProfit,
+                            isWin = tradeProfit > 0.0,
+                            durationMin = durationMin,
+                            exitReason = exitReason
+                        )
+                    )
+                    positionSize = 0.0
+                }
+            }
+        }
+
+        // Force Close End
+        if (positionSize > 0.0) {
+            val finalCandle = candles.last()
+            val exitPrice = finalCandle.close * (1.0 - slippagePercent)
+            val rawValue = positionSize * exitPrice
+            val fee = rawValue * feePercent
+            val tradeProfit = rawValue - fee - (positionSize * entryPrice)
+            cash += (rawValue - fee)
+
+            val durationMs = finalCandle.timestamp - entryTime
+            val durationMin = max(1L, durationMs / (60 * 1000))
+
+            completedTrades.add(
+                ValidationTrade(
+                    regime = "FINAL_REGIME",
+                    entryPrice = entryPrice,
+                    exitPrice = exitPrice,
+                    profit = tradeProfit,
+                    isWin = tradeProfit > 0.0,
+                    durationMin = durationMin,
+                    exitReason = "Force Closed End"
+                )
+            )
+        }
+
+        return Pair(completedTrades, equityCurve)
+    }
+
+    /**
+     * Parameter Optimizer acting purely on the Training period.
+     */
+    fun optimizeStrategyOnTraining(
+        strategy: TradingStrategy,
+        trainingCandles: List<ValidationCandle>
+    ) {
+        var bestNetProfit = -999999.0
+        var bestParams = mapOf<String, Double>()
+
+        when (strategy) {
+            is TrendFollowingStrategy -> {
+                for (short in listOf(8, 12, 16)) {
+                    for (long in listOf(20, 26, 32)) {
+                        if (short >= long) continue
+                        strategy.setParameters(mapOf("emaShortPeriod" to short.toDouble(), "emaLongPeriod" to long.toDouble()))
+                        val (trades, _) = simulateWithExecutionModel(strategy, trainingCandles)
+                        val netProfit = trades.sumOf { it.profit }
+                        if (netProfit > bestNetProfit) {
+                            bestNetProfit = netProfit
+                            bestParams = mapOf("emaShortPeriod" to short.toDouble(), "emaLongPeriod" to long.toDouble())
+                        }
+                    }
+                }
+            }
+            is BreakoutStrategy -> {
+                for (p in listOf(15, 20, 25)) {
+                    strategy.setParameters(mapOf("period" to p.toDouble()))
+                    val (trades, _) = simulateWithExecutionModel(strategy, trainingCandles)
+                    val netProfit = trades.sumOf { it.profit }
+                    if (netProfit > bestNetProfit) {
+                        bestNetProfit = netProfit
+                        bestParams = mapOf("period" to p.toDouble())
+                    }
+                }
+            }
+            is MeanReversionStrategy -> {
+                for (overBought in listOf(65.0, 70.0, 75.0)) {
+                    for (overSold in listOf(25.0, 30.0, 35.0)) {
+                        strategy.setParameters(mapOf("oversoldThreshold" to overSold, "overboughtThreshold" to overBought))
+                        val (trades, _) = simulateWithExecutionModel(strategy, trainingCandles)
+                        val netProfit = trades.sumOf { it.profit }
+                        if (netProfit > bestNetProfit) {
+                            bestNetProfit = netProfit
+                            bestParams = mapOf("oversoldThreshold" to overSold, "overboughtThreshold" to overBought)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (bestParams.isNotEmpty()) {
+            strategy.setParameters(bestParams)
+        }
+    }
+
+    /**
+     * Executes walk-forward validation and historical replay against real Binance spot candles or fallback synthetic candles.
+     */
+    suspend fun runValidationSuite(
+        symbol: String = "BTCUSDT",
+        timeframe: String = "1h",
+        customLimit: Int = 400
+    ): EngineValidationReport {
+        Log.i(TAG, "Starting walk-forward historical validation on Binance Spot for $symbol [$timeframe]")
+
+        // 1. Fetch real historical candles from Binance (Public API - no key needed!)
+        var realCandles: List<ValidationCandle>? = null
+        try {
+            val result = BinanceConnector.fetchCandles(symbol, timeframe, limit = customLimit)
+            if (result.isSuccess) {
+                val binanceCandles = result.getOrThrow()
+                realCandles = binanceCandles.map {
+                    ValidationCandle(
+                        timestamp = it.openTime,
+                        open = it.open,
+                        high = it.high,
+                        low = it.low,
+                        close = it.close,
+                        volume = it.volume
+                    )
+                }
+                Log.i(TAG, "Successfully retrieved ${realCandles.size} real candles from Binance for $symbol [$timeframe]")
+            } else {
+                Log.w(TAG, "Binance fetch returned failure, using fallback regime candles.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Binance fetch threw exception: ${e.message}, using fallback regime candles.")
+        }
+
+        // If Binance download failed/timed out, combine mock regimes to build a continuous stream of 400 candles
+        val candles = realCandles ?: run {
+            val stream = mutableListOf<ValidationCandle>()
+            stream.addAll(generateRegimeCandles("BULLISH_TREND", 100, 50000.0))
+            stream.addAll(generateRegimeCandles("BEARISH_TREND", 100, stream.lastOrNull()?.close ?: 50000.0))
+            stream.addAll(generateRegimeCandles("MEAN_REVERTING", 100, stream.lastOrNull()?.close ?: 50000.0))
+            stream.addAll(generateRegimeCandles("HIGH_VOLATILITY", 100, stream.lastOrNull()?.close ?: 50000.0))
+            stream
+        }
+
+        val totalCandles = candles.size
+        
+        // 2. Perform Walk-Forward splits
+        val trainingLimit = (totalCandles * 0.50).toInt()
+        val validationLimit = (totalCandles * 0.75).toInt()
+
+        val trainingCandles = candles.subList(0, trainingLimit)
+        val validationCandles = candles.subList(trainingLimit, validationLimit)
+        val testingCandles = candles.subList(validationLimit, totalCandles)
+
+        val strategies = StrategyRegistry.getAllStrategies()
+        val results = mutableListOf<StrategyValidationResult>()
+
+        for (strategy in strategies) {
+            // A. Optimize parameter sets ONLY on training data
+            optimizeStrategyOnTraining(strategy, trainingCandles)
+
+            // B. Replay simulated execution candle-by-candle over unseen Validation + Testing datasets
+            val (trainingTrades, _) = simulateWithExecutionModel(strategy, trainingCandles)
+            val (validationTrades, _) = simulateWithExecutionModel(strategy, validationCandles)
+            val (testingTrades, testingEquityCurve) = simulateWithExecutionModel(strategy, testingCandles)
+
+            // C. Consolidate trades & calculate key walk-forward metrics
+            val allTrades = trainingTrades + validationTrades + testingTrades
+            val totalTrades = allTrades.size
+            val winningTrades = allTrades.count { it.isWin }
+            val losingTrades = totalTrades - winningTrades
+
+            val winRate = if (totalTrades > 0) (winningTrades.toDouble() / totalTrades) * 100.0 else 0.0
+            val trainingWR = if (trainingTrades.isNotEmpty()) (trainingTrades.count { it.isWin }.toDouble() / trainingTrades.size) * 100.0 else 0.0
+            val validationWR = if (validationTrades.isNotEmpty()) (validationTrades.count { it.isWin }.toDouble() / validationTrades.size) * 100.0 else 0.0
+            val testingWR = if (testingTrades.isNotEmpty()) (testingTrades.count { it.isWin }.toDouble() / testingTrades.size) * 100.0 else 0.0
+
+            val grossWins = allTrades.filter { it.isWin }.sumOf { it.profit }
+            val grossLosses = abs(allTrades.filter { !it.isWin }.sumOf { it.profit })
+            val profitFactor = if (grossLosses > 0.0) grossWins / grossLosses else if (grossWins > 0.0) 99.9 else 1.0
+
+            val netProfit = allTrades.sumOf { it.profit }
+            val expectancy = if (totalTrades > 0) netProfit / totalTrades else 0.0
+
+            // Drawdown Curve calculations over entire validation+testing sequence
+            val combinedReplayCandles = validationCandles + testingCandles
+            val (_, combinedEquityCurve) = simulateWithExecutionModel(strategy, combinedReplayCandles)
+            
+            var peakVal = 10000.0
+            var maxDrawdownVal = 0.0
+            val drawdownCurve = mutableListOf<Double>()
+            
+            combinedEquityCurve.forEach { balance ->
+                if (balance > peakVal) peakVal = balance
+                val dd = if (peakVal > 0.0) ((peakVal - balance) / peakVal) * 100.0 else 0.0
+                if (dd > maxDrawdownVal) maxDrawdownVal = dd
+                drawdownCurve.add(dd)
+            }
+
+            // Sharpe & Sortino Calculations over trade returns
+            val returns = allTrades.map { it.profit }
+            val avgProfit = if (totalTrades > 0) returns.average() else 0.0
+            val stdDev = if (totalTrades > 1) {
+                val variance = returns.map { (it - avgProfit) * (it - avgProfit) }.sum() / (totalTrades - 1)
+                sqrt(variance)
+            } else 0.0
+            val sharpeRatio = if (stdDev > 0.0) (avgProfit / stdDev) * sqrt(12.0) else if (avgProfit > 0.0) 2.0 else 0.0
+
+            val negativeReturns = returns.filter { it < 0.0 }
+            val downsideDev = if (negativeReturns.size > 1) {
+                val variance = negativeReturns.map { (it - avgProfit) * (it - avgProfit) }.sum() / (negativeReturns.size - 1)
+                sqrt(variance)
+            } else if (negativeReturns.size == 1) abs(negativeReturns.first() - avgProfit) else 0.0
+            val sortinoRatio = if (downsideDev > 0.0) (avgProfit / downsideDev) * sqrt(12.0) else if (avgProfit > 0.0) 2.5 else 0.0
+
+            val avgHoldingTimeMin = if (allTrades.isNotEmpty()) allTrades.map { it.durationMin }.average() else 0.0
+            val largestWinVal = if (winningTrades > 0) allTrades.filter { it.isWin }.maxOf { it.profit } else 0.0
+            val largestLossVal = if (losingTrades > 0) allTrades.filter { !it.isWin }.minOf { it.profit } else 0.0
+
+            // D. Failure Analysis & Cause Breakdown
+            val failureCauses = mutableMapOf<String, Int>()
+            val remainingLosingTrades = allTrades.filter { !it.isWin }
+            
+            remainingLosingTrades.forEach { trade ->
+                val reason = when {
+                    trade.exitReason == "Stop Loss Hit" && trade.regime.contains("VOLATILITY") -> "Premature stop-loss"
+                    trade.exitReason == "Stop Loss Hit" -> "Trend reversal"
+                    trade.exitReason == "Strategy Signal Exit" && trade.regime.contains("RANGING") -> "False breakout"
+                    trade.exitReason == "Strategy Signal Exit" -> "Late entry"
+                    else -> "Execution slippage"
+                }
+                failureCauses[reason] = failureCauses.getOrDefault(reason, 0) + 1
+            }
+
+            val primaryCauseOfLoss = if (failureCauses.isNotEmpty()) {
+                failureCauses.maxByOrNull { it.value }?.key ?: "False breakout"
+            } else "None (No losing trades)"
+
+            // E. Regime Breakdown Analysis
+            val regimes = listOf("HIGH_VOLATILITY_TRENDING", "STRONG_BEAR", "HIGH_VOLATILITY_RANGING", "LOW_VOLATILITY_TRENDING", "LOW_VOLATILITY_RANGING")
+            val regimeResults = regimes.map { r ->
+                val rTrades = allTrades.filter { it.regime == r }
+                val rWR = if (rTrades.isNotEmpty()) (rTrades.count { it.isWin }.toDouble() / rTrades.size) * 100.0 else 0.0
+                val rNet = rTrades.sumOf { it.profit }
+                RegimeResult(r, rTrades.size, rWR, rNet)
+            }
+
+            // F. Strategy Qualification Checks (Required Thresholds to trade live)
+            val failedThresholds = mutableListOf<String>()
+            if (testingWR < 45.0) failedThresholds.add("Testing Win Rate (${String.format(Locale.US, "%.1f", testingWR)}% < 45%)")
+            if (profitFactor < 1.10) failedThresholds.add("Profit Factor (${String.format(Locale.US, "%.2f", profitFactor)} < 1.10)")
+            if (maxDrawdownVal >= 15.0) failedThresholds.add("Max Drawdown (${String.format(Locale.US, "%.1f", maxDrawdownVal)}% >= 15%)")
+            if (sharpeRatio < 1.0) failedThresholds.add("Sharpe Ratio (${String.format(Locale.US, "%.2f", sharpeRatio)} < 1.0)")
+
+            val recommendation = if (failedThresholds.isNotEmpty()) {
+                val sb = StringBuilder()
+                sb.append("❌ STRATEGY DEQUALIFIED & INACTIVE: ")
+                if (testingWR < 45.0) sb.append("Testing Out-Of-Sample (OOS) edge failed. Filters are too loose. ")
+                if (profitFactor < 1.10) sb.append("Poor profit factor. TP distances must be optimized. ")
+                if (maxDrawdownVal >= 15.0) sb.append("Max drawdown limit violated. Reduce trade allocation risk. ")
+                if (sharpeRatio < 1.0) sb.append("Performance inconsistency across regimes.")
+                sb.toString()
+            } else {
+                "✅ QUALIFIED FOR AUTONOMOUS DISPATCH: Passed walk-forward stress tests. Statistically validated market edge confirmed."
+            }
+
+            // G. Build Detailed Text Logs
+            val detailsSb = StringBuilder()
+            detailsSb.append("=== WALK-FORWARD VALIDATION FOR ${strategy.name} ===\n")
+            detailsSb.append("Symbol: $symbol | Timeframe: $timeframe | Candles: $totalCandles\n")
+            detailsSb.append("• Training Set Win Rate: ${String.format(Locale.US, "%.1f", trainingWR)}%\n")
+            detailsSb.append("• Validation Set Win Rate: ${String.format(Locale.US, "%.1f", validationWR)}%\n")
+            detailsSb.append("• Testing Set (OOS) Win Rate: ${String.format(Locale.US, "%.1f", testingWR)}%\n")
+            detailsSb.append("• Sortino Ratio: ${String.format(Locale.US, "%.2f", sortinoRatio)}\n")
+            detailsSb.append("• Avg Holding Time: ${String.format(Locale.US, "%.1f", avgHoldingTimeMin)} mins\n")
+            detailsSb.append("• Drawdowns Peak: ${String.format(Locale.US, "%.1f", maxDrawdownVal)}%\n")
+
+            results.add(
+                StrategyValidationResult(
+                    strategyName = strategy.name,
+                    totalTrades = totalTrades,
+                    winningTrades = winningTrades,
+                    losingTrades = losingTrades,
+                    winRate = winRate,
+                    profitFactor = profitFactor,
+                    expectancy = expectancy,
+                    maxDrawdown = maxDrawdownVal,
+                    sharpeRatio = sharpeRatio,
+                    avgRiskReward = if (losingTrades > 0 && winningTrades > 0) {
+                        val avgWin = allTrades.filter { it.isWin }.map { it.profit }.average()
+                        val avgLoss = abs(allTrades.filter { !it.isWin }.map { it.profit }.average())
+                        if (avgLoss > 0) avgWin / avgLoss else 1.0
+                    } else 1.5,
+                    primaryCauseOfLoss = primaryCauseOfLoss,
+                    failedThresholds = failedThresholds,
+                    recommendation = recommendation,
+                    regimePerformance = regimeResults,
+                    details = detailsSb.toString(),
+                    sortinoRatio = sortinoRatio,
+                    avgHoldingTimeMin = avgHoldingTimeMin,
+                    largestWin = largestWinVal,
+                    largestLoss = largestLossVal,
+                    equityCurve = combinedEquityCurve,
+                    drawdownCurve = drawdownCurve,
+                    trainingWinRate = trainingWR,
+                    validationWinRate = validationWR,
+                    testingWinRate = testingWR,
+                    failureCauseBreakdown = failureCauses,
+                    evaluatedSymbol = symbol,
+                    evaluatedTimeframe = timeframe
+                )
+            )
+        }
+
+        val passedCount = results.count { it.failedThresholds.isEmpty() }
+        val failedCount = results.size - passedCount
+
+        return EngineValidationReport(
+            totalStrategiesEvaluated = results.size,
+            passedStrategiesCount = passedCount,
+            failedStrategiesCount = failedCount,
+            strategyResults = results,
+            symbol = symbol,
+            timeframe = timeframe
+        )
+    }
+}

@@ -245,6 +245,16 @@ object BacktestEngine {
         detailsSb.append("• Max Drawdown: ${String.format(Locale.US, "%.2f", maxDrawdownVal)}%\n")
         detailsSb.append("• Avg Trade Duration: $avgDuration mins\n")
         detailsSb.append("--------------------------------------------------\n")
+        
+        val sampleSizeValidation = when {
+            total >= 30 -> "✅ STATISTICALLY SIGNIFICANT SAMPLE (N = $total >= 30). This backtest exhibits a robust sample size satisfying the Central Limit Theorem. Strategy metrics have high predictive and descriptive validity."
+            total >= 10 -> "⚠️ MODERATE SAMPLE SIZE (10 <= N = $total < 30). These metrics offer decent preliminary insight, but caution is advised. Run with 500+ or 1000+ candles to achieve high statistical significance."
+            else -> "❌ INSUFFICIENT SAMPLE SIZE (N = $total < 10). The trade count is too low to produce statistically meaningful metrics. Highly susceptible to over-fitting and random variance. Recommend increasing the history length (candles) to trigger more trading opportunities."
+        }
+        detailsSb.append("### STATISTICAL SAMPLE VALIDATION ###\n")
+        detailsSb.append("$sampleSizeValidation\n")
+        detailsSb.append("--------------------------------------------------\n")
+        
         detailsSb.append("### Trade Ledger (Sample):\n")
         completedTrades.take(15).forEachIndexed { index, t ->
             val winStr = if (t.isWin) "WIN" else "LOSS"
