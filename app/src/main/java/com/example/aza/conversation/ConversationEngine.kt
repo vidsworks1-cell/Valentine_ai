@@ -6,17 +6,19 @@ import com.example.data.repository.AppRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
+import com.example.aza.cognition.ConversationEngine as CognitionConversationEngine
 
 class ConversationEngine(private val repository: AppRepository, val brain: ExecutiveBrain) {
 
     val memory = ConversationMemory()
+    val cognitionEngine = CognitionConversationEngine(repository, brain)
 
     private val _dialogueState = MutableStateFlow(DialogueState())
     val dialogueState = _dialogueState.asStateFlow()
 
     /**
      * Entry point to process a new message from the user.
-     * Returns a pair of: (The final processed text including any backdrop context, isClarificationNeeded)
+     * Delegates fully to our premium executive cognition module.
      */
     suspend fun processUserMessage(
         text: String,
@@ -30,14 +32,22 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
         knowledge: List<KnowledgeEntry>,
         actionExecutedNotice: String
     ): ProcessedMessageResult {
-        // 1. Resolve any anaphoric references (like "continue", "like yesterday")
-        val resolvedText = memory.resolveAnaphoricReference(text)
         
-        // 2. Perform Intent & Tone/Emotion analysis
-        val intentResult = IntentAnalyzer.analyze(resolvedText)
-        val emotionResult = EmotionAnalyzer.analyze(resolvedText)
+        // 1. Process via Executive Cognition Engine
+        val cognitionResult = cognitionEngine.processUserMessage(
+            text = text,
+            portfolioCash = portfolioCash,
+            holdings = holdings,
+            contentQueue = contentQueue,
+            openGigs = openGigs,
+            pendingTrades = pendingTrades,
+            pendingTasks = pendingTasks,
+            activeMissions = activeMissions,
+            knowledge = knowledge,
+            actionExecutedNotice = actionExecutedNotice
+        )
 
-        // 3. Resolve multi-layer context
+        // 2. Perform original context resolution for UI compatibility
         val context = ContextResolver.resolve(
             repository = repository,
             brain = brain,
@@ -53,14 +63,51 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
             knowledge = knowledge
         )
 
-        // 4. Executive Reasoning / Planning before speaking
-        val plan = ConversationPlanner.plan(resolvedText, intentResult, emotionResult, context)
+        // 3. Map cognition results into original IntentAnalysisResult & EmotionAnalysisResult
+        val intentResult = IntentAnalysisResult(
+            primaryIntent = when (cognitionResult.intentResult.primaryIntent) {
+                "TRADING_EXECUTION" -> IntentType.TRADING_ADVICE
+                "PORTFOLIO_REVIEW" -> IntentType.EXECUTIVE_DECISION
+                "CONTENT_PLANNING" -> IntentType.CONTENT_PLANNING
+                "FREELANCE_PLANNING" -> IntentType.FREELANCE_PLANNING
+                "TASK_MANAGEMENT" -> IntentType.PLANNING
+                "EXPLANATION" -> IntentType.EXPLANATION
+                "SYSTEM_DIAGNOSTICS" -> IntentType.SYSTEM_CONTROL
+                "EMOTIONAL_FEEDBACK" -> IntentType.FEEDBACK
+                else -> IntentType.CASUAL
+            },
+            confidenceScores = mapOf(),
+            explanation = "Executive Goal Alignment: " + cognitionResult.intentResult.hiddenGoal
+        )
 
-        // 5. Build/Update Dialogue State
+        val emotionResult = EmotionAnalysisResult(
+            primaryEmotion = when (cognitionResult.intentResult.emotionalTone) {
+                "FOCUSED" -> EmotionType.FOCUSED
+                "UNCERTAIN" -> EmotionType.UNCERTAIN
+                "CALM" -> EmotionType.CALM
+                else -> EmotionType.CALM
+            },
+            scores = mapOf(),
+            description = "Executive Tone Level: " + cognitionResult.intentResult.emotionalTone
+        )
+
+        // 4. Construct original ConversationPlan based on executive cognitive step traces
+        val plan = ConversationPlan(
+            actualQuestion = text,
+            missingInformation = if (cognitionResult.plan.isClarificationRequired) cognitionResult.plan.missingParameters.firstOrNull() else null,
+            relevantMemories = emptyList(),
+            contributingAgents = cognitionResult.plan.contributingAgents,
+            isClarificationRequired = cognitionResult.plan.isClarificationRequired,
+            isActionRequired = cognitionResult.plan.isActionExecutionRecommended,
+            isUserSimplyTalking = cognitionResult.intentResult.primaryIntent == "CASUAL",
+            reasoningSteps = cognitionResult.plan.steps + cognitionResult.reasoningResult.logicExplanation
+        )
+
+        // 5. Update DialogueState
         val newState = DialogueState(
             conversationId = _dialogueState.value.conversationId,
-            activeTopics = if (intentResult.primaryIntent != IntentType.CASUAL) {
-                (_dialogueState.value.activeTopics + intentResult.primaryIntent.name).distinct().takeLast(5)
+            activeTopics = if (cognitionResult.intentResult.primaryIntent != "CASUAL") {
+                (_dialogueState.value.activeTopics + cognitionResult.intentResult.primaryIntent).distinct().takeLast(5)
             } else _dialogueState.value.activeTopics,
             unresolvedQuestions = memory.unresolvedQuestions,
             previousExplanation = memory.previousExplanation,
@@ -75,23 +122,16 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
         _dialogueState.value = newState
 
         // 6. Update Rolling Conversation Memory & Relationship Profile
-        val userMsg = ChatMessage(sender = "USER", text = resolvedText)
+        val userMsg = ChatMessage(sender = "USER", text = text)
         memory.addMessage(userMsg)
-        
-        // Record topics to memory
         memory.updateTopics(newState.activeTopics)
 
-        // 7. Continuous Learning Evaluation
-        evaluateLearningCycle(resolvedText, intentResult, emotionResult, plan, context)
-
-        // 8. Generate appropriate backdrop prompt for Gemini & local fallback options
-        val backdropPrompt = ResponseGenerator.generateBackdropPrompt(
-            resolvedText, intentResult, emotionResult, plan, context
-        )
+        // 7. Run adaptation checks
+        evaluateLearningCycle(text, intentResult, emotionResult, plan, context)
 
         return ProcessedMessageResult(
-            resolvedText = resolvedText,
-            backdropPrompt = backdropPrompt,
+            resolvedText = text,
+            backdropPrompt = cognitionResult.backdropPrompt,
             plan = plan,
             intentResult = intentResult,
             emotionResult = emotionResult,
@@ -102,18 +142,18 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
     /**
      * Record the finalized AZA response back to the Dialogue State and memory
      */
-    fun recordAzaResponse(response: String) {
+    suspend fun recordAzaResponse(response: String) {
         val azaMsg = ChatMessage(sender = "AZA", text = response)
         memory.addMessage(azaMsg)
         _dialogueState.value = _dialogueState.value.copy(
             lastAzaMessage = response,
             previousExplanation = response
         )
+        cognitionEngine.recordAzaResponse(response)
     }
 
     /**
-     * Requirement 12: Continuous Learning Evaluation
-     * Evaluates if we understood intent, if clarification was needed, if we got corrected, and stores updates.
+     * Continuous Learning Evaluation
      */
     private suspend fun evaluateLearningCycle(
         text: String,
@@ -124,14 +164,12 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
     ) {
         val lower = text.lowercase(Locale.US)
         
-        // Check if user is correcting us
         if (intent.primaryIntent == IntentType.CORRECTION) {
             brain.addLog("⚠️ Conversational Correction detected from user. Adapting heuristics...")
             
             val correctionTopic = _dialogueState.value.activeTopics.lastOrNull() ?: "General"
             val title = "Conversational Correction: $correctionTopic"
             
-            // Learn from this correction and add to knowledge base
             val exists = repository.getAllKnowledgeDirect().any { it.title == title }
             if (!exists) {
                 repository.insertKnowledge(
@@ -147,17 +185,14 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
                 )
             }
             
-            // Update relation memory previous decisions
             memory.relationshipProfile.previousDecisions.add("Correction on $correctionTopic: Avoid repeating mismatched assertions")
         }
 
-        // Check if clarification was triggered
         if (plan.isClarificationRequired) {
             brain.addLog("ℹ️ Clarification requested on missing parameter: ${plan.missingInformation}")
             memory.relationshipProfile.recurringQuestions.add(plan.missingInformation ?: "context")
         }
 
-        // Check for positive feedback
         if (intent.primaryIntent == IntentType.FEEDBACK && (lower.contains("good") || lower.contains("thanks") || lower.contains("perfect"))) {
             brain.addLog("✅ Received positive user reinforcement. Enhancing response heuristics confidence.")
             

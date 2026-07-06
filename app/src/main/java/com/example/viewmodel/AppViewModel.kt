@@ -13,7 +13,35 @@ import com.example.aza.planning.AzaPlanningEngine
 import com.example.aza.web.WebSurfer
 import com.example.aza.web.SearchResult
 
-class AppViewModel(private val repository: AppRepository) : ViewModel() {
+class AppViewModel(private val repository: AppRepository, private val testContext: android.content.Context? = null) : ViewModel() {
+
+    // YouTube Sync Manager & Observables
+    val youtubeSyncManager: com.example.data.repository.YouTubeSyncManager by lazy {
+        val ctx = testContext ?: try {
+            com.example.aza.security.SecureCredentialStore.getContext()
+        } catch (e: Exception) {
+            // JVM Unit test fallback context setup
+            try {
+                com.example.aza.security.SecureCredentialStore.init(android.app.Application())
+                com.example.aza.security.SecureCredentialStore.getContext()
+            } catch (ex: Exception) {
+                throw RuntimeException("SecureCredentialStore context not initialized and unit test fallback failed", e)
+            }
+        }
+        com.example.data.repository.YouTubeSyncManager(ctx, repository)
+    }
+
+    val youtubeChannel: StateFlow<com.example.data.database.YouTubeChannelEntity?> = repository.youtubeChannel
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val youtubeVideos: StateFlow<List<com.example.data.database.YouTubeVideoEntity>> = repository.youtubeVideos
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val youtubeAnalyticsSnapshots: StateFlow<List<com.example.data.database.YouTubeAnalyticsSnapshot>> = repository.youtubeAnalyticsSnapshots
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val youtubeUploadDrafts: StateFlow<List<com.example.data.database.YouTubeUploadDraft>> = repository.youtubeUploadDrafts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Engine Validation States
     private val _isEngineValidating = MutableStateFlow(false)
@@ -3490,6 +3518,12 @@ class AppViewModel(private val repository: AppRepository) : ViewModel() {
                     text = "🤝 **CROSS-AGENT DELEGATION:** Agent **$agentA** initiated high-fidelity negotiation with Agent **$agentB** on task **'$taskName'**. Consensus rating achieved; sub-agent spawned for target completion."
                 )
             )
+        }
+    }
+
+    fun deleteYouTubeUploadDraft(draft: com.example.data.database.YouTubeUploadDraft) {
+        viewModelScope.launch {
+            repository.deleteYouTubeUploadDraft(draft)
         }
     }
 

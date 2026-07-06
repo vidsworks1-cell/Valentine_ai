@@ -29,7 +29,7 @@ object SecureCredentialStore {
         }
     }
 
-    private fun getContext(): Context {
+    fun getContext(): Context {
         return appContext ?: throw IllegalStateException("SecureCredentialStore has not been initialized with Context")
     }
 

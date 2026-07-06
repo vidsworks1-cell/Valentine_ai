@@ -46,9 +46,15 @@ import kotlinx.coroutines.launch
         TradeProposalEntity::class,
         BinancePositionEntity::class,
         PositionReviewEntity::class,
-        PositionAlertEntity::class
+        PositionAlertEntity::class,
+        YouTubeChannelEntity::class,
+        YouTubeVideoEntity::class,
+        YouTubeAnalyticsSnapshot::class,
+        YouTubeUploadDraft::class,
+        GraphNodeEntity::class,
+        GraphEdgeEntity::class
     ],
-    version = 22,
+    version = 24,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -73,6 +79,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun binanceDao(): BinanceDao
     abstract fun marketIntelligenceDao(): MarketIntelligenceDao
     abstract fun portfolioPositionDao(): PortfolioPositionDao
+    abstract fun youtubeDao(): YouTubeDao
+    abstract fun graphDao(): GraphDao
 
 
     companion object {

@@ -34,8 +34,16 @@ class AppRepository(private val db: AppDatabase) {
     private val binanceDao = db.binanceDao()
     val marketIntelligenceDao = db.marketIntelligenceDao()
     val portfolioPositionDao = db.portfolioPositionDao()
+    val youtubeDao = db.youtubeDao()
+    private val graphDao = db.graphDao()
  
     // Observables (Flows)
+    val graphNodes: Flow<List<GraphNodeEntity>> = graphDao.getAllNodesFlow()
+    val graphEdges: Flow<List<GraphEdgeEntity>> = graphDao.getAllEdgesFlow()
+    val youtubeChannel: Flow<YouTubeChannelEntity?> = youtubeDao.getChannelFlow()
+    val youtubeVideos: Flow<List<YouTubeVideoEntity>> = youtubeDao.getAllVideosFlow()
+    val youtubeAnalyticsSnapshots: Flow<List<YouTubeAnalyticsSnapshot>> = youtubeDao.getAnalyticsSnapshotsFlow()
+    val youtubeUploadDrafts: Flow<List<YouTubeUploadDraft>> = youtubeDao.getUploadDraftsFlow()
     val allPositions: Flow<List<BinancePositionEntity>> = portfolioPositionDao.getAllPositionsFlow()
     val allReviews: Flow<List<PositionReviewEntity>> = portfolioPositionDao.getAllReviewsFlow()
     val allAlerts: Flow<List<PositionAlertEntity>> = portfolioPositionDao.getAllAlertsFlow()
@@ -1033,5 +1041,98 @@ class AppRepository(private val db: AppDatabase) {
 
     suspend fun clearAllAlerts() = withContext(Dispatchers.IO) {
         portfolioPositionDao.clearAllAlerts()
+    }
+
+    // YouTube Operations
+    suspend fun getYouTubeChannelDirect(): YouTubeChannelEntity? = withContext(Dispatchers.IO) {
+        youtubeDao.getChannelDirect()
+    }
+
+    suspend fun insertYouTubeChannel(channel: YouTubeChannelEntity) = withContext(Dispatchers.IO) {
+        youtubeDao.insertChannel(channel)
+    }
+
+    suspend fun clearYouTubeChannel() = withContext(Dispatchers.IO) {
+        youtubeDao.clearChannel()
+    }
+
+    suspend fun getYouTubeVideosDirect(): List<YouTubeVideoEntity> = withContext(Dispatchers.IO) {
+        youtubeDao.getAllVideosDirect()
+    }
+
+    suspend fun insertYouTubeVideos(videos: List<YouTubeVideoEntity>) = withContext(Dispatchers.IO) {
+        youtubeDao.insertVideos(videos)
+    }
+
+    suspend fun insertYouTubeVideo(video: YouTubeVideoEntity) = withContext(Dispatchers.IO) {
+        youtubeDao.insertVideo(video)
+    }
+
+    suspend fun clearYouTubeVideos() = withContext(Dispatchers.IO) {
+        youtubeDao.clearVideos()
+    }
+
+    suspend fun getYouTubeAnalyticsSnapshotsDirect(): List<YouTubeAnalyticsSnapshot> = withContext(Dispatchers.IO) {
+        youtubeDao.getAnalyticsSnapshotsDirect()
+    }
+
+    suspend fun insertYouTubeAnalyticsSnapshot(snapshot: YouTubeAnalyticsSnapshot) = withContext(Dispatchers.IO) {
+        youtubeDao.insertAnalyticsSnapshot(snapshot)
+    }
+
+    suspend fun clearYouTubeAnalyticsSnapshots() = withContext(Dispatchers.IO) {
+        youtubeDao.clearAnalyticsSnapshots()
+    }
+
+    suspend fun getYouTubeUploadDraftsDirect(): List<YouTubeUploadDraft> = withContext(Dispatchers.IO) {
+        youtubeDao.getUploadDraftsDirect()
+    }
+
+    suspend fun getYouTubeUploadDraftById(id: Int): YouTubeUploadDraft? = withContext(Dispatchers.IO) {
+        youtubeDao.getUploadDraftById(id)
+    }
+
+    suspend fun insertYouTubeUploadDraft(draft: YouTubeUploadDraft): Long = withContext(Dispatchers.IO) {
+        youtubeDao.insertUploadDraft(draft)
+    }
+
+    suspend fun deleteYouTubeUploadDraft(draft: YouTubeUploadDraft) = withContext(Dispatchers.IO) {
+        youtubeDao.deleteUploadDraft(draft)
+    }
+
+    suspend fun clearYouTubeUploadDrafts() = withContext(Dispatchers.IO) {
+        youtubeDao.clearUploadDrafts()
+    }
+
+    suspend fun getAllGraphNodesDirect(): List<GraphNodeEntity> = withContext(Dispatchers.IO) {
+        graphDao.getAllNodes()
+    }
+
+    suspend fun getGraphNodeByIdDirect(id: Long): GraphNodeEntity? = withContext(Dispatchers.IO) {
+        graphDao.getNodeById(id)
+    }
+
+    suspend fun getGraphNodeByLabelAndTypeDirect(label: String, type: String): GraphNodeEntity? = withContext(Dispatchers.IO) {
+        graphDao.getNodeByLabelAndType(label, type)
+    }
+
+    suspend fun insertGraphNode(node: GraphNodeEntity): Long = withContext(Dispatchers.IO) {
+        graphDao.insertNode(node)
+    }
+
+    suspend fun getAllGraphEdgesDirect(): List<GraphEdgeEntity> = withContext(Dispatchers.IO) {
+        graphDao.getAllEdges()
+    }
+
+    suspend fun insertGraphEdge(edge: GraphEdgeEntity): Long = withContext(Dispatchers.IO) {
+        graphDao.insertEdge(edge)
+    }
+
+    suspend fun clearGraphNodes() = withContext(Dispatchers.IO) {
+        graphDao.clearNodes()
+    }
+
+    suspend fun clearGraphEdges() = withContext(Dispatchers.IO) {
+        graphDao.clearEdges()
     }
 }
