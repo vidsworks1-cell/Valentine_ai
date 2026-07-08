@@ -1,0 +1,55 @@
+Index: gradle/libs.versions.toml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>[versions]\r\nagp = \"9.1.1\"\r\ncoreKtx = \"1.18.0\"\r\njunit = \"4.13.2\"\r\njunitVersion = \"1.3.0\"\r\nespressoCore = \"3.7.0\"\r\nlifecycleRuntimeKtx = \"2.8.7\"\r\nlifecycleViewmodelCompose = \"2.8.7\"\r\nlifecycleRuntimeCompose = \"2.8.7\"\r\nactivityCompose = \"1.10.1\"\r\nkotlin = \"2.2.10\"\r\ncomposeBom = \"2024.09.00\"\r\ngoogleDevtoolsKsp = \"2.3.5\"\r\nnavigationCompose = \"2.8.9\"\r\nroomRuntime = \"2.7.0\"\r\nroomKtx = \"2.7.0\"\r\nroomCompiler = \"2.7.0\"\r\nkotlinxCoroutinesTest = \"1.10.2\"\r\ncore = \"1.6.1\"\r\nrunner = \"1.6.2\"\r\ncoilCompose = \"2.7.0\"\r\nretrofit = \"2.12.0\"\r\nconverterMoshi = \"2.12.0\"\r\nkotlinxCoroutinesAndroid = \"1.10.2\"\r\nkotlinxCoroutinesCore = \"1.10.2\"\r\naccompanistPermissions = \"0.37.3\"\r\nplayServicesLocation = \"21.3.0\"\r\ncameraCamera2 = \"1.5.0\"\r\ncameraLifecycle = \"1.5.0\"\r\ncameraView = \"1.5.0\"\r\ncameraCore = \"1.5.0\"\r\nloggingInterceptor = \"4.10.0\"\r\nokhttp = \"4.10.0\"\r\nmoshiKotlin = \"1.15.2\"\r\nmoshiKotlinCodegen = \"1.15.2\"\r\ndatastorePreferences = \"1.1.7\"\r\nrobolectric = \"4.16.1\"\r\nroborazzi = \"1.59.0\"\r\nfirebaseBom = \"34.12.0\"\r\nsecretsGradlePlugin = \"2.0.1\"\r\n\r\n[libraries]\r\nandroidx-core-ktx = { group = \"androidx.core\", name = \"core-ktx\", version.ref = \"coreKtx\" }\r\njunit = { group = \"junit\", name = \"junit\", version.ref = \"junit\" }\r\nandroidx-junit = { group = \"androidx.test.ext\", name = \"junit\", version.ref = \"junitVersion\" }\r\nandroidx-espresso-core = { group = \"androidx.test.espresso\", name = \"espresso-core\", version.ref = \"espressoCore\" }\r\nandroidx-lifecycle-runtime-ktx = { group = \"androidx.lifecycle\", name = \"lifecycle-runtime-ktx\", version.ref = \"lifecycleRuntimeKtx\" }\r\nandroidx-lifecycle-viewmodel-compose = { group = \"androidx.lifecycle\", name = \"lifecycle-viewmodel-compose\", version.ref = \"lifecycleViewmodelCompose\" }\r\nandroidx-lifecycle-runtime-compose = { group = \"androidx.lifecycle\", name = \"lifecycle-runtime-compose\", version.ref = \"lifecycleRuntimeCompose\" }\r\nandroidx-activity-compose = { group = \"androidx.activity\", name = \"activity-compose\", version.ref = \"activityCompose\" }\r\nandroidx-compose-bom = { group = \"androidx.compose\", name = \"compose-bom\", version.ref = \"composeBom\" }\r\nandroidx-compose-ui = { group = \"androidx.compose.ui\", name = \"ui\" }\r\nandroidx-compose-ui-graphics = { group = \"androidx.compose.ui\", name = \"ui-graphics\" }\r\nandroidx-compose-ui-tooling = { group = \"androidx.compose.ui\", name = \"ui-tooling\" }\r\nandroidx-compose-ui-tooling-preview = { group = \"androidx.compose.ui\", name = \"ui-tooling-preview\" }\r\nandroidx-compose-ui-test-manifest = { group = \"androidx.compose.ui\", name = \"ui-test-manifest\" }\r\nandroidx-compose-ui-test-junit4 = { group = \"androidx.compose.ui\", name = \"ui-test-junit4\" }\r\nandroidx-navigation-compose = { group = \"androidx.navigation\", name = \"navigation-compose\", version.ref = \"navigationCompose\" }\r\nandroidx-room-runtime = { group = \"androidx.room\", name = \"room-runtime\", version.ref = \"roomRuntime\" }\r\nandroidx-room-ktx = { group = \"androidx.room\", name = \"room-ktx\", version.ref = \"roomKtx\" }\r\nandroidx-room-compiler = { group = \"androidx.room\", name = \"room-compiler\", version.ref = \"roomCompiler\" }\r\nkotlinx-coroutines-test = { group = \"org.jetbrains.kotlinx\", name = \"kotlinx-coroutines-test\", version.ref = \"kotlinxCoroutinesTest\" }\r\nandroidx-core = { group = \"androidx.test\", name = \"core\", version.ref = \"core\" }\r\nandroidx-runner = { group = \"androidx.test\", name = \"runner\", version.ref = \"runner\" }\r\nandroidx-compose-material3 = { group = \"androidx.compose.material3\", name = \"material3\" }\r\nandroidx-compose-material-icons-core = { group = \"androidx.compose.material\", name = \"material-icons-core\" }\r\nandroidx-compose-material-icons-extended = { group = \"androidx.compose.material\", name = \"material-icons-extended\" }\r\ncoil-compose = { group = \"io.coil-kt\", name = \"coil-compose\", version.ref = \"coilCompose\" }\r\nretrofit = { group = \"com.squareup.retrofit2\", name = \"retrofit\", version.ref = \"retrofit\" }\r\nconverter-moshi = { group = \"com.squareup.retrofit2\", name = \"converter-moshi\", version.ref = \"converterMoshi\" }\r\nkotlinx-coroutines-android = { group = \"org.jetbrains.kotlinx\", name = \"kotlinx-coroutines-android\", version.ref = \"kotlinxCoroutinesAndroid\" }\r\nkotlinx-coroutines-core = { group = \"org.jetbrains.kotlinx\", name = \"kotlinx-coroutines-core\", version.ref = \"kotlinxCoroutinesCore\" }\r\naccompanist-permissions = { group = \"com.google.accompanist\", name = \"accompanist-permissions\", version.ref = \"accompanistPermissions\" }\r\nplay-services-location = { group = \"com.google.android.gms\", name = \"play-services-location\", version.ref = \"playServicesLocation\" }\r\nandroidx-camera-camera2 = { group = \"androidx.camera\", name = \"camera-camera2\", version.ref = \"cameraCamera2\" }\r\nandroidx-camera-lifecycle = { group = \"androidx.camera\", name = \"camera-lifecycle\", version.ref = \"cameraLifecycle\" }\r\nandroidx-camera-view = { group = \"androidx.camera\", name = \"camera-view\", version.ref = \"cameraView\" }\r\nandroidx-camera-core = { group = \"androidx.camera\", name = \"camera-core\", version.ref = \"cameraCore\" }\r\nlogging-interceptor = { group = \"com.squareup.okhttp3\", name = \"logging-interceptor\", version.ref = \"loggingInterceptor\" }\r\nokhttp = { group = \"com.squareup.okhttp3\", name = \"okhttp\", version.ref = \"okhttp\" }\r\nmoshi-kotlin = { group = \"com.squareup.moshi\", name = \"moshi-kotlin\", version.ref = \"moshiKotlin\" }\r\nmoshi-kotlin-codegen = { group = \"com.squareup.moshi\", name = \"moshi-kotlin-codegen\", version.ref = \"moshiKotlinCodegen\" }\r\nandroidx-datastore-preferences = { group = \"androidx.datastore\", name = \"datastore-preferences\", version.ref = \"datastorePreferences\" }\r\nrobolectric = { group = \"org.robolectric\", name = \"robolectric\", version.ref = \"robolectric\" }\r\nroborazzi = { group = \"io.github.takahirom.roborazzi\", name = \"roborazzi\", version.ref = \"roborazzi\" }\r\nroborazzi-compose = { group = \"io.github.takahirom.roborazzi\", name = \"roborazzi-compose\", version.ref = \"roborazzi\" }\r\nroborazzi-junit-rule = { group = \"io.github.takahirom.roborazzi\", name = \"roborazzi-junit-rule\", version.ref = \"roborazzi\" }\r\nfirebase-bom = { group = \"com.google.firebase\", name = \"firebase-bom\", version.ref = \"firebaseBom\" }\r\nfirebase-ai = { group = \"com.google.firebase\", name = \"firebase-ai\" }\r\n\r\n[plugins]\r\nandroid-application = { id = \"com.android.application\", version.ref = \"agp\" }\r\nkotlin-compose = { id = \"org.jetbrains.kotlin.plugin.compose\", version.ref = \"kotlin\" }\r\ngoogle-devtools-ksp = { id = \"com.google.devtools.ksp\", version.ref = \"googleDevtoolsKsp\" }\r\nroborazzi = { id = \"io.github.takahirom.roborazzi\", version.ref = \"roborazzi\" }\r\nsecrets = { id = \"com.google.android.libraries.mapsplatform.secrets-gradle-plugin\", version.ref = \"secretsGradlePlugin\" }\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+--- a/gradle/libs.versions.toml	(revision 6e052ce5d2502e79bd6fe6ca741e294c69492a39)
++++ b/gradle/libs.versions.toml	(date 1783088509881)
+@@ -1,5 +1,5 @@
+ [versions]
+-agp = "9.1.1"
++agp = "9.2.1"
+ coreKtx = "1.18.0"
+ junit = "4.13.2"
+ junitVersion = "1.3.0"
+Index: .idea/gradle.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<project version=\"4\">\r\n  <component name=\"GradleMigrationSettings\" migrationVersion=\"1\" />\r\n  <component name=\"GradleSettings\">\r\n    <option name=\"linkedExternalProjectsSettings\">\r\n      <GradleProjectSettings>\r\n        <option name=\"testRunner\" value=\"CHOOSE_PER_TEST\" />\r\n        <option name=\"externalProjectPath\" value=\"$PROJECT_DIR$\" />\r\n        <option name=\"gradleJvm\" value=\"#GRADLE_LOCAL_JAVA_HOME\" />\r\n        <option name=\"modules\">\r\n          <set>\r\n            <option value=\"$PROJECT_DIR$\" />\r\n            <option value=\"$PROJECT_DIR$/app\" />\r\n          </set>\r\n        </option>\r\n      </GradleProjectSettings>\r\n    </option>\r\n  </component>\r\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/gradle.xml b/.idea/gradle.xml
+--- a/.idea/gradle.xml	(revision 6e052ce5d2502e79bd6fe6ca741e294c69492a39)
++++ b/.idea/gradle.xml	(date 1783088544357)
+@@ -6,7 +6,6 @@
+       <GradleProjectSettings>
+         <option name="testRunner" value="CHOOSE_PER_TEST" />
+         <option name="externalProjectPath" value="$PROJECT_DIR$" />
+-        <option name="gradleJvm" value="#GRADLE_LOCAL_JAVA_HOME" />
+         <option name="modules">
+           <set>
+             <option value="$PROJECT_DIR$" />
+Index: gradle/wrapper/gradle-wrapper.properties
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>#Thu Jul 02 06:16:39 PDT 2026\r\ndistributionBase=GRADLE_USER_HOME\r\ndistributionPath=wrapper/dists\r\ndistributionSha256Sum=b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06\r\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-bin.zip\r\nnetworkTimeout=10000\r\nvalidateDistributionUrl=true\r\nzipStoreBase=GRADLE_USER_HOME\r\nzipStorePath=wrapper/dists\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/gradle/wrapper/gradle-wrapper.properties b/gradle/wrapper/gradle-wrapper.properties
+--- a/gradle/wrapper/gradle-wrapper.properties	(revision 6e052ce5d2502e79bd6fe6ca741e294c69492a39)
++++ b/gradle/wrapper/gradle-wrapper.properties	(date 1783088509943)
+@@ -1,8 +1,7 @@
+ #Thu Jul 02 06:16:39 PDT 2026
+ distributionBase=GRADLE_USER_HOME
+ distributionPath=wrapper/dists
+-distributionSha256Sum=b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06
+-distributionUrl=https\://services.gradle.org/distributions/gradle-9.3.1-bin.zip
++distributionUrl=https\://services.gradle.org/distributions/gradle-9.4.1-bin.zip
+ networkTimeout=10000
+ validateDistributionUrl=true
+ zipStoreBase=GRADLE_USER_HOME
