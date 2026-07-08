@@ -5730,6 +5730,40 @@ fun KnowledgeHubTabContent(viewModel: AppViewModel) {
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
+
+                            // Manual Calibration Override Slider
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Manual Calibration Override",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = String.format(Locale.US, "%.2fx", skill.manualCalibration),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Slider(
+                                value = skill.manualCalibration.toFloat(),
+                                onValueChange = { newVal ->
+                                    viewModel.updateSkillEntry(
+                                        skill.copy(manualCalibration = newVal.toDouble())
+                                    )
+                                },
+                                valueRange = 0.1f..2.0f,
+                                steps = 18,
+                                modifier = Modifier.fillMaxWidth().height(24.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
                             
                             // Real-time Calibration trigger button for user simulation
                             Button(
@@ -7906,6 +7940,13 @@ fun CredibilityWeightRow(
 
 @Composable
 fun CognitiveSimulationConsole(viewModel: com.example.viewmodel.AppViewModel) {
+    val estimator = viewModel.dynamicExponentialEstimator
+    val conflictEngine = viewModel.conflictResolutionEngine
+
+    val shannonOpinionEntropy by conflictEngine.shannonOpinionEntropy.collectAsStateWithLifecycle()
+    val lowEntropyBreakthroughDetected by conflictEngine.lowEntropyBreakthroughDetected.collectAsStateWithLifecycle()
+    val cooldownExpirationTime by com.example.aza.connector.BinanceConnector.cooldownExpirationTime.collectAsStateWithLifecycle()
+
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
         shape = RoundedCornerShape(12.dp),
@@ -7913,42 +7954,363 @@ fun CognitiveSimulationConsole(viewModel: com.example.viewmodel.AppViewModel) {
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
-                text = "CONFLICT RESOLUTION CONTROLLER",
+                text = "CONFLICT RESOLUTION & RISK ENGINE",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Manually trigger an executive sweep over the Knowledge Hub, or simulate conflicting incoming predictions to review AZA's response.",
+                text = "Manually trigger an executive sweep over the Knowledge Hub, adjust dynamic risk parameters, or simulate conflicting incoming predictions.",
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            
             Spacer(modifier = Modifier.height(12.dp))
+            
+            // --- Live Dynamic Exponential Estimator Stats ---
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                        text = "📈 DYNAMIC RISK ESTIMATOR (DEE)",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Market Regime", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val regimeColor = when (estimator.currentRegime) {
+                                "VOLATILE" -> Color(0xFFE53935)
+                                "BULL" -> Color(0xFF43A047)
+                                "BEAR" -> Color(0xFFD81B60)
+                                else -> Color(0xFF1E88E5)
+                            }
+                            Text(
+                                text = estimator.currentRegime,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = regimeColor
+                            )
+                        }
+                        
+                        Column {
+                            Text("Est. Volatility", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.5f", estimator.currentVolatility),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        
+                        Column {
+                            Text("Decay Alpha (α)", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.2f", estimator.decayAlpha),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Liquidity Index", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.2f", estimator.currentLiquidity),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (estimator.currentLiquidity < estimator.criticalLiquidityPercentile) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        
+                        Column {
+                            Text("Order Flow (OFI)", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.2f", estimator.currentOFI),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        
+                        Column {
+                            Text("Gated Momentum", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val gatedMom = estimator.evaluateHierarchicalGating()
+                            Text(
+                                text = String.format(Locale.US, "%.3f", gatedMom),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Weight Entropy", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.3f", estimator.weightEntropy),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        
+                        Column {
+                            Text("Gating Threshold", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val dThresh = conflictEngine.calculateDynamicGatingThreshold("Risk", "Strategy")
+                            Text(
+                                text = String.format(Locale.US, "%.3f", dThresh),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+
+                        Column {
+                            Text("Trust Clip (ε)", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val epsilon = conflictEngine.calculateAdaptiveClippingRange(estimator.currentVolatility)
+                            Text(
+                                text = String.format(Locale.US, "%.1f%%", epsilon * 100.0),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Column {
+                            Text("Thrashing Tracker", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = if (estimator.transitionThrashingDetected) "⚠️ WARNING" else "Healthy",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (estimator.transitionThrashingDetected) Color(0xFFE53935) else Color(0xFF43A047)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Opinion Entropy (H)", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.4f", shannonOpinionEntropy),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Column {
+                            Text("Consensus State", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = if (lowEntropyBreakthroughDetected) "⚡ Breakthrough" else "Standard Align",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (lowEntropyBreakthroughDetected) Color(0xFF43A047) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Column {
+                            Text("Binance API Cooldown", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val isCooldownActive = com.example.aza.connector.BinanceConnector.isCooldownActive()
+                            val remaining = com.example.aza.connector.BinanceConnector.getCooldownRemainingSeconds()
+                            Text(
+                                text = if (isCooldownActive) "⚠️ COOLING (${remaining}s)" else "Active (Normal)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isCooldownActive) Color(0xFFE53935) else Color(0xFF43A047)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Button(
-                    onClick = { viewModel.runConflictResolutionSweep() },
+                    onClick = { viewModel.evaluateDynamicEstimator() },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(12.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Run Sweep", fontSize = 10.sp)
+                    Text("Eval DEE", fontSize = 9.sp)
+                }
+
+                Button(
+                    onClick = { viewModel.runConflictResolutionSweep() },
+                    modifier = Modifier.weight(1.1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Run Sweep", fontSize = 9.sp)
                 }
                 
                 Button(
                     onClick = { viewModel.simulateConflictingInputs() },
-                    modifier = Modifier.weight(1.1f),
+                    modifier = Modifier.weight(1.2f),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                 ) {
-                    Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(12.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Simulate Conflict", fontSize = 10.sp)
+                    Text("Sim Conflict", fontSize = 9.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "⚡ ADVERSARIAL STRESS-TESTS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Button(
+                    onClick = { viewModel.simulateStressTest("BLACK_SWAN") },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text("🔥 Black Swan", fontSize = 9.sp)
+                }
+
+                Button(
+                    onClick = { viewModel.simulateStressTest("STOP_RUN") },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text("🎯 Stop Run", fontSize = 9.sp)
+                }
+
+                Button(
+                    onClick = { viewModel.simulateStressTest("STATE_THRASHING") },
+                    modifier = Modifier.weight(1.1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text("🔄 Thrashing", fontSize = 9.sp)
+                }
+            }
+
+            conflictEngine.lastConsensusMetrics?.let { metrics ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "📊 LAST CONSENSUS CONVERGENCE METRICS",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Scenario", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(metrics.scenarioName, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Rounds to Converge", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${metrics.roundsToConverge} Epochs", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("Simulated Latency", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${String.format(Locale.US, "%.1f", metrics.simulatedDurationMs)} ms", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Avg Sentiment Jitter (SJF)", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(String.format(Locale.US, "%.3f", metrics.averageSentimentJitter), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Gating / Clipping", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${String.format(Locale.US, "%.3f", metrics.dynamicGatingThreshold)} / ${String.format(Locale.US, "%.1f%%", metrics.activeClippingRange * 100.0)}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Bayesian Source Credibilities:", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    metrics.finalBayesianCredibilities.forEach { (agent, credibility) ->
+                        val color = when {
+                            credibility >= 0.9 -> Color(0xFF43A047)
+                            credibility >= 0.7 -> Color(0xFFFB8C00)
+                            else -> Color(0xFFE53935)
+                        }
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f)),
+                            border = BorderStroke(0.5.dp, color.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(agent.replace("Agent", ""), fontSize = 7.sp, fontWeight = FontWeight.Bold, color = color)
+                                Text(String.format(Locale.US, "%.2f", credibility), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = color)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -8573,68 +8935,117 @@ fun AzaCognitiveReasoningPanel(viewModel: com.example.viewmodel.AppViewModel) {
     val lastEmotion = dialogueState.lastDetectedEmotion
     val lastReasoning = dialogueState.lastReasoningSteps
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+    if (!isExpanded) {
+        // Super compact, elegant collapsed pill that takes up negligible vertical screen space
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 2.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Surface(
+                onClick = { isExpanded = true },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                modifier = Modifier.padding(vertical = 2.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = "Cognitive Reasoning",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(12.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Cognitive Reasoning & Intent Engine",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "Cognitive Engine",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
                     if (lastIntent != null) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Text(
-                                text = lastIntent.primaryIntent.name,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
-                        }
+                        Text(
+                            text = "• ${lastIntent.primaryIntent.name}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                     Icon(
-                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = "Toggle Expand",
+                        imageVector = Icons.Default.ExpandMore,
+                        contentDescription = "Expand",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                 }
             }
+        }
+    } else {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isExpanded = false },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Cognitive Reasoning",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Cognitive Reasoning & Intent Engine",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (lastIntent != null) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Text(
+                                    text = lastIntent.primaryIntent.name,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ExpandLess,
+                            contentDescription = "Toggle Collapse",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
 
-            if (isExpanded) {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Intent & Emotion Analysis
                 Row(
@@ -8644,14 +9055,14 @@ fun AzaCognitiveReasoningPanel(viewModel: com.example.viewmodel.AppViewModel) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Detected Intent",
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = lastIntent?.primaryIntent?.name ?: "UNKNOWN",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -8659,7 +9070,7 @@ fun AzaCognitiveReasoningPanel(viewModel: com.example.viewmodel.AppViewModel) {
                             val confidence = lastIntent.confidenceScores[lastIntent.primaryIntent] ?: 0.0
                             Text(
                                 text = "Confidence: ${(confidence * 100).toInt()}%",
-                                fontSize = 10.sp,
+                                fontSize = 9.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                         }
@@ -8668,14 +9079,14 @@ fun AzaCognitiveReasoningPanel(viewModel: com.example.viewmodel.AppViewModel) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Detected Tone",
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = lastEmotion?.primaryEmotion?.name ?: "CALM",
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.secondary
                         )
@@ -8683,22 +9094,25 @@ fun AzaCognitiveReasoningPanel(viewModel: com.example.viewmodel.AppViewModel) {
                             val score = lastEmotion.scores[lastEmotion.primaryEmotion] ?: 0.0
                             Text(
                                 text = "Intensity: ${(score * 100).toInt()}%",
-                                fontSize = 10.sp,
+                                fontSize = 9.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                         }
                     }
                 }
 
+                // Adaptive Preference Calibration Panel
+                AdaptivePreferenceCalibrationSubpanel(viewModel)
+
                 if (lastReasoning.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "Internal Planner Reasoning Path",
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -8706,39 +9120,216 @@ fun AzaCognitiveReasoningPanel(viewModel: com.example.viewmodel.AppViewModel) {
                                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                                 shape = MaterialTheme.shapes.small
                             )
-                            .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                            .padding(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         lastReasoning.forEach { step ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
                                     text = "•",
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
                                     text = step,
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onSurface,
-                                    lineHeight = 14.sp
+                                    lineHeight = 13.sp
                                 )
                             }
                         }
                     }
                 } else {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "Send a message to initiate reasoning cycles.",
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun AdaptivePreferenceCalibrationSubpanel(viewModel: com.example.viewmodel.AppViewModel) {
+    val profile = viewModel.conversationEngine.memory.relationshipProfile
+    
+    var technicalLevel by remember(profile.technicalLevelScore) { mutableStateOf(profile.technicalLevelScore.toFloat()) }
+    var verbosity by remember(profile.verbosityPreference) { mutableStateOf(profile.verbosityPreference.toFloat()) }
+    var formality by remember(profile.formalityPreference) { mutableStateOf(profile.formalityPreference.toFloat()) }
+    var decisionControl by remember(profile.decisionControlPreference) { mutableStateOf(profile.decisionControlPreference.toFloat()) }
+    
+    var autoCalibrationEnabled by remember { mutableStateOf(true) }
+
+    Spacer(modifier = Modifier.height(14.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    Spacer(modifier = Modifier.height(10.dp))
+    
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Adaptive Preference Calibration (APC)",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Linguistically-derived real-time persona calibration",
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (autoCalibrationEnabled) "AUTO-ON" else "MANUAL",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (autoCalibrationEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+                Switch(
+                    checked = autoCalibrationEnabled,
+                    onCheckedChange = { autoCalibrationEnabled = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    )
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        CalibrationRow(
+            label = "Technical Precision",
+            value = technicalLevel,
+            onValueChange = {
+                technicalLevel = it
+                profile.technicalLevelScore = it.toDouble()
+                if (!autoCalibrationEnabled) {
+                    viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
+                }
+            },
+            leftLabel = "Conceptual",
+            rightLabel = "Deep Technical",
+            color = MaterialTheme.colorScheme.primary
+        )
+        
+        CalibrationRow(
+            label = "Response Depth (Verbosity)",
+            value = verbosity,
+            onValueChange = {
+                verbosity = it
+                profile.verbosityPreference = it.toDouble()
+                if (!autoCalibrationEnabled) {
+                    viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
+                }
+            },
+            leftLabel = "Concise",
+            rightLabel = "Exhaustive",
+            color = MaterialTheme.colorScheme.secondary
+        )
+
+        CalibrationRow(
+            label = "Linguistic Formality",
+            value = formality,
+            onValueChange = {
+                formality = it
+                profile.formalityPreference = it.toDouble()
+                if (!autoCalibrationEnabled) {
+                    viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
+                }
+            },
+            leftLabel = "Casual",
+            rightLabel = "Business",
+            color = MaterialTheme.colorScheme.tertiary
+        )
+
+        CalibrationRow(
+            label = "Decision Authority",
+            value = decisionControl,
+            onValueChange = {
+                decisionControl = it
+                profile.decisionControlPreference = it.toDouble()
+                if (!autoCalibrationEnabled) {
+                    viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
+                }
+            },
+            leftLabel = "High Approval",
+            rightLabel = "Autopilot",
+            color = MaterialTheme.colorScheme.error
+        )
+        
+        Spacer(modifier = Modifier.height(10.dp))
+        
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("CALIBRATED COMM-STYLE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(profile.preferredCommunicationStyle, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("CALIBRATED EXPLANATION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(profile.preferredExplanations, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            }
+        }
+    }
+}
+
+@Composable
+fun CalibrationRow(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    leftLabel: String,
+    rightLabel: String,
+    color: Color
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Text("${(value * 100).toInt()}%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = color)
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(leftLabel, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = 0.1f..1.0f,
+                modifier = Modifier.weight(1f).height(18.dp),
+                colors = SliderDefaults.colors(
+                    thumbColor = color,
+                    activeTrackColor = color.copy(alpha = 0.7f),
+                    inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                )
+            )
+            Text(rightLabel, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
         }
     }
 }

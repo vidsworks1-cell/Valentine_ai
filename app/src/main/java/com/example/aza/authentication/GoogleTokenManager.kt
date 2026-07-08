@@ -16,6 +16,7 @@ class GoogleTokenManager(private val context: Context) {
         private const val KEY_ALIAS = "AzaGoogleAuthKeyAlias"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val PREFS_NAME = "aza_google_auth_secure_prefs"
+        private const val CACHE_PREFS_NAME = "aza_google_token_cache"
 
         private const val KEY_ACCESS_TOKEN = "google_access_token"
         private const val KEY_REFRESH_TOKEN = "google_refresh_token"
@@ -26,9 +27,67 @@ class GoogleTokenManager(private val context: Context) {
         private const val KEY_PROFILE_PIC = "google_profile_pic"
         private const val KEY_SCOPES = "google_scopes"
         private const val KEY_LAST_SYNC = "google_last_sync"
+
+        private const val KEY_CACHED_ACCESS_TOKEN = "cached_access_token"
+        private const val KEY_CACHED_REFRESH_TOKEN = "cached_refresh_token"
     }
 
     private val sharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val cacheSharedPreferences = context.getSharedPreferences(CACHE_PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun getCachedAccessToken(): String? {
+        return decryptWithCacheKey(KEY_CACHED_ACCESS_TOKEN)
+    }
+
+    fun getCachedRefreshToken(): String? {
+        return decryptWithCacheKey(KEY_CACHED_REFRESH_TOKEN)
+    }
+
+    fun cacheTokens(accessToken: String?, refreshToken: String?) {
+        if (accessToken != null) {
+            encryptWithCacheKey(KEY_CACHED_ACCESS_TOKEN, accessToken)
+        }
+        if (refreshToken != null) {
+            encryptWithCacheKey(KEY_CACHED_REFRESH_TOKEN, refreshToken)
+        }
+    }
+
+    private fun encryptWithCacheKey(key: String, value: String) {
+        try {
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey())
+            val encryptionIv = cipher.iv
+            val encryptedBytes = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+            val ivStr = Base64.encodeToString(encryptionIv, Base64.DEFAULT)
+            val encryptedStr = Base64.encodeToString(encryptedBytes, Base64.DEFAULT)
+            cacheSharedPreferences.edit()
+                .putString("${key}_iv", ivStr)
+                .putString("${key}_val", encryptedStr)
+                .apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun decryptWithCacheKey(key: String): String? {
+        val ivStr = cacheSharedPreferences.getString("${key}_iv", null) ?: return null
+        val encryptedStr = cacheSharedPreferences.getString("${key}_val", null) ?: return null
+        return try {
+            val iv = Base64.decode(ivStr, Base64.DEFAULT)
+            val encryptedBytes = Base64.decode(encryptedStr, Base64.DEFAULT)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, getOrCreateSecretKey(), GCMParameterSpec(128, iv))
+            val decryptedBytes = cipher.doFinal(encryptedBytes)
+            String(decryptedBytes, Charsets.UTF_8)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    fun clearCache() {
+        cacheSharedPreferences.edit().clear().apply()
+    }
 
     private fun getOrCreateSecretKey(): SecretKey {
         val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
@@ -98,6 +157,11 @@ class GoogleTokenManager(private val context: Context) {
         encrypt(KEY_ID_TOKEN, idToken)
         val expiresAt = System.currentTimeMillis() + (expiresInSeconds * 1000)
         sharedPreferences.edit().putLong(KEY_EXPIRES_AT, expiresAt).apply()
+        
+        // Cache tokens offline in local Google Cache
+        if (accessToken != null) {
+            cacheTokens(accessToken, refreshToken)
+        }
     }
 
     fun getAccessToken(): String? = decrypt(KEY_ACCESS_TOKEN)
@@ -140,6 +204,7 @@ class GoogleTokenManager(private val context: Context) {
             .remove(KEY_EXPIRES_AT)
             .remove(KEY_LAST_SYNC)
             .apply()
+        clearCache()
     }
 
     fun hasCredentials(): Boolean {

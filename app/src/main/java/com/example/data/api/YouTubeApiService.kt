@@ -173,6 +173,7 @@ object YouTubeRetrofitClient {
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         })
+        .certificatePinner(com.example.aza.security.SslPinningUtility.certificatePinner)
         .build()
 
     private val moshi = Moshi.Builder()

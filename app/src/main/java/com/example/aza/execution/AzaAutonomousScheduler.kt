@@ -27,6 +27,7 @@ class AzaAutonomousScheduler(
     val consensusEngine = com.example.aza.executive.ConfidenceConsensusEngine(repository, planningEngine.coordinator.learningEngine, planningEngine.registry)
     val executivePlanner = com.example.aza.executive.ExecutivePlanner(repository, planningEngine.coordinator.learningEngine)
     val executiveBrain = com.example.aza.executive.ExecutiveBrain(repository)
+    var dynamicExponentialEstimator: com.example.aza.executive.DynamicExponentialEstimator? = null
     data class SchedulerDiagnostics(
         val isHealthy: Boolean,
         val networkStatus: String,
@@ -293,9 +294,21 @@ class AzaAutonomousScheduler(
                 val policy = state.authPolicy
                 val needsApproval = when {
                     policy == "APPROVAL_REQUIRED" -> true
-                    capabilityName == "Binance Capability" && policy == "RISK_LIMIT" && task.estimatedBudget > 1000.0 -> {
-                        onLog("⚠️ POLICY ENFORCEMENT: Budget $${task.estimatedBudget} exceeds risk limit of $1000.0 for Binance Capability.")
-                        true
+                    capabilityName == "Binance Capability" && policy == "RISK_LIMIT" -> {
+                        val estimator = dynamicExponentialEstimator
+                        val volatility = estimator?.currentVolatility ?: 0.015
+                        val baseLimit = 1000.0
+                        val adjustedLimit = when {
+                            volatility > 0.05 -> baseLimit * 0.25
+                            volatility > 0.03 -> baseLimit * 0.50
+                            else -> baseLimit
+                        }
+                        if (task.estimatedBudget > adjustedLimit) {
+                            onLog("⚠️ POLICY ENFORCEMENT (VOLATILITY-ADAPTIVE): Budget $${task.estimatedBudget} exceeds volatility-adjusted risk limit of $${adjustedLimit} (Current Volatility: ${String.format(java.util.Locale.US, "%.4f", volatility)} under regime '${estimator?.currentRegime ?: "RANGE"}').")
+                            true
+                        } else {
+                            false
+                        }
                     }
                     capabilityName == "YouTube Capability" && policy == "DRAFT_ONLY" && task.title.lowercase(Locale.US).contains("publish") -> {
                         onLog("⚠️ POLICY ENFORCEMENT: 'Draft Only' policy prevents publishing action for YouTube Capability.")

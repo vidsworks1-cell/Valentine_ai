@@ -25,11 +25,12 @@ object BinanceConnector {
     private var apiKey: String = ""
     private var apiSecret: String = ""
 
-    // Thread-safe OkHttpClient
+    // Thread-safe OkHttpClient with SSL Pinning
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
+        .certificatePinner(com.example.aza.security.SslPinningUtility.certificatePinner)
         .build()
 
     // Connection Health Telemetry & Status StateFlows
@@ -50,6 +51,22 @@ object BinanceConnector {
 
     private val _rateLimitStatus = MutableStateFlow("1200/1200")
     val rateLimitStatus = _rateLimitStatus.asStateFlow()
+
+    private val _cooldownExpirationTime = MutableStateFlow(0L)
+    val cooldownExpirationTime = _cooldownExpirationTime.asStateFlow()
+
+    fun isCooldownActive(): Boolean {
+        return System.currentTimeMillis() < _cooldownExpirationTime.value
+    }
+
+    fun getCooldownRemainingSeconds(): Long {
+        val remaining = _cooldownExpirationTime.value - System.currentTimeMillis()
+        return if (remaining > 0) remaining / 1000 else 0L
+    }
+
+    fun triggerManualCooldown(seconds: Long) {
+        _cooldownExpirationTime.value = System.currentTimeMillis() + (seconds * 1000)
+    }
 
     private val _isOrderPlacementEnabled = MutableStateFlow(false)
     val isOrderPlacementEnabled = _isOrderPlacementEnabled.asStateFlow()
@@ -152,6 +169,10 @@ object BinanceConnector {
      * latency tracking, rate limit monitoring, and robust error handling.
      */
     private suspend fun executeCall(request: Request, maxRetries: Int = 3): String = withContext(Dispatchers.IO) {
+        if (isCooldownActive()) {
+            throw IOException("Rate limit cooldown active. Remaining: ${getCooldownRemainingSeconds()} seconds.")
+        }
+
         var attempt = 0
         var lastException: Exception? = null
         var delayMs = 500L
@@ -188,6 +209,16 @@ object BinanceConnector {
                         }
                         _lastErrorMessage.value = errMsg
                         _healthState.value = "DEGRADED"
+
+                        // Check for rate limit or IP ban codes (429 or 418)
+                        if (response.code == 429 || response.code == 418) {
+                            val retryAfterHeader = response.header("Retry-After")
+                            val backoffSec = retryAfterHeader?.toLongOrNull() ?: 60L
+                            _cooldownExpirationTime.value = System.currentTimeMillis() + (backoffSec * 1000)
+                            Log.e(TAG, "Rate limit hit (HTTP ${response.code}). Putting connector on cooldown for ${backoffSec}s.")
+                            _lastErrorMessage.value = "Rate Limit Hit. Backing off for ${backoffSec}s."
+                        }
+
                         throw IOException(errMsg)
                     }
                 }
