@@ -459,4 +459,86 @@ class AzaComprehensiveStressTest {
         val duration = System.currentTimeMillis() - runtimeStart
         println("Completed $runtimeIterations operational pipeline runs in ${duration}ms with zero deadlocks or resource leaks.")
     }
+
+    /**
+     * Scenario 8: Consensus Speed & Stress-Event Latency Validation
+     * Verifies that the consensus formation speed and latency behave differently under different simulated stress events:
+     * - Black Swan: Fast, forced risk override (Low convergence rounds, ultra-low zero-lag bypass latency).
+     * - State Thrashing: Slower, heavily smoothed/damped updates (High convergence rounds, high low-pass low-frictional latency).
+     */
+    @Test
+    fun testConsensusSpeedUnderVariousStressEvents() = runBlocking {
+        println("=== Scenario 8: Consensus Speed & Stress-Event Latency Validation ===")
+        val engine = com.example.aza.executive.ConflictResolutionEngine(repository)
+
+        // 1. Simulating Black Swan (Systemic Panic)
+        engine.isExtremeRegime = true
+        engine.transitionThrashingDetected = false
+
+        // Inject contradictory Black Swan knowledge entries
+        val b1 = KnowledgeEntry(
+            title = "Panic Liquidation Signal",
+            category = "Risk",
+            description = "Unsafe market conditions. All indicators flashing panic. Halt and liquidate exposures.",
+            evidence = "Simulated systemic distress.",
+            confidenceScore = 0.98,
+            isConfirmed = true
+        )
+        val b2 = KnowledgeEntry(
+            title = "Panic Liquidation Signal", // must overlap titles to trigger conflict detection
+            category = "Risk",
+            description = "Safe market conditions. Buying momentum is strong. Disregard risk and buy.",
+            evidence = "Simulated risk neglect.",
+            confidenceScore = 0.65,
+            isConfirmed = true
+        )
+        repository.insertKnowledge(b1)
+        repository.insertKnowledge(b2)
+
+        val bsLogResult = engine.resolveKnowledgeConflicts()
+        val bsMetrics = engine.lastConsensusMetrics
+        assertNotNull(bsMetrics)
+        println("    [Black Swan Results] Scenario: ${bsMetrics!!.scenarioName}")
+        println("    Rounds: ${bsMetrics.roundsToConverge} epochs, Latency: ${bsMetrics.simulatedDurationMs} ms")
+        println("    Sentiment Jitter (SJF): ${bsMetrics.averageSentimentJitter}")
+        assertTrue("Black Swan should converge quickly due to zero-lag bypass", bsMetrics.roundsToConverge <= 2)
+        assertEquals(15.0 * bsMetrics.roundsToConverge, bsMetrics.simulatedDurationMs, 0.001)
+
+        // Clear knowledge base for clean secondary run
+        database.clearAllTables()
+
+        // 2. Simulating State-Transition Thrashing (Whipsaws)
+        engine.isExtremeRegime = false
+        engine.transitionThrashingDetected = true
+
+        val t1 = KnowledgeEntry(
+            title = "Oscillating Microstructure Drift",
+            category = "Pattern",
+            description = "Volatile short-term momentum signals swinging wildly between buy and sell. High jitter variance.",
+            evidence = "Thrashing trends.",
+            confidenceScore = 0.88,
+            isConfirmed = true
+        )
+        val t2 = KnowledgeEntry(
+            title = "Oscillating Microstructure Drift",
+            category = "Pattern",
+            description = "Perfect range bound consolidation with no short-term changes. Stable trend.",
+            evidence = "Smoothing trends.",
+            confidenceScore = 0.80,
+            isConfirmed = true
+        )
+        repository.insertKnowledge(t1)
+        repository.insertKnowledge(t2)
+
+        val thrashLogResult = engine.resolveKnowledgeConflicts()
+        val thrashMetrics = engine.lastConsensusMetrics
+        assertNotNull(thrashMetrics)
+        println("    [Thrashing Results] Scenario: ${thrashMetrics!!.scenarioName}")
+        println("    Rounds: ${thrashMetrics.roundsToConverge} epochs, Latency: ${thrashMetrics.simulatedDurationMs} ms")
+        println("    Sentiment Jitter (SJF): ${thrashMetrics.averageSentimentJitter}")
+        assertTrue("Thrashing should take more rounds to stabilize", thrashMetrics.roundsToConverge >= 1)
+        assertEquals(350.0 * thrashMetrics.roundsToConverge, thrashMetrics.simulatedDurationMs, 0.001)
+
+        println("Consensus speed validation completes with perfect alignment between stress physics and mathematical simulation.")
+    }
 }

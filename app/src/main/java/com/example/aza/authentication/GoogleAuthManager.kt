@@ -72,7 +72,7 @@ class GoogleAuthManager(
                         email = "azizriaziz803@gmail.com",
                         displayName = "Aziz Ri",
                         profilePicUrl = "https://lh3.googleusercontent.com/a/default-user=s96-c",
-                        scopes = listOf("openid", "email", "profile")
+                        scopes = listOf("openid", "email", "profile", "https://www.googleapis.com/auth/youtube", "https://www.googleapis.com/auth/youtube.readonly")
                     )
                     onResult(true)
                 }
@@ -108,7 +108,7 @@ class GoogleAuthManager(
                 email = email,
                 displayName = displayName,
                 profilePicUrl = profilePicUrl,
-                scopes = listOf("openid", "email", "profile")
+                scopes = listOf("openid", "email", "profile", "https://www.googleapis.com/auth/youtube", "https://www.googleapis.com/auth/youtube.readonly")
             )
         } else {
             repository.setAuthState(OAuthState.ERROR)

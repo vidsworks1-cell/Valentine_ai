@@ -2125,6 +2125,93 @@ fun PositionManagerSection(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Max Drawdown & Dynamic Position Sizing Panel
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val estimator = viewModel.dynamicExponentialEstimator
+                    val currentDrawdown = estimator.calculatedDrawdownPercent
+                    val maxDrawdownLimit = estimator.maxAllowableDrawdownPercent
+                    val isBreakerTripped = estimator.isCircuitBreakerTriggered
+                    val peakValue = estimator.peakPortfolioValue
+
+                    // Max Drawdown Card
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isBreakerTripped) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isBreakerTripped) Icons.Default.Warning else Icons.Default.TrendingDown,
+                                    contentDescription = null,
+                                    tint = if (isBreakerTripped) Color(0xFFC62828) else MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Max Drawdown Protection", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "${String.format(Locale.US, "%.2f", currentDrawdown)}% / ${String.format(Locale.US, "%.1f", maxDrawdownLimit)}%",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (isBreakerTripped) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                if (isBreakerTripped) "🛑 BREAKER TRIPPED! Halt approved." else "✓ Protection active. Peak: $${String.format(Locale.US, "%,.1f", peakValue)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isBreakerTripped) Color(0xFFC62828) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Kelly & Volatility Sizing Multiplier Card
+                    val regimeMultiplier = when (estimator.currentRegime) {
+                        "VOLATILE" -> 0.40
+                        "BEAR" -> 0.70
+                        "BULL" -> 1.00
+                        else -> 0.85
+                    }
+                    val thrashingMultiplier = if (estimator.transitionThrashingDetected) 0.50 else 1.00
+                    val combinedSizingFactor = regimeMultiplier * thrashingMultiplier
+
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.QueryStats,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Kelly & Volatility Multiplier", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "${String.format(Locale.US, "%.2f", combinedSizingFactor)}x",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Regime: ${estimator.currentRegime} (${String.format(Locale.US, "%.0f", regimeMultiplier * 100)}%)" + (if (estimator.transitionThrashingDetected) " | Thrashing" else ""),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
 

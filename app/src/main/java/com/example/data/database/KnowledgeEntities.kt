@@ -32,7 +32,8 @@ data class SkillEntry(
     val failureRate: Double = 0.0,
     val confidence: Double = 0.5,
     val lastUpdated: Long = System.currentTimeMillis(),
-    val associatedRegimes: String // e.g., "TRENDING, VOLATILE"
+    val associatedRegimes: String, // e.g., "TRENDING, VOLATILE"
+    val manualCalibration: Double = 1.0 // Manual calibration field for overrides/bias adjustment
 )
 
 @Dao

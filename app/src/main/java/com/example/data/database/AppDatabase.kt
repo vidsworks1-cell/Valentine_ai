@@ -54,7 +54,7 @@ import kotlinx.coroutines.launch
         GraphNodeEntity::class,
         GraphEdgeEntity::class
     ],
-    version = 24,
+    version = 25,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -634,6 +634,38 @@ abstract class AppDatabase : RoomDatabase() {
                     failureRate = 30.0,
                     confidence = 0.75,
                     associatedRegimes = "TRENDING, VOLATILE"
+                ),
+                SkillEntry(
+                    name = "Agent: ResearchAgent",
+                    description = "Independent Research Agent that analyzes momentum vectors, news, and market trend setup.",
+                    successRate = 85.0,
+                    failureRate = 15.0,
+                    confidence = 0.85,
+                    associatedRegimes = "ANY"
+                ),
+                SkillEntry(
+                    name = "Agent: RiskAgent",
+                    description = "Independent Risk Agent that enforces safety gates, stops, limits, and dynamic capital exposure constraints.",
+                    successRate = 92.0,
+                    failureRate = 8.0,
+                    confidence = 0.92,
+                    associatedRegimes = "ANY"
+                ),
+                SkillEntry(
+                    name = "Agent: TradingAgent",
+                    description = "Independent Trading Agent that executes orders, tracks positions, and monitors paper/real accounts.",
+                    successRate = 80.0,
+                    failureRate = 20.0,
+                    confidence = 0.80,
+                    associatedRegimes = "ANY"
+                ),
+                SkillEntry(
+                    name = "Agent: LaptopAgent",
+                    description = "Laptop Synchronizer Agent that processes documents, syncs preferences, and calibrates schedules.",
+                    successRate = 88.0,
+                    failureRate = 12.0,
+                    confidence = 0.88,
+                    associatedRegimes = "ANY"
                 )
             )
             for (skill in skills) {

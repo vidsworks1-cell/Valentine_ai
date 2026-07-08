@@ -81,6 +81,14 @@ class ResourceManager(private val repository: AppRepository) {
             return true
         }
 
+        // 5. Binance Rate Limit Cooldown: throttle crypto/trading tasks if Binance API is cooling down
+        val lowerSkill = task.requiredSkill.lowercase(Locale.US)
+        if (lowerSkill.contains("trading") || lowerSkill.contains("crypto") || lowerSkill.contains("binance")) {
+            if (com.example.aza.connector.BinanceConnector.isCooldownActive()) {
+                return true
+            }
+        }
+
         return false
     }
 

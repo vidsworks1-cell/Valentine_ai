@@ -63,6 +63,7 @@ object LaptopAgentClient {
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .writeTimeout(5, TimeUnit.SECONDS)
+            .certificatePinner(com.example.aza.security.SslPinningUtility.certificatePinner)
             .build()
 
         val moshi = Moshi.Builder()

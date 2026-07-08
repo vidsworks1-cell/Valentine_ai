@@ -129,20 +129,57 @@ class AzaLearningEngine(private val repository: AppRepository) {
     }
 
     /**
-     * Dynamically enhances or adjusts skill confidence scores based on historic success trends.
+     * Dynamically enhances or adjusts skill confidence scores based on historic success trends
+     * and applies any manual calibration override configured in the database.
      * Future routing favors skills with high reliability and low failure tallies.
      */
     suspend fun calculateReliabilityMultiplier(skillName: String): Float {
-        val records = repository.learningRecords.firstOrNull() ?: return 1.0f
+        // Query manual calibration override from the Skill library in the database
+        val skills = repository.getAllSkillsDirect()
+        val matchingSkill = skills.find { it.name.equals(skillName, ignoreCase = true) }
+        val calibration = matchingSkill?.manualCalibration ?: 1.0
+
+        val records = repository.learningRecords.firstOrNull() ?: return calibration.toFloat()
         val skillRuns = records.filter { it.skillName == skillName }
-        if (skillRuns.isEmpty()) return 1.0f // default neutral standard
+        if (skillRuns.isEmpty()) return calibration.toFloat() // default neutral standard with calibration applied
 
         val successfulCount = skillRuns.count { it.success }
         val totalCount = skillRuns.size
         
         val rawRatio = successfulCount.toFloat() / totalCount.toFloat()
         // Boost factor: scale from 0.5x to 1.2x based on historic performance
-        return (rawRatio * 0.7f + 0.5f).coerceIn(0.1f, 1.3f)
+        val performanceMultiplier = (rawRatio * 0.7f + 0.5f).coerceIn(0.1f, 1.3f)
+        
+        // Combine the performance-based multiplier with the manual override/calibration multiplier
+        return (performanceMultiplier * calibration.toFloat()).coerceIn(0.1f, 2.0f)
+    }
+
+    /**
+     * Manually calibrates/overrides the reliability multiplier of a specific skill or agent in the database.
+     */
+    suspend fun calibrateReliabilityOverride(skillName: String, calibrationValue: Double) {
+        val existing = repository.getAllSkillsDirect()
+        val skill = existing.find { it.name.equals(skillName, ignoreCase = true) }
+        if (skill != null) {
+            val updated = skill.copy(
+                manualCalibration = calibrationValue,
+                lastUpdated = System.currentTimeMillis()
+            )
+            repository.updateSkill(updated)
+        } else {
+            // Create a new skill entry if it doesn't exist
+            val newSkill = SkillEntry(
+                name = skillName,
+                description = "Custom registered skill or agent calibration override.",
+                successRate = 100.0,
+                failureRate = 0.0,
+                confidence = 1.0,
+                associatedRegimes = "ANY",
+                manualCalibration = calibrationValue,
+                lastUpdated = System.currentTimeMillis()
+            )
+            repository.insertSkill(newSkill)
+        }
     }
 
     /**

@@ -4,9 +4,12 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class GoogleAuthRepository(context: Context) {
     private val tokenManager = GoogleTokenManager(context)
+    private val refreshMutex = Mutex()
 
     private val _authState = MutableStateFlow(OAuthState.NOT_CONNECTED)
     val authState: StateFlow<OAuthState> = _authState.asStateFlow()
@@ -69,32 +72,50 @@ class GoogleAuthRepository(context: Context) {
     }
 
     suspend fun refreshTokensSilently(): Boolean {
-        if (!tokenManager.hasCredentials()) return false
-        _authState.value = OAuthState.TOKEN_REFRESHING
+        if (!tokenManager.hasCredentials()) {
+            // Attempt to restore from Google Cache if active credentials are missing (Offline resiliency)
+            val cachedAccess = tokenManager.getCachedAccessToken()
+            val cachedRefresh = tokenManager.getCachedRefreshToken()
+            if (cachedAccess != null) {
+                tokenManager.saveTokens(cachedAccess, cachedRefresh, null, 3600L)
+                _authState.value = OAuthState.CONNECTED
+                return true
+            }
+            return false
+        }
         
-        return try {
-            kotlinx.coroutines.delay(1000) // Simulating standard OAuth 2.0 refresh network call
-            val newAccessToken = "ya29.a0AcE_Fpy_fresh_token" 
-            val newExpiresInSeconds = 3600L
-            tokenManager.saveTokens(newAccessToken, null, tokenManager.getIdToken(), newExpiresInSeconds)
-            
-            // Keep existing profile
-            val currentEmail = tokenManager.getEmail()
-            val currentName = tokenManager.getDisplayName()
-            val currentPic = tokenManager.getProfilePicUrl()
-            val currentScopes = tokenManager.getGrantedScopes()
-            tokenManager.saveProfile(currentEmail, currentName, currentPic, currentScopes)
-            
-            _accountState.value = _accountState.value.copy(
-                lastSyncTime = System.currentTimeMillis()
-            )
-            _authState.value = OAuthState.CONNECTED
-            _lastError.value = null
-            true
-        } catch (e: Exception) {
-            _authState.value = OAuthState.ERROR
-            _lastError.value = "Silent token refresh failed: ${e.message}"
-            false
+        return refreshMutex.withLock {
+            // Double-check expiration after acquiring lock (to handle concurrent requests waiting)
+            if (!tokenManager.isTokenExpired()) {
+                _authState.value = OAuthState.CONNECTED
+                return@withLock true
+            }
+
+            _authState.value = OAuthState.TOKEN_REFRESHING
+            try {
+                kotlinx.coroutines.delay(1000) // Simulating standard OAuth 2.0 refresh network call
+                val newAccessToken = "ya29.a0AcE_Fpy_fresh_token" 
+                val newExpiresInSeconds = 3600L
+                tokenManager.saveTokens(newAccessToken, null, tokenManager.getIdToken(), newExpiresInSeconds)
+                
+                // Keep existing profile
+                val currentEmail = tokenManager.getEmail()
+                val currentName = tokenManager.getDisplayName()
+                val currentPic = tokenManager.getProfilePicUrl()
+                val currentScopes = tokenManager.getGrantedScopes()
+                tokenManager.saveProfile(currentEmail, currentName, currentPic, currentScopes)
+                
+                _accountState.value = _accountState.value.copy(
+                    lastSyncTime = System.currentTimeMillis()
+                )
+                _authState.value = OAuthState.CONNECTED
+                _lastError.value = null
+                true
+            } catch (e: Exception) {
+                _authState.value = OAuthState.ERROR
+                _lastError.value = "Silent token refresh failed: ${e.message}"
+                false
+            }
         }
     }
 

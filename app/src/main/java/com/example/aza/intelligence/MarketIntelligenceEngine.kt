@@ -16,8 +16,11 @@ import kotlin.random.Random
 
 class MarketIntelligenceEngine(
     private val repository: AppRepository,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val dynamicExponentialEstimator: com.example.aza.executive.DynamicExponentialEstimator? = null
 ) {
+    private val estimator = dynamicExponentialEstimator ?: com.example.aza.executive.DynamicExponentialEstimator(repository)
+
     private val _isEngineRunning = MutableStateFlow(false)
     val isEngineRunning = _isEngineRunning.asStateFlow()
 
@@ -487,7 +490,18 @@ class MarketIntelligenceEngine(
 
         val account = repository.getAccountInfoDirect()
         val accountBalance = account?.totalBalance ?: 5000.0
-        val recPositionSize = strategyObj.calculatePositionSize(symbol, accountBalance, entryPrice, 1.0, pricesList)
+        
+        val dbStr = repository.getStrategyByNameDirect(opportunity.strategy)
+        val strategyWinRate = if (dbStr != null) dbStr.paperWinRate / 100.0 else 0.55
+        
+        val recPositionSize = estimator.calculateDynamicPositionSize(
+            symbol = symbol,
+            accountBalance = accountBalance,
+            entryPrice = entryPrice,
+            prices = pricesList,
+            strategyWinRate = strategyWinRate,
+            strategyRiskReward = riskReward
+        )
 
         // Prepend strategy attribution to evidence
         val evidence = "Strategy: ${opportunity.strategy}\n" + consensus.agentInputs.values.joinToString("\n") { "- ${it.agentName}: ${it.evidence} (Recommendation: ${it.recommendation})" }

@@ -58,7 +58,8 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
 
     // Market Intelligence Observables
-    val marketIntelligenceEngine = com.example.aza.intelligence.MarketIntelligenceEngine(repository, viewModelScope)
+    val dynamicExponentialEstimator = com.example.aza.executive.DynamicExponentialEstimator(repository)
+    val marketIntelligenceEngine = com.example.aza.intelligence.MarketIntelligenceEngine(repository, viewModelScope, dynamicExponentialEstimator)
     val marketOpportunities: StateFlow<List<com.example.data.database.OpportunityEntity>> = repository.marketOpportunities
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val tradeProposals: StateFlow<List<com.example.data.database.TradeProposalEntity>> = repository.tradeProposals
@@ -178,6 +179,32 @@ class AppViewModel(private val repository: AppRepository, private val testContex
      */
     fun approveTradeProposal(proposal: com.example.data.database.TradeProposalEntity, isLive: Boolean) {
         viewModelScope.launch {
+            if (dynamicExponentialEstimator.isCircuitBreakerTriggered) {
+                val updatedToRejected = proposal.copy(
+                    status = "REJECTED",
+                    supportingEvidence = proposal.supportingEvidence + "\n🚨 [CIRCUIT BREAKER] Trade execution blocked because maximum drawdown threshold (10.0%) was breached."
+                )
+                repository.updateProposal(updatedToRejected)
+                
+                repository.insertTradeAuditLog(
+                    com.example.data.database.TradeAuditLog(
+                        strategyName = "RISK_CIRCUIT_BREAKER",
+                        marketRegime = "LIVE",
+                        signal = "BLOCKED",
+                        entryReason = "Execution halted due to Drawdown Alert. Current Drawdown: ${String.format(Locale.US, "%.2f", dynamicExponentialEstimator.calculatedDrawdownPercent)}%",
+                        exitReason = "N/A",
+                        confidence = 1.0,
+                        positionSize = proposal.positionSize,
+                        expectedProfit = 0.0,
+                        actualProfit = 0.0,
+                        slippage = 0.0,
+                        fees = 0.0,
+                        executionLatencyMs = 0L
+                    )
+                )
+                return@launch
+            }
+
             // Immediately lock/update the proposal state to prevent duplicate clicks (Idempotency)
             val updatedToExecuting = proposal.copy(status = "EXECUTING")
             repository.updateProposal(updatedToExecuting)
@@ -871,7 +898,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     }
                 )
                 repository.updateKnowledge(updated)
-                conflictResolutionEngine.adjustCredibilityBasedOnFeedback(entry.category, rating)
+                conflictResolutionEngine.adjustCredibilityBasedOnFeedback(
+                    category = entry.category,
+                    rating = rating,
+                    volatility = dynamicExponentialEstimator.currentVolatility
+                )
                 syncCredibilitiesFromEngine()
                 addThought("🧠 USER FEEDBACK INTEGRATED: Rated '${entry.title}' as '$rating'. Adjusted confidence to ${String.format(java.util.Locale.US, "%.1f", updated.confidenceScore * 100.0)}%. Future recommendations re-calibrated.")
             }
@@ -1366,9 +1397,57 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         _laptopAgentCredibility.value = conflictResolutionEngine.laptopAgentCredibility.toFloat()
     }
 
+    fun evaluateDynamicEstimator() {
+        viewModelScope.launch {
+            val prices = listOf(99.5, 100.2, 101.4, 100.8, 102.5, 105.0, 104.2, 106.8)
+            val ofi = Random.nextDouble(0.3, 0.9)
+            val liquidity = Random.nextDouble(0.08, 0.95)
+            dynamicExponentialEstimator.updateMarketMicrostructure(ofi, liquidity)
+            dynamicExponentialEstimator.analyzePricesAndAdapt(prices)
+            dynamicExponentialEstimator.calculateCrossAssetDivergence(listOf(0.85, 0.72, 0.91, 0.64))
+
+            conflictResolutionEngine.isExtremeRegime = (dynamicExponentialEstimator.currentRegime == "VOLATILE")
+
+            val weights = mapOf(
+                "RiskAgent" to conflictResolutionEngine.riskAgentCredibility.toDouble(),
+                "LaptopAgent" to conflictResolutionEngine.laptopAgentCredibility.toDouble(),
+                "ResearchAgent" to conflictResolutionEngine.researchAgentCredibility.toDouble(),
+                "TradingAgent" to conflictResolutionEngine.tradingAgentCredibility.toDouble()
+            )
+            dynamicExponentialEstimator.monitorRobustness(weights)
+            dynamicExponentialEstimator.runWalkForwardOptimization(0.85, 0.75)
+            dynamicExponentialEstimator.publishMetricsToKnowledgeBase()
+
+            addSchedulerThought("🧠 DYNAMIC ESTIMATOR: Analyzed market state. Regime: ${dynamicExponentialEstimator.currentRegime}, Volatility: ${String.format(Locale.US, "%.4f", dynamicExponentialEstimator.currentVolatility)}, Decay alpha: ${String.format(Locale.US, "%.2f", dynamicExponentialEstimator.decayAlpha)}")
+        }
+    }
+
     fun runConflictResolutionSweep() {
         viewModelScope.launch {
             addSchedulerThought("🧠 COGNITIVE SYSTEM: Commencing knowledge conflict resolution sweep...")
+            
+            // First run the Dynamic Exponential Estimator to update environmental risk factors
+            val prices = listOf(99.5, 100.2, 101.4, 100.8, 102.5, 105.0, 104.2, 106.8)
+            val ofi = Random.nextDouble(0.3, 0.9)
+            val liquidity = Random.nextDouble(0.08, 0.95)
+            dynamicExponentialEstimator.updateMarketMicrostructure(ofi, liquidity)
+            dynamicExponentialEstimator.analyzePricesAndAdapt(prices)
+            dynamicExponentialEstimator.calculateCrossAssetDivergence(listOf(0.85, 0.72, 0.91, 0.64))
+            
+            conflictResolutionEngine.isExtremeRegime = (dynamicExponentialEstimator.currentRegime == "VOLATILE")
+            
+            val weights = mapOf(
+                "RiskAgent" to conflictResolutionEngine.riskAgentCredibility.toDouble(),
+                "LaptopAgent" to conflictResolutionEngine.laptopAgentCredibility.toDouble(),
+                "ResearchAgent" to conflictResolutionEngine.researchAgentCredibility.toDouble(),
+                "TradingAgent" to conflictResolutionEngine.tradingAgentCredibility.toDouble()
+            )
+            dynamicExponentialEstimator.monitorRobustness(weights)
+            dynamicExponentialEstimator.runWalkForwardOptimization(0.85, 0.75)
+            dynamicExponentialEstimator.publishMetricsToKnowledgeBase()
+            
+            addSchedulerThought("🧠 DYNAMIC ESTIMATOR: Updated risk parameters. Regime: ${dynamicExponentialEstimator.currentRegime}, Volatility: ${String.format(Locale.US, "%.4f", dynamicExponentialEstimator.currentVolatility)}")
+            
             val result = conflictResolutionEngine.resolveKnowledgeConflicts()
             addSchedulerThought("🧠 COGNITIVE SYSTEM: Sweep completed.")
             addThought("🧠 CONFLICT RESOLUTION: $result")
@@ -1402,6 +1481,118 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             addSchedulerThought("⚠️ SIMULATION OVERRIDE: Injected contradictory forecasts into database.")
             addThought("⚠️ SIMULATION OVERRIDE: Injected contradictory forecasts into database. Starting resolution sweep.")
             runConflictResolutionSweep()
+        }
+    }
+
+    fun simulateStressTest(scenario: String) {
+        viewModelScope.launch {
+            when (scenario) {
+                "BLACK_SWAN" -> {
+                    addSchedulerThought("🚨 STRESS SIMULATION: Activating [Black Swan Scenario]...")
+                    addThought("🚨 STRESS SIMULATION: Simulating systemic crash with extreme negative bias. Initiating parameter recalibration.")
+                    
+                    // Inject extreme market stats into DEE
+                    dynamicExponentialEstimator.currentVolatility = 0.085 // 8.5% volatility (Extreme)
+                    dynamicExponentialEstimator.currentOFI = -0.92         // Severe order flow selling pressure
+                    dynamicExponentialEstimator.currentLiquidity = 0.02    // Dry liquidity
+                    dynamicExponentialEstimator.currentRegime = "VOLATILE"
+                    conflictResolutionEngine.isExtremeRegime = true
+                    conflictResolutionEngine.transitionThrashingDetected = false
+                    
+                    // Inject contradictory reports under duress
+                    val e1 = com.example.data.database.KnowledgeEntry(
+                        title = "Systemic Liquidation - Panic Exit",
+                        category = "Risk",
+                        description = "Severe macro selling pressure. All indicators flashing unsafe. Instantly activate zero-lag bypass and halt active exposures.",
+                        evidence = "Black Swan simulated distress.",
+                        confidenceScore = 0.98,
+                        isConfirmed = true
+                    )
+                    val e2 = com.example.data.database.KnowledgeEntry(
+                        title = "Trading Momentum - Buy the Dip",
+                        category = "Strategy",
+                        description = "OFI is heavily oversold. Perfect opportunity to buy the dip with maximum available leverage.",
+                        evidence = "Simulated contrarian signal.",
+                        confidenceScore = 0.70,
+                        isConfirmed = true
+                    )
+                    repository.insertKnowledge(e1)
+                    repository.insertKnowledge(e2)
+                    
+                    runConflictResolutionSweep()
+                }
+                "STOP_RUN" -> {
+                    addSchedulerThought("🎯 STRESS SIMULATION: Activating [Liquidity Stop-Run Scenario]...")
+                    addThought("🎯 STRESS SIMULATION: Simulating highly asymmetric stop-run with weak liquidity and strong buy imbalance.")
+                    
+                    // Inject stop-run stats: low liquidity, high positive OFI
+                    dynamicExponentialEstimator.currentVolatility = 0.024
+                    dynamicExponentialEstimator.currentOFI = 0.88         // Strong buying pressure
+                    dynamicExponentialEstimator.currentLiquidity = 0.08   // But extremely weak liquidity (below 20% critical threshold)
+                    dynamicExponentialEstimator.currentRegime = "BULL"
+                    conflictResolutionEngine.isExtremeRegime = false
+                    conflictResolutionEngine.transitionThrashingDetected = false
+                    
+                    val e1 = com.example.data.database.KnowledgeEntry(
+                        title = "Order Flow Signal - Aggressive Longs",
+                        category = "Strategy",
+                        description = "Order Flow Imbalance shows aggressive buying momentum. Standard trend-following logic dictates entering immediate longs.",
+                        evidence = "High OFI signal.",
+                        confidenceScore = 0.90,
+                        isConfirmed = true
+                    )
+                    val e2 = com.example.data.database.KnowledgeEntry(
+                        title = "Liquidity Alert - Liquidity Pool Depleted",
+                        category = "Risk",
+                        description = "Critical liquidity index has dropped to 0.08. Directional momentum signals are highly likely to be stop-run manipulation.",
+                        evidence = "Microstructure liquidity depletion.",
+                        confidenceScore = 0.92,
+                        isConfirmed = true
+                    )
+                    repository.insertKnowledge(e1)
+                    repository.insertKnowledge(e2)
+                    
+                    runConflictResolutionSweep()
+                }
+                "STATE_THRASHING" -> {
+                    addSchedulerThought("🔄 STRESS SIMULATION: Activating [State-Transition Thrashing Scenario]...")
+                    addThought("🔄 STRESS SIMULATION: Rapidly switching mock states to trigger adaptive smoothing and monitor system damping.")
+                    
+                    // Simulate rapid switches to record regime transitions
+                    val mockRegimes = listOf("BULL", "BEAR", "RANGE", "VOLATILE", "BULL", "BEAR")
+                    for (reg in mockRegimes) {
+                        dynamicExponentialEstimator.analyzePricesAndAdapt(listOf(100.0, 102.0, 99.0, 105.0))
+                        dynamicExponentialEstimator.currentRegime = reg
+                        dynamicExponentialEstimator.updateMarketMicrostructure(0.5, 0.4)
+                    }
+                    
+                    // Manually flag thrashing
+                    dynamicExponentialEstimator.transitionThrashingDetected = true
+                    conflictResolutionEngine.transitionThrashingDetected = true
+                    conflictResolutionEngine.isExtremeRegime = false
+                    
+                    val e1 = com.example.data.database.KnowledgeEntry(
+                        title = "Microstructure Shift - Oscillating Trend",
+                        category = "Pattern",
+                        description = "Trend signals are oscillating wildly between bear and bull within sub-minute intervals.",
+                        evidence = "Rapid transitions recorded.",
+                        confidenceScore = 0.85,
+                        isConfirmed = true
+                    )
+                    val e2 = com.example.data.database.KnowledgeEntry(
+                        title = "Regime Stability - Stable Consolidation",
+                        category = "Pattern",
+                        description = "Long-term Moving Averages suggest we are in a stable range consolidation phase with low variance.",
+                        evidence = "Smoothed indicators.",
+                        confidenceScore = 0.78,
+                        isConfirmed = true
+                    )
+                    repository.insertKnowledge(e1)
+                    repository.insertKnowledge(e2)
+                    
+                    runConflictResolutionSweep()
+                }
+            }
         }
     }
 
@@ -1478,6 +1669,9 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     val registeredAgents = planningEngine.registry.getAllAgents()
 
     init {
+        // Wire up dynamic estimation parameters to safety gates
+        scheduler.dynamicExponentialEstimator = dynamicExponentialEstimator
+
         // Start Autonomous Market Intelligence Engine
         marketIntelligenceEngine.startIntelligenceLoop()
 
