@@ -16,6 +16,25 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
     private val _dialogueState = MutableStateFlow(DialogueState())
     val dialogueState = _dialogueState.asStateFlow()
 
+    suspend fun loadHistory() {
+        try {
+            val messages = repository.getAllChatMessagesDirect()
+            memory.setMessages(messages)
+            cognitionEngine.memory.setMessages(messages)
+            
+            // Set the unresolved questions and previous explanations if any
+            if (messages.isNotEmpty()) {
+                val lastAza = messages.findLast { it.sender == "AZA" }?.text
+                _dialogueState.value = _dialogueState.value.copy(
+                    lastAzaMessage = lastAza ?: "",
+                    previousExplanation = lastAza ?: ""
+                )
+            }
+        } catch (e: Exception) {
+            brain.addLog("⚠️ Failed to load conversational memory from DB: ${e.localizedMessage}")
+        }
+    }
+
     /**
      * Entry point to process a new message from the user.
      * Delegates fully to our premium executive cognition module.

@@ -3085,6 +3085,30 @@ fun TradingDiagnosticsDashboard(
                                         }
                                     }
 
+                                    // TAIL RISK METRIC
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("Tail Expected Shortfall (95% ES)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Warning,
+                                                    contentDescription = "Tail Risk",
+                                                    tint = Color(0xFFC62828),
+                                                    modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                                                )
+                                                Text("$${String.format(Locale.US, "%.2f", result.expectedShortfall95)} USD", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                                            }
+                                        }
+                                        Badge(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
+                                            Text("ES-OPTIMIZED WFO", modifier = Modifier.padding(horizontal = 6.dp), style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+
                                     // VISUAL PORTFOLIO CURVES
                                     if (result.equityCurve.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(12.dp))

@@ -30,6 +30,11 @@ class ConversationMemory {
     private val _recentMessages = mutableListOf<ChatMessage>()
     val recentMessages: List<ChatMessage> get() = _recentMessages
 
+    fun setMessages(messages: List<ChatMessage>) {
+        _recentMessages.clear()
+        _recentMessages.addAll(messages.takeLast(20))
+    }
+
     val ongoingTopics = mutableListOf<String>()
     val unresolvedQuestions = mutableListOf<String>()
     var previousExplanation: String? = null

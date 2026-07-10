@@ -64,7 +64,8 @@ data class StrategyValidationResult(
     val testingWinRate: Double = 0.0,
     val failureCauseBreakdown: Map<String, Int> = emptyMap(),
     val evaluatedSymbol: String = "BTCUSDT",
-    val evaluatedTimeframe: String = "1h"
+    val evaluatedTimeframe: String = "1h",
+    val expectedShortfall95: Double = 0.0
 )
 
 data class EngineValidationReport(
@@ -278,12 +279,80 @@ object EngineValidationSuite {
     /**
      * Parameter Optimizer acting purely on the Training period.
      */
+    /**
+     * Calculates the Expected Shortfall (Conditional Value-at-Risk) of a list of trade profits.
+     * ES represents the average loss in the worst alpha% of outcomes.
+     */
+    fun calculateExpectedShortfall(trades: List<ValidationTrade>, confidenceLevel: Double = 0.95): Double {
+        if (trades.isEmpty()) return 0.0
+        val profits = trades.map { it.profit }
+        val sortedProfits = profits.sorted() // ascending: worst losses (most negative values) first
+        val alphaFraction = 1.0 - confidenceLevel
+        val worstCount = max(1, (sortedProfits.size * alphaFraction).toInt())
+        val worstLosses = sortedProfits.take(worstCount)
+        val avgTailProfit = worstLosses.average()
+        return if (avgTailProfit < 0.0) -avgTailProfit else 0.0
+    }
+
+    /**
+     * Checks if a candle sequence represents a high-volatility period.
+     */
+    fun isHighVolatilityPeriod(candles: List<ValidationCandle>): Boolean {
+        if (candles.size < 2) return false
+        val closes = candles.map { it.close }
+        val avg = closes.average()
+        if (avg <= 0.0) return false
+        val variance = closes.map { (it - avg) * (it - avg) }.average()
+        val stdDev = sqrt(variance)
+        return (stdDev / avg) > 0.02
+    }
+
+    /**
+     * Parameter Optimizer acting purely on the Training period.
+     * Adapts walk-forward optimization to prioritize minimizing expected shortfall under high volatility.
+     * Incorporates a continuous performance-to-risk feedback loop that dynamically scales the tail-risk penalty factor.
+     */
     fun optimizeStrategyOnTraining(
         strategy: TradingStrategy,
         trainingCandles: List<ValidationCandle>
     ) {
-        var bestNetProfit = -999999.0
+        var bestObjectiveScore = -999999.0
         var bestParams = mapOf<String, Double>()
+        val isHighVol = isHighVolatilityPeriod(trainingCandles)
+
+        // --- CONTINUOUS FEEDBACK LOOP FOR PENALTY FACTOR CALIBRATION ---
+        // 1. Run a baseline simulation using the strategy's current parameters on the training set
+        val (baselineTrades, _) = simulateWithExecutionModel(strategy, trainingCandles)
+        
+        // 2. Assess baseline risk metrics: Max Drawdown and Downside Deviation (tail risk proxy)
+        val baselineDrawdown = if (baselineTrades.isNotEmpty()) {
+            var peak = 10000.0
+            var maxDD = 0.0
+            var currentBal = 10000.0
+            for (t in baselineTrades) {
+                currentBal += t.profit
+                if (currentBal > peak) peak = currentBal
+                val dd = ((peak - currentBal) / peak) * 100.0
+                if (dd > maxDD) maxDD = dd
+            }
+            maxDD
+        } else {
+            0.0
+        }
+
+        // 3. Calibrate feedback-adjusted penalty factor dynamically:
+        // Base penalty: 4.0 for high volatility, 1.5 for standard conditions.
+        // We adjust it based on baseline max drawdown and tail risk (Expected Shortfall).
+        // - High Drawdown (> 8%) acts as negative feedback, scaling the penalty up to prevent extreme losses.
+        // - Low Drawdown (< 3%) and stable performance acts as positive feedback, safely scaling the penalty down to prioritize nominal yields.
+        val basePenalty = if (isHighVol) 4.0 else 1.5
+        val feedbackMultiplier = when {
+            baselineDrawdown > 8.0 -> 1.5 // Scale up penalty by 50% for high-drawdown vulnerability
+            baselineDrawdown > 5.0 -> 1.2 // Scale up penalty by 20%
+            baselineDrawdown < 3.0 && baselineTrades.isNotEmpty() -> 0.8 // Scale down penalty by 20% to capture opportunity
+            else -> 1.0
+        }
+        val dynamicPenaltyWeight = basePenalty * feedbackMultiplier
 
         when (strategy) {
             is TrendFollowingStrategy -> {
@@ -293,8 +362,11 @@ object EngineValidationSuite {
                         strategy.setParameters(mapOf("emaShortPeriod" to short.toDouble(), "emaLongPeriod" to long.toDouble()))
                         val (trades, _) = simulateWithExecutionModel(strategy, trainingCandles)
                         val netProfit = trades.sumOf { it.profit }
-                        if (netProfit > bestNetProfit) {
-                            bestNetProfit = netProfit
+                        val es = calculateExpectedShortfall(trades, 0.90) // 90% ES for optimization signal
+                        val objectiveScore = netProfit - (dynamicPenaltyWeight * es)
+
+                        if (objectiveScore > bestObjectiveScore) {
+                            bestObjectiveScore = objectiveScore
                             bestParams = mapOf("emaShortPeriod" to short.toDouble(), "emaLongPeriod" to long.toDouble())
                         }
                     }
@@ -305,8 +377,11 @@ object EngineValidationSuite {
                     strategy.setParameters(mapOf("period" to p.toDouble()))
                     val (trades, _) = simulateWithExecutionModel(strategy, trainingCandles)
                     val netProfit = trades.sumOf { it.profit }
-                    if (netProfit > bestNetProfit) {
-                        bestNetProfit = netProfit
+                    val es = calculateExpectedShortfall(trades, 0.90)
+                    val objectiveScore = netProfit - (dynamicPenaltyWeight * es)
+
+                    if (objectiveScore > bestObjectiveScore) {
+                        bestObjectiveScore = objectiveScore
                         bestParams = mapOf("period" to p.toDouble())
                     }
                 }
@@ -317,8 +392,11 @@ object EngineValidationSuite {
                         strategy.setParameters(mapOf("oversoldThreshold" to overSold, "overboughtThreshold" to overBought))
                         val (trades, _) = simulateWithExecutionModel(strategy, trainingCandles)
                         val netProfit = trades.sumOf { it.profit }
-                        if (netProfit > bestNetProfit) {
-                            bestNetProfit = netProfit
+                        val es = calculateExpectedShortfall(trades, 0.90)
+                        val objectiveScore = netProfit - (dynamicPenaltyWeight * es)
+
+                        if (objectiveScore > bestObjectiveScore) {
+                            bestObjectiveScore = objectiveScore
                             bestParams = mapOf("oversoldThreshold" to overSold, "overboughtThreshold" to overBought)
                         }
                     }
@@ -498,6 +576,7 @@ object EngineValidationSuite {
             }
 
             // G. Build Detailed Text Logs
+            val es95 = calculateExpectedShortfall(allTrades, 0.95)
             val detailsSb = StringBuilder()
             detailsSb.append("=== WALK-FORWARD VALIDATION FOR ${strategy.name} ===\n")
             detailsSb.append("Symbol: $symbol | Timeframe: $timeframe | Candles: $totalCandles\n")
@@ -505,6 +584,7 @@ object EngineValidationSuite {
             detailsSb.append("• Validation Set Win Rate: ${String.format(Locale.US, "%.1f", validationWR)}%\n")
             detailsSb.append("• Testing Set (OOS) Win Rate: ${String.format(Locale.US, "%.1f", testingWR)}%\n")
             detailsSb.append("• Sortino Ratio: ${String.format(Locale.US, "%.2f", sortinoRatio)}\n")
+            detailsSb.append("• Expected Shortfall (95% ES): $${String.format(Locale.US, "%.2f", es95)}\n")
             detailsSb.append("• Avg Holding Time: ${String.format(Locale.US, "%.1f", avgHoldingTimeMin)} mins\n")
             detailsSb.append("• Drawdowns Peak: ${String.format(Locale.US, "%.1f", maxDrawdownVal)}%\n")
 
@@ -540,7 +620,8 @@ object EngineValidationSuite {
                     testingWinRate = testingWR,
                     failureCauseBreakdown = failureCauses,
                     evaluatedSymbol = symbol,
-                    evaluatedTimeframe = timeframe
+                    evaluatedTimeframe = timeframe,
+                    expectedShortfall95 = es95
                 )
             )
         }

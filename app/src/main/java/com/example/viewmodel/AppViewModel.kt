@@ -1672,6 +1672,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         // Wire up dynamic estimation parameters to safety gates
         scheduler.dynamicExponentialEstimator = dynamicExponentialEstimator
 
+        // Load historical chat context so conversation proceeds seamlessly
+        viewModelScope.launch {
+            conversationEngine.loadHistory()
+        }
+
         // Start Autonomous Market Intelligence Engine
         marketIntelligenceEngine.startIntelligenceLoop()
 
@@ -3713,6 +3718,20 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 )
             )
         }
+    }
+
+    fun insertYouTubeUploadDraft(draft: com.example.data.database.YouTubeUploadDraft) {
+        viewModelScope.launch {
+            repository.insertYouTubeUploadDraft(draft)
+        }
+    }
+
+    suspend fun getAiVideoScenes(title: String, scriptOutline: String): String {
+        return repository.getAiVideoScenes(title, scriptOutline)
+    }
+
+    suspend fun getExpandedVideoPrompt(subtitle: String, currentPrompt: String): String {
+        return repository.getExpandedVideoPrompt(subtitle, currentPrompt)
     }
 
     fun deleteYouTubeUploadDraft(draft: com.example.data.database.YouTubeUploadDraft) {

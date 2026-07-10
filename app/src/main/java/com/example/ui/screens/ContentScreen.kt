@@ -122,6 +122,7 @@ fun VideoPlannerTab(
     var projectTitle by remember { mutableStateOf("") }
     var selectedPlatform by remember { mutableStateOf("YOUTUBE") }
     var expandedItemIndex by remember { mutableStateOf<Int?>(null) }
+    var activeVideoStudioItem by remember { mutableStateOf<ContentItem?>(null) }
 
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -534,6 +535,28 @@ fun VideoPlannerTab(
                                                 )
                                             }
                                         }
+
+                                        if (item.status != "DRAFT") {
+                                            Button(
+                                                onClick = {
+                                                    activeVideoStudioItem = item
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                                    contentColor = MaterialTheme.colorScheme.primary
+                                                ),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.MovieFilter,
+                                                    contentDescription = "Aza Video Studio",
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Aza Studio 🎥", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
                                     }
 
                                     // Delete concept
@@ -559,6 +582,14 @@ fun VideoPlannerTab(
                 }
             }
         }
+    }
+
+    activeVideoStudioItem?.let { item ->
+        AzaVideoStudioDialog(
+            item = item,
+            viewModel = viewModel,
+            onDismiss = { activeVideoStudioItem = null }
+        )
     }
 }
 

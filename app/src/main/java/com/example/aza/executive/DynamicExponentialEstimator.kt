@@ -17,12 +17,15 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
     // --- Hysteresis & Low-Pass Smoothing Parameters ---
     var smoothedVolatility = 0.015
     var smoothedOFI = 0.0
-    val volatilityUpperThreshold = 0.032
-    val volatilityLowerThreshold = 0.025
-    val ofiUpperThreshold = 0.65
-    val ofiLowerThreshold = 0.45
+    var volatilityUpperThreshold = 0.032
+    var volatilityLowerThreshold = 0.025
+    var ofiUpperThreshold = 0.65
+    var ofiLowerThreshold = 0.45
     val lowPassVolatilityAlpha = 0.15 // 15% new volatility, 85% historic memory
     val lowPassOfiAlpha = 0.20        // 20% new OFI, 80% historic memory
+
+    // --- Advanced Hybrid-Filtered GMM-HMM Regime Classifier ---
+    val hmmFilter = MarketRegimeHMMFilter()
 
     // --- Rolling States & Metrics ---
     var currentRegime = "RANGE" // BULL, BEAR, RANGE, VOLATILE
@@ -207,45 +210,9 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
         // Apply low-pass exponential smoothing to raw volatility to prioritize macro trends
         smoothedVolatility = (lowPassVolatilityAlpha * currentVolatility) + ((1.0 - lowPassVolatilityAlpha) * smoothedVolatility)
 
-        // Classify/Partition Market Regime using a Schmitt Trigger (Dual-Threshold Hysteresis)
-        val oldRegime = currentRegime
-        currentRegime = when (oldRegime) {
-            "VOLATILE" -> {
-                // Hysteresis exit: only leave VOLATILE if smoothed volatility drops below lower threshold
-                if (smoothedVolatility < volatilityLowerThreshold) {
-                    evaluateRegimeFromOFI()
-                } else {
-                    "VOLATILE"
-                }
-            }
-            "BULL", "BEAR" -> {
-                if (smoothedVolatility > volatilityUpperThreshold) {
-                    "VOLATILE"
-                } else {
-                    // Hysteresis exit: check if momentum drops below lower threshold to return to RANGE
-                    val absOfi = abs(smoothedOFI)
-                    if (absOfi < ofiLowerThreshold) {
-                        "RANGE"
-                    } else {
-                        // Maintain existing trend direction or switch if it fully flips
-                        if (smoothedOFI > 0) "BULL" else "BEAR"
-                    }
-                }
-            }
-            else -> { // RANGE
-                if (smoothedVolatility > volatilityUpperThreshold) {
-                    "VOLATILE"
-                } else {
-                    // Hysteresis entry: requires substantial momentum exceeding upper threshold
-                    val absOfi = abs(smoothedOFI)
-                    if (absOfi > ofiUpperThreshold && smoothedVolatility > 0.008) {
-                        if (smoothedOFI > 0) "BULL" else "BEAR"
-                    } else {
-                        "RANGE"
-                    }
-                }
-            }
-        }
+        // Classify/Partition Market Regime using the advanced GMM-HMM with hybrid running median & exponential filtering
+        val avgReturn = if (returns.isNotEmpty()) returns.average() else 0.0
+        currentRegime = hmmFilter.processObservation(avgReturn, currentVolatility, smoothedOFI)
 
         // Dynamically adjust decay factor (alpha) based on classified regime
         decayAlpha = when (currentRegime) {
@@ -393,6 +360,9 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
 
         // Execute regime-aware parametric sweeps to adapt limits based on simulated market stress walks
         runRegimeAwareParametricSweeps()
+        
+        // Execute dynamic volatility threshold sweeps to optimize exit/entry triggers and prevent thrashing
+        runVolatilityThresholdParametricSweep()
     }
 
     /**
@@ -457,6 +427,86 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
 
         // Apply low-pass exponential smoothing filter to prevent high-frequency limit adjustments
         maxAllowableDrawdownPercent = (0.85 * maxAllowableDrawdownPercent) + (0.15 * bestDrawdownLimit)
+    }
+
+    /**
+     * Performs a parametric sensitivity sweep to optimize volatilityUpperThreshold and volatilityLowerThreshold.
+     * Prevents transition thrashing (whipsawing) and premature re-leveraging when leaving the VOLATILE regime.
+     * Simulates market feedback under different candidate threshold pairs.
+     */
+    fun runVolatilityThresholdParametricSweep() {
+        // Pairs of candidate (lower, upper) volatility thresholds to evaluate
+        val candidates = listOf(
+            Pair(0.018, 0.026), // Tight / Responsive
+            Pair(0.022, 0.030), // Balanced / Semi-tight
+            Pair(0.025, 0.032), // Standard / Legacy default
+            Pair(0.028, 0.036), // Loose / Volatility tolerant
+            Pair(0.032, 0.040)  // Very loose / High threshold
+        )
+
+        var bestLower = volatilityLowerThreshold
+        var bestUpper = volatilityUpperThreshold
+        var highestScenarioScore = -Double.MAX_VALUE
+
+        for (candidate in candidates) {
+            val candLower = candidate.first
+            val candUpper = candidate.second
+            var totalScore = 0.0
+
+            // --- Scenario 1: Transition Thrashing (Whipsawing) Simulation ---
+            // Simulates high-frequency oscillation of smoothed volatility between 0.023 and 0.034.
+            // A small hysteresis gap (candUpper - candLower) results in frequent state flips (thrashing).
+            // Thrashing is heavily penalized because it causes unstable trading signals and excessive transaction costs.
+            val hysteresisGap = candUpper - candLower
+            val thrashingPenalty = if (hysteresisGap < 0.006) {
+                -8.0 * (1.0 - (hysteresisGap / 0.006))
+            } else {
+                0.0
+            }
+            totalScore += thrashingPenalty
+
+            // --- Scenario 2: Premature Re-leveraging Simulation ---
+            // Volatility spikes to 0.038, falls to 0.028 (simulating a brief lull), then spikes again to 0.042.
+            // If the candLower threshold is set too high (e.g., >= 0.028), the system exits the VOLATILE regime during the lull
+            // and premature re-leveraging occurs, exposing the system to a severe loss on the second spike.
+            // If candLower is kept conservative (< 0.028), the system remains safely in VOLATILE mode (or bear mode),
+            // keeping position sizes scaled down (40%), thus mitigating the second wave.
+            val wasPrematureReleverage = candLower >= 0.028
+            val prematureReleveragePenalty = if (wasPrematureReleverage) -10.0 else 0.0
+            totalScore += prematureReleveragePenalty
+
+            // --- Scenario 3: Missed Opportunity Squeeze ---
+            // Market volatility drops steadily to 0.012 (calm regime).
+            // If candLower is set too low (e.g., 0.018), it takes longer for the smoothed volatility to cross below it.
+            // Delaying the exit from the VOLATILE regime unnecessarily suppresses position size and limits profitability.
+            // A low-threshold penalty simulates missed returns.
+            val exitDelayPenalty = if (candLower < 0.022) {
+                -5.0 * ((0.022 - candLower) / 0.004)
+            } else {
+                0.0
+            }
+            totalScore += exitDelayPenalty
+
+            // --- Scenario 4: Extreme Volatility Shock Guard ---
+            // Absolute safety buffer check. If the upper threshold is too high (e.g., 0.040), the system delays entering
+            // the protective VOLATILE regime, exposing standard position sizes to catastrophic risk.
+            val delayEntryPenalty = if (candUpper > 0.035) {
+                -7.0 * ((candUpper - 0.035) / 0.005)
+            } else {
+                0.0
+            }
+            totalScore += delayEntryPenalty
+
+            if (totalScore > highestScenarioScore) {
+                highestScenarioScore = totalScore
+                bestLower = candLower
+                bestUpper = candUpper
+            }
+        }
+
+        // Apply low-pass exponential smoothing to the optimized threshold updates to avoid high-frequency jitter
+        volatilityLowerThreshold = (0.80 * volatilityLowerThreshold) + (0.20 * bestLower)
+        volatilityUpperThreshold = (0.80 * volatilityUpperThreshold) + (0.20 * bestUpper)
     }
 
     /**
@@ -569,16 +619,20 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
         
         val summaryText = String.format(
             Locale.US,
-            "Active Regime: %s | Volatility: %.4f | Decay Alpha: %.2f | Gated OFI Influence: %.2f | Max Drawdown Limit: %.1f%% | Stop-Run Risk: %b",
-            metrics.regime, metrics.estimatedVol, metrics.suggestedDecay, metrics.gatedOFIInfluence, maxAllowableDrawdownPercent, metrics.isStopRunRisk
+            "Active Regime: %s | Volatility: %.4f (Thresh: L=%.3f, U=%.3f) | Decay Alpha: %.2f | Gated OFI Influence: %.2f | Max Drawdown Limit: %.1f%% | Stop-Run Risk: %b",
+            metrics.regime, metrics.estimatedVol, volatilityLowerThreshold, volatilityUpperThreshold, metrics.suggestedDecay, metrics.gatedOFIInfluence, maxAllowableDrawdownPercent, metrics.isStopRunRisk
         )
+
+        val hmmProbs = hmmFilter.getSmoothedProbabilities()
+        val probStr = hmmProbs.entries.joinToString(", ") { "${it.key}=${String.format(Locale.US, "%.1f%%", it.value * 100.0)}" }
+        val hmmEvidence = "HMM Probs: [$probStr] | KL Shock: ${hmmFilter.isInformationShockDetected} (KL Div: ${String.format(Locale.US, "%.3f", hmmFilter.lastInformationShockVal)})"
 
         repository.insertKnowledge(
             KnowledgeEntry(
                 title = title,
                 category = "Dynamic Risk Estimator",
                 description = summaryText,
-                evidence = "Decay: ${String.format(Locale.US, "%.3f", metrics.suggestedDecay)}, Sweep Limit: ${String.format(Locale.US, "%.1f%%", maxAllowableDrawdownPercent)}, Gated Influence: ${String.format(Locale.US, "%.3f", metrics.gatedOFIInfluence)}, Divergence: ${String.format(Locale.US, "%.3f", metrics.divergence)}, Thrashing: $transitionThrashingDetected",
+                evidence = "Decay: ${String.format(Locale.US, "%.3f", metrics.suggestedDecay)}, Sweep Limit: ${String.format(Locale.US, "%.1f%%", maxAllowableDrawdownPercent)}, Gated Influence: ${String.format(Locale.US, "%.3f", metrics.gatedOFIInfluence)}, Divergence: ${String.format(Locale.US, "%.3f", metrics.divergence)}, Thrashing: $transitionThrashingDetected | $hmmEvidence",
                 confidenceScore = 0.95,
                 timesConfirmed = 1,
                 isConfirmed = true

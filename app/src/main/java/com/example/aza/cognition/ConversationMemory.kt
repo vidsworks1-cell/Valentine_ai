@@ -21,6 +21,11 @@ class ConversationMemory {
     private val _recentMessages = mutableListOf<ChatMessage>()
     val recentMessages: List<ChatMessage> get() = _recentMessages
 
+    fun setMessages(messages: List<ChatMessage>) {
+        _recentMessages.clear()
+        _recentMessages.addAll(messages.takeLast(20))
+    }
+
     fun addMessage(message: ChatMessage) {
         _recentMessages.add(message)
         if (_recentMessages.size > 20) {

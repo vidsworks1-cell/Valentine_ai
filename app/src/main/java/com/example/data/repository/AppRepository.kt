@@ -284,6 +284,10 @@ class AppRepository(private val db: AppDatabase) {
         chatDao.insertMessage(message)
     }
 
+    suspend fun getAllChatMessagesDirect(): List<ChatMessage> = withContext(Dispatchers.IO) {
+        chatDao.getAllMessagesDirect()
+    }
+
     suspend fun clearChatMessages() = withContext(Dispatchers.IO) {
         chatDao.deleteAllMessages()
     }
@@ -422,6 +426,83 @@ class AppRepository(private val db: AppDatabase) {
             generateContentWithFallback(apiKey, request)
         } catch (e: Exception) {
             getSimulatedContentScript(title, platform)
+        }
+    }
+
+    suspend fun getAiVideoScenes(title: String, scriptOutline: String): String = withContext(Dispatchers.IO) {
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY" || apiKey.contains("placeholder", ignoreCase = true)) {
+            return@withContext getSimulatedVideoScenes(title)
+        }
+
+        val prompt = """
+            You are a master AI video director. Break down this video script/concept outline into exactly 4 visual narrative scenes with specific, highly engaging spoken narration and exact timing.
+            - Video Title: $title
+            - Script Outline: $scriptOutline
+
+            Format your response exactly as a list of 4 scenes. Each scene MUST be separated by a double line break and start with 'SCENE [number]:' followed by these exact labels on new lines:
+            - Narrative Subtitle: [The actual spoken audio transcript line for this scene]
+            - Visual Prompt: [A descriptive prompt for generative AI imagery/graphics]
+            - Duration: [An integer representing duration in milliseconds, e.g. 5000]
+        """.trimIndent()
+
+        val request = GenerateContentRequest(
+            contents = listOf(ApiContent(parts = listOf(Part(text = prompt))))
+        )
+
+        try {
+            generateContentWithFallback(apiKey, request)
+        } catch (e: Exception) {
+            getSimulatedVideoScenes(title)
+        }
+    }
+
+    private fun getSimulatedVideoScenes(title: String): String {
+        return """
+            SCENE 1:
+            Narrative Subtitle: Are you making this critical mistake in your daily trading routine? Let's check it.
+            Visual Prompt: A close-up of a high-tech financial terminal with glowing green candles and neon cyber-grid overlays.
+            Duration: 4000
+
+            SCENE 2:
+            Narrative Subtitle: Most traders focus purely on price action, completely ignoring structural momentum shifts and HMM filters.
+            Visual Prompt: An abstract futuristic radar grid scanning rapid data streams, with blue and purple dynamic waves pulsing.
+            Duration: 5000
+
+            SCENE 3:
+            Narrative Subtitle: By integrating our adaptive fast and stable slow dual-path algorithm, you eliminate all trading whipsaws instantly.
+            Visual Prompt: A glowing double helix path lighting up in a digital network, representing adaptive speed and stable macro lines.
+            Duration: 5500
+
+            SCENE 4:
+            Narrative Subtitle: Tap subscribe to master autonomous trading filters with AZA, and never trade blindly again.
+            Visual Prompt: A sleek neon metallic subscriber button with glowing particle ripples and custom dynamic reflections.
+            Duration: 4500
+        """.trimIndent()
+    }
+
+    suspend fun getExpandedVideoPrompt(subtitle: String, currentPrompt: String): String = withContext(Dispatchers.IO) {
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY" || apiKey.contains("placeholder", ignoreCase = true)) {
+            return@withContext "Cinematic 8k, photorealistic cybernetic composition: $currentPrompt, dramatic low-key cyber lighting, highly detailed octane render style, vivid neon glow accents."
+        }
+
+        val prompt = """
+            You are an expert AI video artist and prompt engineer. Expand the following visual video scene prompt into a highly detailed, cinematic, and descriptive generative video art prompt.
+            - Narration Subtitle: ${'$'}subtitle
+            - Current Prompt: ${'$'}currentPrompt
+
+            Provide ONLY the final expanded descriptive text in your response, with NO extra conversational headers or explanations. Keep it under 150 words.
+        """.trimIndent()
+
+        val request = GenerateContentRequest(
+            contents = listOf(ApiContent(parts = listOf(Part(text = prompt))))
+        )
+
+        try {
+            generateContentWithFallback(apiKey, request)
+        } catch (e: Exception) {
+            "Cinematic 8k, photorealistic cybernetic composition: $currentPrompt, dramatic low-key cyber lighting, highly detailed octane render style, vivid neon glow accents."
         }
     }
 

@@ -64,11 +64,18 @@ fun AzaScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val clipboardManager = LocalClipboardManager.current
 
+    var isFirstLoad by remember { mutableStateOf(true) }
+
     // Auto-scroll to the latest message on update
     LaunchedEffect(messages.size, isAzaResponding) {
         if (messages.isNotEmpty()) {
-            delay(100)
-            listState.animateScrollToItem(messages.size - 1)
+            if (isFirstLoad) {
+                listState.scrollToItem(messages.size - 1)
+                isFirstLoad = false
+            } else {
+                delay(100)
+                listState.animateScrollToItem(messages.size - 1)
+            }
         }
     }
 
@@ -8149,6 +8156,110 @@ fun CognitiveSimulationConsole(viewModel: com.example.viewmodel.AppViewModel) {
                                 fontWeight = FontWeight.Bold,
                                 color = if (isCooldownActive) Color(0xFFE53935) else Color(0xFF43A047)
                             )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "🧠 GMM-HMM REGIME PROBABILITIES (HYBRID-FILTERED)",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+
+                    val hmmProbs = estimator.hmmFilter.getSmoothedProbabilities()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        hmmProbs.forEach { (stateName, prob) ->
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(stateName, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                LinearProgressIndicator(
+                                    progress = prob.toFloat(),
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = when (stateName) {
+                                        "VOLATILE" -> Color(0xFFE53935)
+                                        "BULL" -> Color(0xFF43A047)
+                                        "BEAR" -> Color(0xFFD81B60)
+                                        else -> Color(0xFF1E88E5)
+                                    },
+                                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                                )
+                                Text(
+                                    text = String.format(Locale.US, "%.1f%%", prob * 100.0),
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("⚡ Fast Path: ", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(estimator.hmmFilter.fastRegime, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("🛡️ Slow Path: ", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(estimator.hmmFilter.slowRegime, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Fusion Weight (w)", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.1f%% Fast", estimator.hmmFilter.dynamicFusionWeight * 100.0),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("KL Info Shock: ", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.4f", estimator.hmmFilter.lastInformationShockVal),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (estimator.hmmFilter.isInformationShockDetected) Color(0xFFE53935) else MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        if (estimator.hmmFilter.isInformationShockDetected) {
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFFE53935).copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("SHOCK DETECTED", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE53935))
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFF43A047).copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("STABLE REGIME", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color(0xFF43A047))
+                            }
                         }
                     }
                 }

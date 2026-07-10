@@ -1,3 +1,14 @@
+import java.io.File
+
+// Automatically generate .env file from environment variables if it doesn't exist
+val envFile = File(rootDir, ".env")
+if (!envFile.exists()) {
+    val geminiKey = System.getenv("GEMINI_API_KEY") ?: ""
+    if (geminiKey.isNotEmpty()) {
+        envFile.writeText("GEMINI_API_KEY=$geminiKey\n")
+    }
+}
+
 pluginManagement {
   repositories {
     google {
