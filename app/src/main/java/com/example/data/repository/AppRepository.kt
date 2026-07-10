@@ -320,12 +320,20 @@ class AppRepository(private val db: AppDatabase) {
         contentDao.deleteContentById(id)
     }
 
+    suspend fun getAllContentDirect(): List<ContentItem> = withContext(Dispatchers.IO) {
+        contentDao.getAllContentDirect()
+    }
+
     suspend fun updateGig(gig: FreelanceGig) = withContext(Dispatchers.IO) {
         gigDao.updateGig(gig)
     }
 
     suspend fun insertGig(gig: FreelanceGig) = withContext(Dispatchers.IO) {
         gigDao.insertGig(gig)
+    }
+
+    suspend fun getAllGigsDirect(): List<FreelanceGig> = withContext(Dispatchers.IO) {
+        gigDao.getAllGigsDirect()
     }
 
     suspend fun insertTransaction(record: TransactionRecord) = withContext(Dispatchers.IO) {
@@ -347,12 +355,10 @@ class AppRepository(private val db: AppDatabase) {
         request: GenerateContentRequest
     ): String {
         val models = listOf(
-            "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "gemini-flash-latest",
             "gemini-3.5-flash",
             "gemini-3.1-pro-preview",
-            "gemini-3.1-flash-lite-preview"
+            "gemini-3.1-flash-lite-preview",
+            "gemini-flash-latest"
         )
         var lastException: Exception? = null
         

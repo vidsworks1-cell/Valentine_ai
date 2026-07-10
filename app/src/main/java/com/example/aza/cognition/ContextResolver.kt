@@ -28,15 +28,19 @@ data class UnifiedContext(
 object ContextResolver {
 
     suspend fun resolve(repository: AppRepository, memory: ConversationMemory): UnifiedContext {
-        val balance = repository.getCapabilityStateByNameDirect("Binance Capability")?.let { 10000.0 } ?: 4250.75
+        val balance = repository.getAccountInfoDirect()?.totalBalance ?: 4250.75
+        val holdingsCount = repository.getAllPositionsDirect().size
+        val activeMissionsCount = if (repository.getActiveMissionDirect() != null) 1 else 0
+        val openGigsCount = repository.getAllGigsDirect().size
+        val contentCount = repository.getAllContentDirect().size
         
         return UnifiedContext(
             recentHistory = memory.recentMessages,
             cashBalance = balance,
-            holdingsCount = 4,
-            activeMissionsCount = 1,
-            openGigsCount = 3,
-            contentCount = 1,
+            holdingsCount = holdingsCount,
+            activeMissionsCount = activeMissionsCount,
+            openGigsCount = openGigsCount,
+            contentCount = contentCount,
             systemStatus = "Connected & Autopilot Operational",
             preferences = memory.preferences
         )

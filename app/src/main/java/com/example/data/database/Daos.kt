@@ -26,6 +26,9 @@ interface ContentDao {
     @Query("SELECT * FROM content_items ORDER BY createdAt DESC")
     fun getAllContent(): Flow<List<ContentItem>>
 
+    @Query("SELECT * FROM content_items")
+    suspend fun getAllContentDirect(): List<ContentItem>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContent(contentItem: ContentItem)
 
@@ -40,6 +43,9 @@ interface ContentDao {
 interface GigDao {
     @Query("SELECT * FROM freelance_gigs")
     fun getAllGigs(): Flow<List<FreelanceGig>>
+
+    @Query("SELECT * FROM freelance_gigs")
+    suspend fun getAllGigsDirect(): List<FreelanceGig>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGig(gig: FreelanceGig)
