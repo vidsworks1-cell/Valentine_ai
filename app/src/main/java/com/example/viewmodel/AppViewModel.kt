@@ -1328,7 +1328,8 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
                 repository.updateCapabilityState(state.copy(
                     apiKey = if (apiKey.isBlank()) "" else "[SECURED_KEYSTORE]",
-                    apiSecret = if (apiSecret.isBlank()) "" else "[SECURED_KEYSTORE]"
+                    apiSecret = if (apiSecret.isBlank()) "" else "[SECURED_KEYSTORE]",
+                    operatingMode = if (apiKey.isBlank()) "MOCK" else "LIVE"
                 ))
                 addSchedulerThought("🔒 CAPABILITY CONFIG: Credentials updated for '$name' securely via Android Keystore.")
             }
@@ -1730,9 +1731,9 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 try {
                     val state = repository.getCapabilityStateByNameDirect("Binance Capability")
                     if (state != null && state.operatingMode == "LIVE") {
-                        val apiKey = state.apiKey
-                        val apiSecret = state.apiSecret
-                        if (apiKey.isNotBlank() && apiSecret.isNotBlank()) {
+                        val apiKey = try { com.example.aza.security.SecureCredentialStore.getBinanceApiKey() } catch(e: Exception) { "" }.ifBlank { state.apiKey }
+                        val apiSecret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }.ifBlank { state.apiSecret }
+                        if (apiKey.isNotBlank() && apiSecret.isNotBlank() && apiKey != "[SECURED_KEYSTORE]") {
                             // Automatically sync credentials
                             com.example.aza.connector.BinanceConnector.updateCredentials(apiKey, apiSecret)
                             

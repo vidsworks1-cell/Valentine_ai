@@ -1227,6 +1227,66 @@ fun AccountScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    // Binance App Specific Step-by-Step Guidance Card
+                    var showHelpSteps by remember { mutableStateOf(false) }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "Guidance Icon",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        "Binance Mobile App Instructions",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                TextButton(
+                                    onClick = { showHelpSteps = !showHelpSteps },
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text(
+                                        if (showHelpSteps) "Hide" else "Show Steps",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                            if (showHelpSteps) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "To enable spot, margin, and stock trading, you must manually grant API Restrictions in the Binance app:\n\n" +
+                                    "1️⃣ **Navigate**: Open Binance App ➔ Tap **Profile (top-left)** ➔ Tap **More Services** ➔ Scroll to **API Management**.\n\n" +
+                                    "2️⃣ **Create**: Tap **Create API** (choose System-Generated) and complete security 2FA verification.\n\n" +
+                                    "3️⃣ **Enable Spot & Margin**: In the API List, tap **Edit** on your key ➔ scroll down to **API Restrictions** ➔ Check **'Enable Spot & Margin Trading'** (ensure other permissions are as desired).\n\n" +
+                                    "4️⃣ **Save**: Tap **Save** ➔ authenticate again. Copy both **API Key** and **Secret Key** (Secret is hidden forever after navigating away!) and paste them below.",
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
                     OutlinedTextField(
                         value = inputApiKey,
                         onValueChange = { inputApiKey = it },
