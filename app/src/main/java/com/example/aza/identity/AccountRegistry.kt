@@ -102,9 +102,9 @@ class AccountRegistry(private val context: Context, private val repository: Iden
         override val provider: ProviderType = ProviderType.YOUTUBE
 
         override suspend fun connect(params: Map<String, String>): AuthenticationResult = withContext(Dispatchers.IO) {
-            val channelName = params["channel_name"] ?: "My YouTube Channel"
+            val channelName = params["channel_name"] ?: params["email"] ?: "My YouTube Channel"
             val channelId = params["channel_id"] ?: "UC_DUMMY_ID"
-            val token = params["oauth_token"] ?: "dummy_yt_token"
+            val token = params["oauth_token"] ?: params["token"] ?: "dummy_yt_token"
             
             CredentialVault.saveToken(provider, token)
             repository.saveConnectionState(provider, ConnectionState.CONNECTED)
@@ -178,10 +178,10 @@ class AccountRegistry(private val context: Context, private val repository: Iden
         override val provider: ProviderType = ProviderType.BINANCE
 
         override suspend fun connect(params: Map<String, String>): AuthenticationResult = withContext(Dispatchers.IO) {
-            val apiKey = params["api_key"] ?: return@withContext AuthenticationResult.Failure("API key required.")
-            val secretKey = params["secret_key"] ?: return@withContext AuthenticationResult.Failure("Secret key required.")
-            val env = params["env"] ?: "Sandbox"
-            val mode = params["trading_mode"] ?: "Read-Only"
+            val apiKey = params["api_key"] ?: params["apiKey"] ?: return@withContext AuthenticationResult.Failure("API key required.")
+            val secretKey = params["secret_key"] ?: params["secret"] ?: params["secretKey"] ?: return@withContext AuthenticationResult.Failure("Secret key required.")
+            val env = params["env"] ?: params["selectedEnv"] ?: "Sandbox"
+            val mode = params["trading_mode"] ?: params["tradingMode"] ?: params["selectedMode"] ?: "Read-Only"
 
             CredentialVault.saveToken(provider, apiKey)
             CredentialVault.saveSecret(provider, secretKey)
@@ -338,7 +338,7 @@ class AccountRegistry(private val context: Context, private val repository: Iden
 
         override suspend fun connect(params: Map<String, String>): AuthenticationResult = withContext(Dispatchers.IO) {
             val email = params["email"] ?: "user@gmail.com"
-            val token = params["oauth_token"] ?: "dummy_gmail_token"
+            val token = params["oauth_token"] ?: params["token"] ?: "dummy_gmail_token"
             
             CredentialVault.saveToken(provider, token)
             repository.saveConnectionState(provider, ConnectionState.CONNECTED)
@@ -401,7 +401,7 @@ class AccountRegistry(private val context: Context, private val repository: Iden
 
         override suspend fun connect(params: Map<String, String>): AuthenticationResult = withContext(Dispatchers.IO) {
             val email = params["email"] ?: "user@gmail.com"
-            val token = params["oauth_token"] ?: "dummy_drive_token"
+            val token = params["oauth_token"] ?: params["token"] ?: "dummy_drive_token"
             
             CredentialVault.saveToken(provider, token)
             repository.saveConnectionState(provider, ConnectionState.CONNECTED)
@@ -464,7 +464,7 @@ class AccountRegistry(private val context: Context, private val repository: Iden
 
         override suspend fun connect(params: Map<String, String>): AuthenticationResult = withContext(Dispatchers.IO) {
             val email = params["email"] ?: "user@gmail.com"
-            val token = params["oauth_token"] ?: "dummy_calendar_token"
+            val token = params["oauth_token"] ?: params["token"] ?: "dummy_calendar_token"
             
             CredentialVault.saveToken(provider, token)
             repository.saveConnectionState(provider, ConnectionState.CONNECTED)
