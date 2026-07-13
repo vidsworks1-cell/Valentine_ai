@@ -36,6 +36,9 @@ class IdentityRepository(private val context: Context) {
             ProviderType.GMAIL, ProviderType.GOOGLE_DRIVE, ProviderType.GOOGLE_CALENDAR -> {
                 com.example.aza.identity.CredentialVault.getToken(provider).isNotEmpty()
             }
+            ProviderType.CCP -> {
+                com.example.aza.security.SecureCredentialStore.getCcpAccountNumber().isNotEmpty()
+            }
             else -> false
         }
 
@@ -102,6 +105,14 @@ class IdentityRepository(private val context: Context) {
                 val token = com.example.aza.identity.CredentialVault.getToken(provider)
                 if (token.isNotEmpty()) {
                     val result = "Google Calendar"
+                    saveAccountName(provider, result)
+                    result
+                } else null
+            }
+            ProviderType.CCP -> {
+                val acc = com.example.aza.security.SecureCredentialStore.getCcpAccountNumber()
+                if (acc.isNotEmpty()) {
+                    val result = "CCP Compte No: $acc"
                     saveAccountName(provider, result)
                     result
                 } else null

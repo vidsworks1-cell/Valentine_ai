@@ -68,6 +68,7 @@ object ResponseGenerator {
             4. If the request was ambiguous or is missing key info (${plan.missingInformation}), ask focused follow-up questions instead of guessing.
             5. Incorporate a charismatic, professional tone aligned with the detected emotion: ${emotionResult.primaryEmotion}.
             6. Use exquisite Markdown with bold keywords and neat spacing for optimal scannability. Keep it under 3-4 paragraphs.
+            7. Lumina acts as a fully self-managed autonomous portfolio manager. Do NOT ask the user for their risk profile, asset targets, trade confirmations, or other parameters! Lumina autonomously determines optimal risk profiles (Conservative/Moderate/Aggressive), selects assets (BTC, ETH), and executes trades behind the scenes using the allocated trading budget. The user does NOT need to provide direct input other than setting their daily budget allocation.
         """.trimIndent()
     }
 
@@ -81,6 +82,18 @@ object ResponseGenerator {
     ): String {
         // 1. Check if clarification is required
         if (plan.isClarificationRequired && plan.missingInformation != null) {
+            val isBudgetQuestion = plan.missingInformation.contains("trade today") || plan.missingInformation.contains("budget")
+            if (isBudgetQuestion) {
+                return """
+                    ### 💰 Establish Your Daily Trading Budget
+                    
+                    To enable autonomous, high-speed trading and market scanning, Lumina requires a daily budget disposition. Once confirmed, I will autonomously monitor the markets, identify high-probability opportunities, and execute trades on your behalf.
+                    
+                    *   **How much do you want to trade today!?** (e.g., "$1000", "$500")
+                    
+                    Please reply with your desired budget allocation so I can activate the autonomous trading pipeline!
+                """.trimIndent()
+            }
             return """
                 ### 🔍 Let's Clarify Your Request
                 

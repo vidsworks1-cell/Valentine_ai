@@ -431,6 +431,31 @@ object BinanceConnector {
     }
 
     /**
+     * Fetch live prices of all symbols from the spot market.
+     */
+    suspend fun fetchAllMarketPrices(): Result<Map<String, Double>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val request = Request.Builder()
+                .url("$BASE_URL/api/v3/ticker/price")
+                .addHeader("Accept", "application/json")
+                .build()
+
+            val jsonStr = executeCall(request)
+            val jsonArray = JSONArray(jsonStr)
+            val priceMap = mutableMapOf<String, Double>()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                val symbol = obj.getString("symbol")
+                val price = obj.getString("price").toDoubleOrNull() ?: 0.0
+                priceMap[symbol] = price
+            }
+            Result.success(priceMap)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Place an order on Binance Spot.
      * Support Market Buy/Sell and Limit Buy/Sell.
      */

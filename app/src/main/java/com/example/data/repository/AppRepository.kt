@@ -282,6 +282,15 @@ class AppRepository(private val db: AppDatabase) {
 
     suspend fun insertChatMessage(message: ChatMessage) = withContext(Dispatchers.IO) {
         chatDao.insertMessage(message)
+        if (message.sender != "USER") {
+            val senderTitle = when (message.sender) {
+                "AZA" -> "Aza Autopilot"
+                "AZA OPERATOR" -> "Aza Operator"
+                "SECURITY WATCHDOG" -> "Aza Security Watchdog"
+                else -> message.sender
+            }
+            com.example.aza.execution.SystemNotificationHelper.showNotification(senderTitle, message.text)
+        }
     }
 
     suspend fun getAllChatMessagesDirect(): List<ChatMessage> = withContext(Dispatchers.IO) {

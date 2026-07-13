@@ -20,6 +20,7 @@ object PermissionManager {
             ProviderType.GMAIL -> listOf("https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send")
             ProviderType.GOOGLE_DRIVE -> listOf("https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive.file")
             ProviderType.GOOGLE_CALENDAR -> listOf("https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/calendar.events")
+            ProviderType.CCP -> listOf("CHECK_BALANCE", "INITIATE_DEPOSIT", "WIRE_SETTLEMENT")
         }
     }
 

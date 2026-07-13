@@ -7,5 +7,6 @@ enum class ProviderType(val displayName: String) {
     GITHUB("GitHub"),
     GMAIL("Gmail"),
     GOOGLE_DRIVE("Google Drive"),
-    GOOGLE_CALENDAR("Google Calendar")
+    GOOGLE_CALENDAR("Google Calendar"),
+    CCP("CCP Algérie Poste")
 }

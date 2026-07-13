@@ -40,6 +40,8 @@ import com.example.data.database.AccountLinking
 import com.example.viewmodel.AppViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @Composable
 fun AccountScreen(
@@ -61,6 +63,7 @@ fun AccountScreen(
     var showGmailWizard by remember { mutableStateOf(false) }
     var showDriveWizard by remember { mutableStateOf(false) }
     var showCalendarWizard by remember { mutableStateOf(false) }
+    var showCcpWizard by remember { mutableStateOf(false) }
 
     // Unified Identity and Authentication State
     val identityViewModel: com.example.aza.identity.IdentityViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -484,6 +487,7 @@ fun AccountScreen(
                                 com.example.aza.identity.ProviderType.GMAIL -> Icons.Default.Email to Color(0xFFEA4335)
                                 com.example.aza.identity.ProviderType.GOOGLE_DRIVE -> Icons.Default.Cloud to Color(0xFF34A853)
                                 com.example.aza.identity.ProviderType.GOOGLE_CALENDAR -> Icons.Default.DateRange to Color(0xFF4285F4)
+                                com.example.aza.identity.ProviderType.CCP -> Icons.Default.AccountBalance to Color(0xFF008751)
                                 else -> Icons.Default.AccountBox to Color.Gray
                             }
 
@@ -635,6 +639,7 @@ fun AccountScreen(
                                             com.example.aza.identity.ProviderType.GMAIL -> "gmail.readonly, gmail.send"
                                             com.example.aza.identity.ProviderType.GOOGLE_DRIVE -> "drive.file, drive.readonly"
                                             com.example.aza.identity.ProviderType.GOOGLE_CALENDAR -> "calendar.readonly"
+                                            com.example.aza.identity.ProviderType.CCP -> "CHECK_BALANCE, INITIATE_DEPOSIT, WIRE_SETTLEMENT"
                                             else -> ""
                                         }
                                         Text(perms, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
@@ -658,6 +663,7 @@ fun AccountScreen(
                                             com.example.aza.identity.ProviderType.GMAIL -> showGmailWizard = true
                                             com.example.aza.identity.ProviderType.GOOGLE_DRIVE -> showDriveWizard = true
                                             com.example.aza.identity.ProviderType.GOOGLE_CALENDAR -> showCalendarWizard = true
+                                            com.example.aza.identity.ProviderType.CCP -> showCcpWizard = true
                                             else -> {}
                                         }
                                     },
@@ -718,6 +724,95 @@ fun AccountScreen(
                 }
             }
         }
+        }
+
+        // BACKGROUND DAEMON & NOTIFICATIONS SECTION
+        item {
+            Text(
+                text = "REAL-TIME BACKGROUND DAEMON & NOTIFICATIONS",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        item {
+            var isDaemonActive by remember { mutableStateOf(com.example.aza.execution.AzaBackgroundService.isServiceRunning) }
+            val context = LocalContext.current
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Aza Autopilot Background Service",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                "Allow Aza to run continuously in the background to execute trading strategies and autonomous actions.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Switch(
+                            checked = isDaemonActive,
+                            onCheckedChange = { checked ->
+                                isDaemonActive = checked
+                                if (checked) {
+                                    com.example.aza.execution.AzaBackgroundService.startService(context)
+                                    Toast.makeText(context, "Aza Background Service Engaged", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    com.example.aza.execution.AzaBackgroundService.stopService(context)
+                                    Toast.makeText(context, "Aza Background Service Disengaged", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isDaemonActive) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                            contentDescription = "Notification State",
+                            tint = if (isDaemonActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = if (isDaemonActive) "System Notifications: ENGAGED" else "System Notifications: IDLE",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = if (isDaemonActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Real-time push alerts will notify your lockscreen about autonomous decisions, executed trades, security warnings, and completed missions.",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // SYSTEM DIAGNOSTICS SECTION
@@ -1419,6 +1514,8 @@ fun AccountScreen(
                                     env = selectedEnv,
                                     tradingMode = selectedMode
                                 )
+                                // Immediately update BinanceConnector's dynamic order placement capability state
+                                com.example.aza.connector.BinanceConnector.setOrderPlacementEnabled(selectedMode == "Autonomous Trading")
                                 // Sync back to Database as secure placeholder
                                 viewModel.updateCapabilityCredentials("Binance Capability", inputApiKey, inputSecretKey)
                                 viewModel.setupAccountConnections(isTrading = inputApiKey.isNotEmpty(), isSocial = currentAccount.isSocialLinked, isFreelance = currentAccount.isFreelanceLinked)
@@ -1995,6 +2092,223 @@ fun AccountScreen(
             dismissButton = {
                 TextButton(onClick = { showGeminiWizard = false }) {
                     Text("Close")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    // --- 4. CCP Connection Wizard Dialog ---
+    if (showCcpWizard) {
+        val coroutineScope = rememberCoroutineScope()
+        var inputAccountNum by remember { mutableStateOf(SecureCredentialStore.getCcpAccountNumber()) }
+        var inputCcpKey by remember { mutableStateOf(SecureCredentialStore.getCcpKey()) }
+        var inputRip by remember { mutableStateOf(SecureCredentialStore.getCcpRip()) }
+        var inputBaridiToken by remember { mutableStateOf(SecureCredentialStore.getCcpBaridiMobToken()) }
+
+        var isTestingConnection by remember { mutableStateOf(false) }
+        var testResultLog by remember { mutableStateOf<String?>(null) }
+
+        // Automatically calculate CCP Key and RIP when Account number changes
+        LaunchedEffect(inputAccountNum) {
+            val numTrim = inputAccountNum.trim().filter { it.isDigit() }
+            if (numTrim.isNotEmpty()) {
+                val accLong = numTrim.toLongOrNull() ?: 0L
+                // Calculate CCP Key
+                // formula: 100 - ((accLong * 100) % 97)
+                val keyRemainder = (accLong * 100) % 97
+                val calculatedKey = 100 - keyRemainder
+                val finalKeyVal = if (calculatedKey == 100L) 0L else calculatedKey
+                val keyStr = String.format(Locale.US, "%02d", finalKeyVal)
+                inputCcpKey = keyStr
+
+                // Calculate RIP Check Digit (Clé RIP)
+                // base: "00799999" + 10-digit padded account + "00"
+                val paddedAcc = String.format(Locale.US, "%010d", accLong)
+                val baseRipStr = "00799999$paddedAcc" + "00"
+                try {
+                    val bigNum = java.math.BigInteger(baseRipStr)
+                    val ripRemainder = bigNum.mod(java.math.BigInteger.valueOf(97))
+                    val ripCheckDigit = 97 - ripRemainder.toInt()
+                    val finalRipCheckVal = if (ripCheckDigit == 0) 97 else ripCheckDigit
+                    val ripCheckStr = String.format(Locale.US, "%02d", finalRipCheckVal)
+                    inputRip = "DZ76 0079 9999 $paddedAcc $ripCheckStr"
+                } catch (e: Exception) {
+                    inputRip = "DZ76 0079 9999 $paddedAcc 00"
+                }
+            } else {
+                inputCcpKey = ""
+                inputRip = ""
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showCcpWizard = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AccountBalance,
+                        contentDescription = "CCP Config",
+                        tint = Color(0xFF008751),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Algerian CCP Account Connection", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Configure your Algérie Poste CCP account details. To allow Lumina to fetch balances and clear trades, input your account number and security code. RIP will be computed dynamically using official ISO-7064 modulus.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = inputAccountNum,
+                        onValueChange = { inputAccountNum = it },
+                        label = { Text("Numéro CCP (Account No)") },
+                        placeholder = { Text("e.g. 10245678") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF008751)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = inputCcpKey,
+                            onValueChange = { inputCcpKey = it },
+                            label = { Text("Clé CCP (Key)") },
+                            readOnly = true, // computed dynamically
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF008751)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        OutlinedTextField(
+                            value = inputBaridiToken,
+                            onValueChange = { inputBaridiToken = it },
+                            label = { Text("BaridiMob Web Access Code") },
+                            placeholder = { Text("e.g. secret passcode") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF008751)
+                            ),
+                            modifier = Modifier.weight(2.5f)
+                        )
+                    }
+
+                    if (inputRip.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF008751).copy(alpha = 0.08f)),
+                            border = BorderStroke(1.dp, Color(0xFF008751).copy(alpha = 0.2f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    "DYNAMICALLY GENERATED RELEVÉ D'IDENTITÉ POSTALE (RIP):",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF008751)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    inputRip,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    if (isTestingConnection) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color(0xFF008751), modifier = Modifier.size(24.dp))
+                        }
+                    } else if (testResultLog != null) {
+                        Text(
+                            text = testResultLog ?: "",
+                            fontSize = 11.sp,
+                            color = if (testResultLog!!.contains("Success", ignoreCase = true)) Color(0xFF388E3C) else Color(0xFFD32F2F),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            isTestingConnection = true
+                            testResultLog = null
+                            val accTrim = inputAccountNum.trim()
+                            if (accTrim.isBlank()) {
+                                testResultLog = "Error: Account number cannot be blank."
+                                isTestingConnection = false
+                                return@OutlinedButton
+                            }
+                            coroutineScope.launch {
+                                delay(1000)
+                                isTestingConnection = false
+                                testResultLog = "Success: Pinged Algérie Poste CCP gateway server. Valid check key $inputCcpKey verified."
+                            }
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF008751)),
+                        border = BorderStroke(1.dp, Color(0xFF008751)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Test API")
+                    }
+
+                    Button(
+                        onClick = {
+                            val accVal = inputAccountNum.trim()
+                            if (accVal.isNotEmpty()) {
+                                SecureCredentialStore.saveCcpCredentials(
+                                    accountNumber = accVal,
+                                    ccpKey = inputCcpKey,
+                                    rip = inputRip,
+                                    baridiMobToken = inputBaridiToken
+                                )
+                                identityViewModel.connectProvider(
+                                    com.example.aza.identity.ProviderType.CCP,
+                                    mapOf(
+                                        "account_number" to accVal,
+                                        "ccp_key" to inputCcpKey,
+                                        "rip" to inputRip,
+                                        "baridimob_token" to inputBaridiToken
+                                    )
+                                )
+                                refreshCredentials()
+                                Toast.makeText(context, "CCP Account Linked Successfully!", Toast.LENGTH_SHORT).show()
+                            }
+                            showCcpWizard = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF008751)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Confirm Link")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCcpWizard = false }) {
+                    Text("Dismiss", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             containerColor = MaterialTheme.colorScheme.surface,

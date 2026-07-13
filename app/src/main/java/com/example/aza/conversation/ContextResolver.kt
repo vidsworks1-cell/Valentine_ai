@@ -22,7 +22,9 @@ data class UnifiedContext(
     val brainRecommendations: List<String>,
     val isBinanceConnected: Boolean,
     val binanceApiKeyMasked: String,
-    val binanceMode: String
+    val binanceMode: String,
+    val tradingBudget: Double,
+    val tradingBudgetPeriod: String
 ) {
     fun formatToContextBlock(): String {
         val binanceLine = if (isBinanceConnected) {
@@ -30,10 +32,16 @@ data class UnifiedContext(
         } else {
             "[Binance Integration] NOT CONNECTED / No API keys linked"
         }
+        val budgetLine = if (tradingBudget > 0) {
+            "[Lumina Trading Budget] Allocated: $${String.format("%.2f", tradingBudget)} USD ($tradingBudgetPeriod)"
+        } else {
+            "[Lumina Trading Budget] No budget currently allocated"
+        }
         return """
             --- UNIFIED SYSTEM CONTEXT ---
             [Portfolio & Balance] Cash Balance: $${String.format("%.2f", portfolioCash)} USD. Holdings: ${if (holdings.isEmpty()) "None" else holdings.joinToString(", ") { "${it.symbol} (${it.amountOwned} units)" }}
             $binanceLine
+            $budgetLine
             [Executive Brain State] Planning Accuracy: $planningAccuracy%, Agent Utilization: $brainRecommendations, System Uptime: $systemUptime%
             [Pending Authorizations] Trade Proposals: $pendingTradesCount pending, Agent Tasks: $pendingTasksCount pending
             [Missions Engine] Active Missions: ${if (activeMissions.isEmpty()) "None" else activeMissions.joinToString(", ") { "${it.title} (${(it.progress * 100).toInt()}% progress)" }}
@@ -70,6 +78,9 @@ object ContextResolver {
         
         val isConnected = apiKey.isNotEmpty() && apiSecret.isNotEmpty() && (binanceState?.isEnabled != false)
         val maskedKey = if (apiKey.length > 8) apiKey.take(4) + "..." + apiKey.takeLast(4) else "None"
+        
+        val budget = try { com.example.aza.security.SecureCredentialStore.getTradingBudget() } catch (e: Exception) { 0.0 }
+        val budgetPeriod = try { com.example.aza.security.SecureCredentialStore.getTradingBudgetPeriod() } catch (e: Exception) { "daily" }
 
         return UnifiedContext(
             recentChatHistory = chatMessages.takeLast(10),
@@ -89,7 +100,9 @@ object ContextResolver {
             brainRecommendations = brain.recommendations.value,
             isBinanceConnected = isConnected,
             binanceApiKeyMasked = maskedKey,
-            binanceMode = mode
+            binanceMode = mode,
+            tradingBudget = budget,
+            tradingBudgetPeriod = budgetPeriod
         )
     }
 }

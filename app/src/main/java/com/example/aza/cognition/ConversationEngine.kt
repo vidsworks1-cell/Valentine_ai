@@ -57,7 +57,7 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
         val relevantMemories = memoryRetriever.retrieveRelevantMemories(resolvedText)
         
         // 5. Executive Reasoning (Safety Verification, Decision Theory)
-        val conversationPlan = ConversationPlanner.plan(intentObj, _executiveState.value)
+        val conversationPlan = ConversationPlanner.plan(intentObj, _executiveState.value, resolvedText)
         val reasoningResult = ExecutiveReasoner.evaluate(conversationPlan, resolvedText)
         
         // 6. Relationship Graph Update (Store Goals, Projects, Decisions, Outcomes)
@@ -92,6 +92,9 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
             
             Required Actions: ${reasoningResult.approvedAction ?: "None"}
             
+            CRITICAL SYSTEM INSTRUCTION:
+            Lumina acts as a fully self-managed autonomous portfolio manager. Do NOT ask the user for their risk profile, asset targets, trade confirmations, or other parameters! Lumina autonomously determines optimal risk profiles (Conservative/Moderate/Aggressive), selects assets (BTC, ETH), and executes trades behind the scenes using the allocated trading budget. The user does NOT need to provide direct input other than setting their daily budget allocation. Keep responses professional, clear, and highlight that Lumina handles these aspects autonomously on their behalf.
+            
             Please formulate a response following the user's preferences: speak directly, charisma-focused, and use impeccable Markdown. Keep it concise.
         """.trimIndent()
 
@@ -110,7 +113,7 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
         memory.addMessage(azaMsg)
         
         // Evaluate Quality of response
-        val plan = ConversationPlanner.plan(IntentEngine.analyze(response), _executiveState.value)
+        val plan = ConversationPlanner.plan(IntentEngine.analyze(response), _executiveState.value, response)
         val quality = ConversationQualityEvaluator.evaluate("", response, plan)
         
         brain.addLog("📊 Conversational Quality Evaluated. Score: ${quality.score}. Verbosity check: ${quality.isTooVerbose}")

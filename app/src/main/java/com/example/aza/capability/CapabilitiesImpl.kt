@@ -116,7 +116,7 @@ class BinanceCapability : Capability {
                                 "balance_btc" to balanceBtc, 
                                 "balance_usdt" to balanceUsdt, 
                                 "currency" to "USDT",
-                                "connection" to "LIVE_READ_ONLY",
+                                "connection" to if (com.example.aza.connector.BinanceConnector.isOrderPlacementEnabled.value) "LIVE_TRADING" else "LIVE_READ_ONLY",
                                 "latency_ms" to BinanceConnector.lastLatencyMs.value
                             )
                         )
@@ -175,7 +175,7 @@ class BinanceCapability : Capability {
                             success = true,
                             outputData = mapOf(
                                 "positions" to positions,
-                                "connection" to "LIVE_READ_ONLY",
+                                "connection" to if (com.example.aza.connector.BinanceConnector.isOrderPlacementEnabled.value) "LIVE_TRADING" else "LIVE_READ_ONLY",
                                 "latency_ms" to BinanceConnector.lastLatencyMs.value
                             )
                         )
@@ -277,7 +277,7 @@ class BinanceCapability : Capability {
                             success = true,
                             outputData = mapOf(
                                 "open_orders" to openOrders,
-                                "connection" to "LIVE_READ_ONLY",
+                                "connection" to if (com.example.aza.connector.BinanceConnector.isOrderPlacementEnabled.value) "LIVE_TRADING" else "LIVE_READ_ONLY",
                                 "latency_ms" to BinanceConnector.lastLatencyMs.value
                             )
                         )

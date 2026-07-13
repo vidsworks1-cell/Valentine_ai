@@ -63,14 +63,29 @@ object ConversationPlanner {
                 
                 // Check if action matches but is missing critical params
                 val lower = userInput.lowercase()
-                if (lower.contains("buy") || lower.contains("sell")) {
+                if (lower.contains("buy") || lower.contains("sell") || lower.contains("trade") || lower.contains("budget")) {
                     contributingAgents.add("TradingAgent")
-                    val hasAmount = lower.contains(Regex("""\d+"""))
-                    val hasSymbol = lower.contains("btc") || lower.contains("eth") || lower.contains("aapl") || lower.contains("nvda")
-                    if (!hasAmount || !hasSymbol) {
-                        isClarificationRequired = true
-                        missingInfo = if (!hasSymbol) "Asset Symbol (e.g. BTC, AAPL)" else "Transaction Amount/Size"
-                        steps.add("Step 4: CRITICAL AMBIGUITY: Request lacks essential trading parameters ($missingInfo). Initiating Clarification Protocol.")
+                    
+                    val isSettingBudget = lower.contains("budget") || lower.contains("allowance") || lower.contains("disposition") || lower.contains("trade today")
+                    val amountStr = """\b\d+(?:\.\d+)?\b""".toRegex().find(userInput)?.value
+                    val parsedBudget = amountStr?.toDoubleOrNull()
+                    
+                    val currentBudget = com.example.aza.security.SecureCredentialStore.getTradingBudget()
+                    
+                    if (isSettingBudget && parsedBudget != null) {
+                        com.example.aza.security.SecureCredentialStore.saveTradingBudget(parsedBudget)
+                        steps.add("Step 4: Defined daily trading budget of $$parsedBudget. Saving configuration.")
+                    } else if (currentBudget <= 0.0) {
+                        if (parsedBudget != null && (lower.contains("trade") || lower.contains("buy") || lower.contains("sell") || lower.contains("start"))) {
+                            com.example.aza.security.SecureCredentialStore.saveTradingBudget(parsedBudget)
+                            steps.add("Step 4: Setting dynamic daily trading budget of $$parsedBudget from context.")
+                        } else {
+                            isClarificationRequired = true
+                            missingInfo = "how much you want to trade today!? (daily trading budget)"
+                            steps.add("Step 4: Missing daily trading budget allocation. Initiating Clarification Protocol.")
+                        }
+                    } else {
+                        steps.add("Step 4: Active trading budget of $$currentBudget configured. Coordinating autonomous trading operations.")
                     }
                 } else if (lower.contains("script") || lower.contains("content")) {
                     contributingAgents.add("ContentAgent")

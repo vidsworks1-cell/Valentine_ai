@@ -43,6 +43,7 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
     // --- Performance Tracking (Simulated or Real-time) ---
     var maxDrawdown = 0.125
     var sharpeRatio = 2.15
+    var sortinoRatio = 1.95
 
     // --- Max Drawdown Protection (MDP) & Dynamic Position Sizing (DPS) ---
     var peakPortfolioValue = 5000.0
@@ -96,7 +97,11 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
         entryPrice: Double,
         prices: List<Double>,
         strategyWinRate: Double = 0.55,
-        strategyRiskReward: Double = 2.0
+        strategyRiskReward: Double = 2.0,
+        sentimentScore: Double = 0.0,
+        newsImpactScore: Double = 0.0,
+        socialMediaScore: Double = 0.0,
+        macroEconomicScore: Double = 0.0
     ): Double {
         // 1. Circuit Breaker Override: If drawdown has breached, size is absolutely 0.0
         if (isCircuitBreakerTriggered) {
@@ -110,6 +115,37 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
         // As drawdown approaches the maximum allowable drawdown (e.g. 10.0%), risk percentage scales down to 0%
         val drawdownMultiplier = (1.0 - (calculatedDrawdownPercent / maxAllowableDrawdownPercent)).coerceIn(0.0, 1.0)
         baseRiskPercent *= drawdownMultiplier
+
+        // 3b. Sentiment Sizing Multiplier (Fast-loop scaling):
+        // Positive sentiment scales up position size to capture FOMO momentum (up to +25% boost).
+        // Negative sentiment scales down position size to protect capital (down to -50% reduction).
+        val sentimentSizingMultiplier = if (sentimentScore > 0.3) {
+            (1.0 + (sentimentScore * 0.25)).coerceIn(1.0, 1.25)
+        } else if (sentimentScore < -0.1) {
+            (1.0 + (sentimentScore * 0.50)).coerceIn(0.5, 1.0)
+        } else {
+            1.0
+        }
+        baseRiskPercent *= sentimentSizingMultiplier
+
+        // 3c. Multi-Source NLP Sentiment Synthesis Risk Refinement:
+        // - Macro Divergence Protection: If macroEconomicScore is bearish (< -0.2) but we're initiating a position, 
+        //   de-risk by an additional 20% to prevent fighting macroeconomic headwinds.
+        // - Speculative Bubble Safeguard: If socialMediaScore indicates extreme retail FOMO (> 0.5) 
+        //   but news or macro is flat/negative (< 0.0), scale down position size by 30% to protect against abrupt reversal.
+        // - High-Conviction Fundamental Tailwinds: If both newsImpactScore and macroEconomicScore are highly positive (> 0.3),
+        //   boost base risk by 15% to capitalize on institutional and macroeconomic trends.
+        var sentimentSynthesisFactor = 1.0
+        if (macroEconomicScore < -0.2) {
+            sentimentSynthesisFactor *= 0.80
+        }
+        if (socialMediaScore > 0.5 && (newsImpactScore < 0.0 || macroEconomicScore < 0.0)) {
+            sentimentSynthesisFactor *= 0.70
+        }
+        if (newsImpactScore > 0.3 && macroEconomicScore > 0.3) {
+            sentimentSynthesisFactor *= 1.15
+        }
+        baseRiskPercent *= sentimentSynthesisFactor
 
         // 4. Volatility Scaling: Scale down risk if market volatility is elevated (VOLATILE regime)
         val regimeMultiplier = when (currentRegime) {
@@ -610,17 +646,64 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
         return alerts
     }
 
+    suspend fun updatePerformanceRatios() {
+        try {
+            val reviews = repository.getAllReviewsDirect()
+            if (reviews.isNotEmpty()) {
+                val returns = reviews.map { 
+                    val sizeVal = if (it.size > 0.0) it.size else 1.0
+                    val entryVal = if (it.entryPrice > 0.0) it.entryPrice else 1.0
+                    it.realizedPnL / (sizeVal * entryVal) 
+                }
+                val avgReturn = returns.average()
+                
+                // Sharpe calculation
+                val variance = if (returns.size > 1) {
+                    returns.map { Math.pow(it - avgReturn, 2.0) }.sum() / (returns.size - 1)
+                } else 1.0
+                val stdDev = Math.sqrt(variance)
+                sharpeRatio = if (stdDev > 0.0) (avgReturn / stdDev) * Math.sqrt(252.0) else if (avgReturn > 0.0) 2.0 else 0.0
+                
+                // Sortino calculation (downside deviation only)
+                val downsideReturns = returns.filter { it < 0.0 }
+                val downsideVariance = if (downsideReturns.isNotEmpty()) {
+                    downsideReturns.map { Math.pow(it, 2.0) }.sum() / downsideReturns.size
+                } else 0.0
+                val downsideStdDev = Math.sqrt(downsideVariance)
+                sortinoRatio = if (downsideStdDev > 0.0) (avgReturn / downsideStdDev) * Math.sqrt(252.0) else if (avgReturn > 0.0) 2.5 else 0.0
+
+                // Adjust risk parameters based on Sortino/Sharpe feedback
+                adjustRiskParametersFromFeedback()
+            }
+        } catch (e: Exception) {
+            // fallback gracefully
+        }
+    }
+
+    private fun adjustRiskParametersFromFeedback() {
+        // High Sortino / Sharpe means excellent downside-adjusted returns.
+        // We can safely expand max allowable drawdown and boost base risk percent.
+        if (sortinoRatio > 2.0 && sharpeRatio > 1.5) {
+            maxAllowableDrawdownPercent = (maxAllowableDrawdownPercent + 0.1).coerceAtMost(15.0)
+        } else if (sortinoRatio < 1.0 || sharpeRatio < 0.8) {
+            // Degraded risk-adjusted return: tighten max allowable drawdown and lower thresholds to protect capital
+            maxAllowableDrawdownPercent = (maxAllowableDrawdownPercent - 0.2).coerceAtLeast(6.0)
+        }
+    }
+
     /**
      * Publishes the estimated risk parameters into the Shared Memory (Knowledge base).
      */
     suspend fun publishMetricsToKnowledgeBase() {
+        updatePerformanceRatios()
+        
         val metrics = estimateRiskMetrics()
         val title = "Dynamic Risk Parameter Estimate: [${metrics.regime}]"
         
         val summaryText = String.format(
             Locale.US,
-            "Active Regime: %s | Volatility: %.4f (Thresh: L=%.3f, U=%.3f) | Decay Alpha: %.2f | Gated OFI Influence: %.2f | Max Drawdown Limit: %.1f%% | Stop-Run Risk: %b",
-            metrics.regime, metrics.estimatedVol, volatilityLowerThreshold, volatilityUpperThreshold, metrics.suggestedDecay, metrics.gatedOFIInfluence, maxAllowableDrawdownPercent, metrics.isStopRunRisk
+            "Active Regime: %s | Volatility: %.4f (Thresh: L=%.3f, U=%.3f) | Decay Alpha: %.2f | Gated OFI Influence: %.2f | Max Drawdown Limit: %.1f%% | Stop-Run Risk: %b | Sharpe: %.2f | Sortino: %.2f",
+            metrics.regime, metrics.estimatedVol, volatilityLowerThreshold, volatilityUpperThreshold, metrics.suggestedDecay, metrics.gatedOFIInfluence, maxAllowableDrawdownPercent, metrics.isStopRunRisk, sharpeRatio, sortinoRatio
         )
 
         val hmmProbs = hmmFilter.getSmoothedProbabilities()
@@ -632,7 +715,7 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
                 title = title,
                 category = "Dynamic Risk Estimator",
                 description = summaryText,
-                evidence = "Decay: ${String.format(Locale.US, "%.3f", metrics.suggestedDecay)}, Sweep Limit: ${String.format(Locale.US, "%.1f%%", maxAllowableDrawdownPercent)}, Gated Influence: ${String.format(Locale.US, "%.3f", metrics.gatedOFIInfluence)}, Divergence: ${String.format(Locale.US, "%.3f", metrics.divergence)}, Thrashing: $transitionThrashingDetected | $hmmEvidence",
+                evidence = "Decay: ${String.format(Locale.US, "%.3f", metrics.suggestedDecay)}, Sweep Limit: ${String.format(Locale.US, "%.1f%%", maxAllowableDrawdownPercent)}, Gated Influence: ${String.format(Locale.US, "%.3f", metrics.gatedOFIInfluence)}, Divergence: ${String.format(Locale.US, "%.3f", metrics.divergence)}, Thrashing: $transitionThrashingDetected | Sharpe: ${String.format(Locale.US, "%.2f", sharpeRatio)}, Sortino: ${String.format(Locale.US, "%.2f", sortinoRatio)} | $hmmEvidence",
                 confidenceScore = 0.95,
                 timesConfirmed = 1,
                 isConfirmed = true

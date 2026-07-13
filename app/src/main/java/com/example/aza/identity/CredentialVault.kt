@@ -18,6 +18,9 @@ object CredentialVault {
             ProviderType.GITHUB -> {
                 SecureCredentialStore.encrypt("github_oauth_token", token)
             }
+            ProviderType.CCP -> {
+                SecureCredentialStore.encrypt("ccp_baridimob_token", token)
+            }
         }
     }
 
@@ -31,6 +34,9 @@ object CredentialVault {
             }
             ProviderType.GITHUB -> {
                 SecureCredentialStore.decrypt("github_oauth_token") ?: ""
+            }
+            ProviderType.CCP -> {
+                SecureCredentialStore.decrypt("ccp_baridimob_token") ?: ""
             }
         }
     }
@@ -79,6 +85,9 @@ object CredentialVault {
             }
             ProviderType.GITHUB -> {
                 SecureCredentialStore.deleteGitHubCredentials()
+            }
+            ProviderType.CCP -> {
+                SecureCredentialStore.deleteCcpCredentials()
             }
         }
     }

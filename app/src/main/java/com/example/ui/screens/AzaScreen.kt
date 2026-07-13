@@ -169,7 +169,7 @@ fun AzaScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "Aza Sparkle",
+                            contentDescription = "Lumina Sparkle",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
                         )
@@ -179,13 +179,13 @@ fun AzaScreen(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Aza AI Assistant",
+                            text = "Lumina AI Assistant",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = if (isAzaResponding) "Aza is thinking..." else "Linked to Trading, Content & Gigs",
+                            text = if (isAzaResponding) "Lumina is thinking..." else "Linked to Trading, Content & Gigs",
                             fontSize = 12.sp,
                             color = if (isAzaResponding) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             fontWeight = if (isAzaResponding) FontWeight.Bold else FontWeight.Normal
@@ -229,7 +229,7 @@ fun AzaScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "No conversation logs. Send a message to wake up Aza!",
+                                text = "No conversation logs. Send a message to wake up Lumina!",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 fontSize = 14.sp
@@ -307,7 +307,7 @@ fun AzaScreen(
                     TextField(
                         value = inputText,
                         onValueChange = { inputText = it },
-                        placeholder = { Text("Ask Aza, or type e.g., 'buy 0.1 btc'", fontSize = 14.sp) },
+                        placeholder = { Text("Ask Lumina, or type e.g., 'buy 0.1 btc'", fontSize = 14.sp) },
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp)),
@@ -370,7 +370,7 @@ fun AzaScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send Message to Aza",
+                            contentDescription = "Send Message to Lumina",
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -6431,6 +6431,157 @@ fun ExecutiveControlTabContent(viewModel: AppViewModel) {
             }
         }
 
+        item {
+            var budgetAmount by remember { mutableStateOf(com.example.aza.security.SecureCredentialStore.getTradingBudget().toString()) }
+            var budgetPeriod by remember { mutableStateOf(com.example.aza.security.SecureCredentialStore.getTradingBudgetPeriod()) }
+            var isEditingBudget by remember { mutableStateOf(false) }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Paid,
+                                contentDescription = "Budget Icon",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "LUMINA AUTONOMOUS BUDGET",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "ALLY AUTONOMOUS ACTIVE",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Active Allocation Limit", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (isEditingBudget) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("$", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    TextField(
+                                        value = budgetAmount,
+                                        onValueChange = { budgetAmount = it },
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                                        modifier = Modifier.width(100.dp),
+                                        colors = TextFieldDefaults.colors(
+                                            focusedContainerColor = Color.Transparent,
+                                            unfocusedContainerColor = Color.Transparent
+                                        ),
+                                        singleLine = true
+                                    )
+                                }
+                            } else {
+                                val currentBudgetVal = com.example.aza.security.SecureCredentialStore.getTradingBudget()
+                                Text(
+                                    text = if (currentBudgetVal > 0.0) "$${String.format(Locale.US, "%,.2f", currentBudgetVal)} USD" else "Not Configured (Inactive)",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (currentBudgetVal > 0.0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Reset Period", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (isEditingBudget) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    TextButton(onClick = { budgetPeriod = "daily" }) {
+                                        Text("Daily", color = if (budgetPeriod == "daily") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    TextButton(onClick = { budgetPeriod = "weekly" }) {
+                                        Text("Weekly", color = if (budgetPeriod == "weekly") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = budgetPeriod.uppercase(Locale.US),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text(
+                        text = "Once confirmed, Lumina manages allocated funds autonomously. High-probability market structural targets are sourced, and trades are completed using 10% risk slices per position directly from this allowance.",
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        if (isEditingBudget) {
+                            TextButton(onClick = { isEditingBudget = false }) {
+                                Text("Cancel")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    val amountDouble = budgetAmount.toDoubleOrNull() ?: 0.0
+                                    com.example.aza.security.SecureCredentialStore.saveTradingBudget(amountDouble)
+                                    com.example.aza.security.SecureCredentialStore.saveTradingBudgetPeriod(budgetPeriod)
+                                    isEditingBudget = false
+                                },
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Save Configuration")
+                            }
+                        } else {
+                            Button(
+                                onClick = { isEditingBudget = true },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Update Budget")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // --- 2. Live Resource Monitor & Simulation Controls ---
         item {
             Card(
@@ -7953,6 +8104,7 @@ fun CognitiveSimulationConsole(viewModel: com.example.viewmodel.AppViewModel) {
     val shannonOpinionEntropy by conflictEngine.shannonOpinionEntropy.collectAsStateWithLifecycle()
     val lowEntropyBreakthroughDetected by conflictEngine.lowEntropyBreakthroughDetected.collectAsStateWithLifecycle()
     val cooldownExpirationTime by com.example.aza.connector.BinanceConnector.cooldownExpirationTime.collectAsStateWithLifecycle()
+    val sentimentReports by viewModel.currentSentimentReports.collectAsStateWithLifecycle()
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
@@ -8156,6 +8308,144 @@ fun CognitiveSimulationConsole(viewModel: com.example.viewmodel.AppViewModel) {
                                 fontWeight = FontWeight.Bold,
                                 color = if (isCooldownActive) Color(0xFFE53935) else Color(0xFF43A047)
                             )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Sharpe Ratio", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.2f", estimator.sharpeRatio),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (estimator.sharpeRatio >= 1.0) Color(0xFF43A047) else Color(0xFFE53935)
+                            )
+                        }
+
+                        Column {
+                            Text("Sortino Ratio", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.2f", estimator.sortinoRatio),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (estimator.sortinoRatio >= 1.0) Color(0xFF43A047) else Color(0xFFE53935)
+                            )
+                        }
+
+                        Column {
+                            Text("Max Drawdown Limit", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = String.format(Locale.US, "%.1f%%", estimator.maxAllowableDrawdownPercent),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    // Multi-Source Sentiment Synthesis Block
+                    val activeReport = sentimentReports["BTCUSDT"] ?: sentimentReports.values.firstOrNull()
+                    if (activeReport != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "📰 MULTI-SOURCE NLP SENTIMENT SYNTHESIS (${activeReport.symbol})",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        
+                        // Three-Column Source Scores
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(
+                                Triple("News Sentiment", activeReport.newsImpactScore, Color(0xFF1E88E5)),
+                                Triple("Social Buzz", activeReport.socialMediaScore, Color(0xFF8E24AA)),
+                                Triple("Macro Indicator", activeReport.macroEconomicScore, Color(0xFFF4511E))
+                            ).forEach { (label, score, color) ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
+                                        .padding(6.dp)
+                                ) {
+                                    Column {
+                                        Text(label, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            text = String.format(Locale.US, "%+.2f", score),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (score > 0) Color(0xFF43A047) else if (score < 0) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        val normalized = ((score + 1.0) / 2.0).toFloat().coerceIn(0f, 1f)
+                                        LinearProgressIndicator(
+                                            progress = { normalized },
+                                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(1.5.dp)),
+                                            color = color,
+                                            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Leading Keywords (Chips)
+                        if (activeReport.leadingKeywords.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Leading Vectors:", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                                activeReport.leadingKeywords.forEach { keyword ->
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f))
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(keyword, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Recent NLP Events
+                        if (activeReport.recentEvents.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f))
+                                    .padding(6.dp)
+                            ) {
+                                Text("Recent Context Analyzed:", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
+                                activeReport.recentEvents.forEach { event ->
+                                    Row(
+                                        modifier = Modifier.padding(vertical = 1.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text("• ", fontSize = 8.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                        Text(event, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), lineHeight = 10.sp)
+                                    }
+                                }
+                            }
                         }
                     }
 

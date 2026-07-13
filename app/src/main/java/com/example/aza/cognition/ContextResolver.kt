@@ -14,7 +14,9 @@ data class UnifiedContext(
     val preferences: UserPreferences,
     val isBinanceConnected: Boolean,
     val binanceApiKeyMasked: String,
-    val binanceMode: String
+    val binanceMode: String,
+    val tradingBudget: Double,
+    val tradingBudgetPeriod: String
 ) {
     fun formatToContextBlock(): String {
         val binanceLine = if (isBinanceConnected) {
@@ -22,10 +24,16 @@ data class UnifiedContext(
         } else {
             "[Binance Integration] NOT CONNECTED / No API keys linked"
         }
+        val budgetLine = if (tradingBudget > 0) {
+            "[Lumina Trading Budget] Allocated: $${String.format("%.2f", tradingBudget)} USD ($tradingBudgetPeriod)"
+        } else {
+            "[Lumina Trading Budget] No budget currently allocated"
+        }
         return """
             --- COGNITIVE WORLD MODEL ---
             [Central Treasury] Cash: $${String.format("%.2f", cashBalance)} USD (Holdings: $holdingsCount active assets)
             $binanceLine
+            $budgetLine
             [Missions Status] Active Missions: $activeMissionsCount; Open Freelance Gigs: $openGigsCount; Draft Content: $contentCount
             [System Health] Status: $systemStatus
             [User Style Preferences] Explanation: ${preferences.preferredExplanationDepth}; Tone: ${preferences.preferredTone}
@@ -52,6 +60,9 @@ object ContextResolver {
         val isConnected = apiKey.isNotEmpty() && apiSecret.isNotEmpty() && (binanceState?.isEnabled != false)
         val maskedKey = if (apiKey.length > 8) apiKey.take(4) + "..." + apiKey.takeLast(4) else "None"
         
+        val budget = try { com.example.aza.security.SecureCredentialStore.getTradingBudget() } catch (e: Exception) { 0.0 }
+        val budgetPeriod = try { com.example.aza.security.SecureCredentialStore.getTradingBudgetPeriod() } catch (e: Exception) { "daily" }
+
         return UnifiedContext(
             recentHistory = memory.recentMessages,
             cashBalance = balance,
@@ -63,7 +74,9 @@ object ContextResolver {
             preferences = memory.preferences,
             isBinanceConnected = isConnected,
             binanceApiKeyMasked = maskedKey,
-            binanceMode = mode
+            binanceMode = mode,
+            tradingBudget = budget,
+            tradingBudgetPeriod = budgetPeriod
         )
     }
 }

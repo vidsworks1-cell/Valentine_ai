@@ -220,6 +220,43 @@ object SecureCredentialStore {
         delete("openai_gemini_api_key")
     }
 
+    // --- CCP Algérie Poste Credentials ---
+    fun saveCcpCredentials(accountNumber: String, ccpKey: String, rip: String, baridiMobToken: String) {
+        encrypt("ccp_account_number", accountNumber)
+        encrypt("ccp_key", ccpKey)
+        encrypt("ccp_rip", rip)
+        encrypt("ccp_baridimob_token", baridiMobToken)
+    }
+
+    fun getCcpAccountNumber(): String = decrypt("ccp_account_number") ?: ""
+    fun getCcpKey(): String = decrypt("ccp_key") ?: ""
+    fun getCcpRip(): String = decrypt("ccp_rip") ?: ""
+    fun getCcpBaridiMobToken(): String = decrypt("ccp_baridimob_token") ?: ""
+
+    fun deleteCcpCredentials() {
+        delete("ccp_account_number")
+        delete("ccp_key")
+        delete("ccp_rip")
+        delete("ccp_baridimob_token")
+    }
+
+    // --- Trading Budget & Allowance ---
+    fun saveTradingBudget(budget: Double) {
+        encrypt("trading_budget", budget.toString())
+    }
+
+    fun getTradingBudget(): Double {
+        return decrypt("trading_budget")?.toDoubleOrNull() ?: 0.0
+    }
+
+    fun saveTradingBudgetPeriod(period: String) {
+        encrypt("trading_budget_period", period)
+    }
+
+    fun getTradingBudgetPeriod(): String {
+        return decrypt("trading_budget_period") ?: "daily"
+    }
+
     // --- ZKP & Homomorphic Encryption preferences ---
     fun isZkpEnabled(): Boolean {
         val context = getContext()

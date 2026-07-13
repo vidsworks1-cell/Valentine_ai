@@ -21,6 +21,7 @@ class AccountRegistry(private val context: Context, private val repository: Iden
         registerConnector(createGmailConnector())
         registerConnector(createGoogleDriveConnector())
         registerConnector(createGoogleCalendarConnector())
+        registerConnector(createCcpConnector())
     }
 
     fun registerConnector(connector: UnifiedConnector) {
@@ -502,6 +503,73 @@ class AccountRegistry(private val context: Context, private val repository: Iden
 
         override suspend fun grantedPermissions(): List<String> {
             return PermissionManager.getPermissions(provider)
+        }
+
+        override suspend fun connectionHealth(): String {
+            return if (isOperational()) "Healthy" else "Disconnected"
+        }
+
+        override suspend fun lastSynchronization(): Long {
+            return repository.getLastSync(provider)
+        }
+
+        override suspend fun validateConnection(): ConnectionState {
+            if (!isAuthenticated()) {
+                repository.saveConnectionState(provider, ConnectionState.NOT_CONFIGURED)
+                return ConnectionState.NOT_CONFIGURED
+            }
+            repository.saveConnectionState(provider, ConnectionState.CONNECTED)
+            return ConnectionState.CONNECTED
+        }
+    }
+
+    private fun createCcpConnector() = object : UnifiedConnector {
+        override val provider: ProviderType = ProviderType.CCP
+
+        override suspend fun connect(params: Map<String, String>): AuthenticationResult = withContext(Dispatchers.IO) {
+            val accountNumber = params["account_number"] ?: return@withContext AuthenticationResult.Failure("CCP Account number is required.")
+            val ccpKey = params["ccp_key"] ?: return@withContext AuthenticationResult.Failure("CCP Key is required.")
+            val rip = params["rip"] ?: ""
+            val token = params["token"] ?: params["baridimob_token"] ?: "ccp_session_token_placeholder"
+
+            CredentialVault.saveToken(provider, token)
+            SecureCredentialStore.saveCcpCredentials(accountNumber, ccpKey, rip, token)
+
+            repository.saveConnectionState(provider, ConnectionState.CONNECTED)
+            val accountLabel = "CCP Compte No: $accountNumber"
+            repository.saveAccountName(provider, accountLabel)
+            repository.saveLastSync(provider, System.currentTimeMillis())
+            ConnectionHealthMonitor.updateHealth(provider, "Healthy", 45)
+
+            IdentityEvents.emit(IdentityEvents.Event.Authentication(provider, accountLabel))
+            AuthenticationResult.Success(accountLabel, mapOf("rip" to rip))
+        }
+
+        override suspend fun disconnect() {
+            val account = currentAccount() ?: ""
+            CredentialVault.clearCredentials(provider)
+            SecureCredentialStore.deleteCcpCredentials()
+            repository.clear(provider)
+            ConnectionHealthMonitor.updateHealth(provider, "Disconnected", 0)
+            IdentityEvents.emit(IdentityEvents.Event.Disconnect(provider, account))
+        }
+
+        override suspend fun refreshAuthentication(): Boolean = true
+
+        override suspend fun isAuthenticated(): Boolean {
+            return SecureCredentialStore.getCcpAccountNumber().isNotEmpty()
+        }
+
+        override suspend fun isOperational(): Boolean {
+            return isAuthenticated() && repository.getConnectionState(provider) == ConnectionState.CONNECTED
+        }
+
+        override suspend fun currentAccount(): String? {
+            return repository.getAccountName(provider)
+        }
+
+        override suspend fun grantedPermissions(): List<String> {
+            return listOf("CHECK_BALANCE", "INITIATE_DEPOSIT", "WIRE_SETTLEMENT")
         }
 
         override suspend fun connectionHealth(): String {

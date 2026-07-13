@@ -7,7 +7,7 @@ object ResponseComposer {
     fun compose(plan: ResponsePlan, context: UnifiedContext, originalInput: String): String {
         // Map ResponsePlan and context back into the NlgEngine's dynamic parameters
         val intent = IntentEngine.analyze(originalInput)
-        val conversationPlan = ConversationPlanner.plan(intent, ExecutiveState())
+        val conversationPlan = ConversationPlanner.plan(intent, ExecutiveState(), originalInput)
         val reasoningResult = ReasoningResult(
             approvedAction = plan.recommendedActions.firstOrNull(),
             expectedUtility = 0.8,

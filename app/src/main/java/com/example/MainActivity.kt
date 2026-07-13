@@ -41,6 +41,31 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.example.aza.security.SecureCredentialStore.init(applicationContext)
+        com.example.aza.execution.SystemNotificationHelper.init(applicationContext)
+
+        // Sync initial trading mode with the connector's safety lock
+        try {
+            val savedMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
+            com.example.aza.connector.BinanceConnector.setOrderPlacementEnabled(savedMode == "Autonomous Trading")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Request POST_NOTIFICATIONS permission dynamically on API 33+ (Android 13+)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val requestPermissionLauncher = registerForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+            ) { _ -> }
+            
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    this,
+                    "android.permission.POST_NOTIFICATIONS"
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
+            }
+        }
+
         enableEdgeToEdge()
 
         setContent {
@@ -56,7 +81,7 @@ class MainActivity : ComponentActivity() {
                             title = {
                                 Text(
                                     text = when (selectedTab) {
-                                        0 -> "Aza AI Advisor"
+                                        0 -> "Lumina AI Advisor"
                                         1 -> "Nexus Trading"
                                         2 -> "AI Content Studio"
                                         3 -> "Gig Freelance Broker"
@@ -93,10 +118,10 @@ class MainActivity : ComponentActivity() {
                                 icon = {
                                     Icon(
                                         imageVector = Icons.Default.Chat,
-                                        contentDescription = "Aza AI Chat Tab"
+                                        contentDescription = "Lumina AI Chat Tab"
                                     )
                                 },
-                                label = { Text("Aza AI", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                                label = { Text("Lumina AI", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                     selectedTextColor = MaterialTheme.colorScheme.primary,

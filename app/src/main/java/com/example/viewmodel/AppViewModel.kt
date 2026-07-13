@@ -60,6 +60,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     // Market Intelligence Observables
     val dynamicExponentialEstimator = com.example.aza.executive.DynamicExponentialEstimator(repository)
     val marketIntelligenceEngine = com.example.aza.intelligence.MarketIntelligenceEngine(repository, viewModelScope, dynamicExponentialEstimator)
+    val currentSentimentReports: StateFlow<Map<String, com.example.aza.intelligence.SentimentSynthesisReport>> = marketIntelligenceEngine.currentSentimentReport
     val marketOpportunities: StateFlow<List<com.example.data.database.OpportunityEntity>> = repository.marketOpportunities
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val tradeProposals: StateFlow<List<com.example.data.database.TradeProposalEntity>> = repository.tradeProposals
@@ -1299,6 +1300,65 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             env = com.example.aza.security.SecureCredentialStore.getBinanceEnv(),
                             tradingMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
                         )
+                        
+                        // Immediately update BinanceConnector's active keys
+                        com.example.aza.connector.BinanceConnector.updateCredentials(apiKey, apiSecret)
+                        
+                        // Check if we are integrating or disconnecting
+                        if (apiKey.isNotBlank() && apiSecret.isNotBlank()) {
+                            // Asynchronously verify connection health and notify the user
+                            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                repository.insertChatMessage(com.example.data.database.ChatMessage(
+                                    sender = "AZA",
+                                    text = "📡 **Binance Connection Check**: Credentials update detected. Initiating connection verification health check..."
+                                ))
+                                
+                                val syncResult = com.example.aza.connector.BinanceConnector.syncServerTime()
+                                val balanceResult = com.example.aza.connector.BinanceConnector.fetchAccountBalances()
+                                if (balanceResult.isSuccess) {
+                                    val latency = com.example.aza.connector.BinanceConnector.lastLatencyMs.value
+                                    val balances = balanceResult.getOrThrow()
+                                    val btcBal = balances.find { it.asset == "BTC" }?.total ?: 0.0
+                                    val usdtBal = balances.find { it.asset == "USDT" }?.total ?: 0.0
+                                    val tradingMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
+                                    
+                                    val msg = """
+                                        🟢 **Binance Connected Successfully!**
+                                        
+                                        AZA has successfully detected your integration credentials and established a secure, live connection.
+                                        
+                                        *   **Status:** Connected (HEALTHY)
+                                        *   **API Latency:** ${latency}ms
+                                        *   **Operating Mode:** LIVE ($tradingMode)
+                                        *   **Validated Wallet Balances:**
+                                            *   **BTC:** ${String.format(java.util.Locale.US, "%.6f", btcBal)} BTC
+                                            *   **USDT:** ${String.format(java.util.Locale.US, "%.2f", usdtBal)} USDT
+                                            
+                                        All automated agents are now synchronizing their portfolios.
+                                    """.trimIndent()
+                                    repository.insertChatMessage(com.example.data.database.ChatMessage(sender = "AZA", text = msg))
+                                } else {
+                                    val err = balanceResult.exceptionOrNull()?.message ?: "Unknown API response error"
+                                    val msg = """
+                                        🚨 **Binance Connection Failed**
+                                        
+                                        AZA detected updated Binance credentials, but the connection verification failed.
+                                        
+                                        *   **Status:** DEGRADED / FAILING
+                                        *   **Error Details:** $err
+                                        
+                                        *Please check that your API Key, Secret Key, IP access restrictions, and API permissions (Spot & Margin Trading) are configured correctly on your Binance account settings.*
+                                    """.trimIndent()
+                                    repository.insertChatMessage(com.example.data.database.ChatMessage(sender = "AZA", text = msg))
+                                }
+                            }
+                        } else {
+                            // Disconnection
+                            repository.insertChatMessage(com.example.data.database.ChatMessage(
+                                sender = "AZA",
+                                text = "⚪ **Binance Disconnected**\n\nYour Binance API credentials have been removed. AZA has severed the live integration and reverted to **MOCK/Simulated** operations."
+                            ))
+                        }
                     }
                     "YouTube Capability" -> {
                         com.example.aza.security.SecureCredentialStore.saveYouTubeCredentials(
@@ -2066,6 +2126,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun sendMessage(text: String) {
         if (text.isBlank()) return
         viewModelScope.launch {
+            val lowerText = text.lowercase(java.util.Locale.US)
             // 1. Save user message
             repository.insertChatMessage(ChatMessage(sender = "USER", text = text))
             _isAzaResponding.value = true
@@ -2221,6 +2282,48 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                         }
                     } catch (e: Exception) {
                         "⚠️ **Aza Web Explorer Error**: Search index connection lost: ${e.localizedMessage}"
+                    }
+                }
+            } else if (lowerText.contains("check connection") || 
+                       lowerText.contains("binance status") || 
+                       lowerText.contains("verify connection") || 
+                       lowerText.contains("is binance connected") || 
+                       lowerText.contains("connection status") || 
+                       lowerText.contains("check binance") ||
+                       lowerText.contains("binance connection")) {
+                actionExecutedNotice = withContext(Dispatchers.IO) {
+                    val binanceState = repository.getCapabilityStateByNameDirect("Binance Capability")
+                    val apiKey = try { com.example.aza.security.SecureCredentialStore.getBinanceApiKey() } catch(e: Exception) { "" }.ifBlank { binanceState?.apiKey ?: "" }
+                    val apiSecret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }.ifBlank { binanceState?.apiSecret ?: "" }
+                    
+                    if (apiKey.isBlank() || apiSecret.isBlank() || apiKey == "[SECURED_KEYSTORE]") {
+                        "ℹ️ **Aza Connection Status Report**: Binance integration is currently inactive (MOCK mode). No API keys are configured."
+                    } else {
+                        // Dynamically test the live connection!
+                        val syncResult = com.example.aza.connector.BinanceConnector.syncServerTime()
+                        val result = com.example.aza.connector.BinanceConnector.fetchAccountBalances()
+                        if (result.isSuccess) {
+                            val latency = com.example.aza.connector.BinanceConnector.lastLatencyMs.value
+                            val balances = result.getOrThrow()
+                            val btcBal = balances.find { it.asset == "BTC" }?.total ?: 0.0
+                            val usdtBal = balances.find { it.asset == "USDT" }?.total ?: 0.0
+                            val tradingMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
+                            
+                            "🟢 **Aza Connection Status Report**: Active and fully integrated with Binance!\n\n" +
+                            "- **Status**: HEALTHY\n" +
+                            "- **API Latency**: ${latency}ms\n" +
+                            "- **Operating Mode**: LIVE ($tradingMode)\n" +
+                            "- **Dynamic Wallet Balances**:\n" +
+                            "  - **BTC**: ${String.format(java.util.Locale.US, "%.6f", btcBal)} BTC\n" +
+                            "  - **USDT**: ${String.format(java.util.Locale.US, "%.2f", usdtBal)} USDT\n\n" +
+                            "The secure connection is functional and live portfolio data is syncing perfectly."
+                        } else {
+                            val err = result.exceptionOrNull()?.message ?: "Unknown Connection Error"
+                            "🚨 **Aza Connection Status Report**: Binance connection test failed.\n\n" +
+                            "- **Status**: DEGRADED / FAILING\n" +
+                            "- **Error Details**: $err\n- **Operating Mode**: Attempting LIVE, but falling back to MOCK.\n\n" +
+                            "Please check your Binance API key, secret, and IP permission settings."
+                        }
                     }
                 }
             }
@@ -3378,18 +3481,39 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val currentPrice = pos.currentPrice
             val symbol = pos.symbol
 
+            // Dynamic Trailing Stop Loss (TSL) Risk Management:
+            // If price moves in our favor, trail the stop-loss upward to lock in profits (2.5% trailing offset).
+            var activeSL = pos.stopLossPrice
+            if (pos.stopLossPrice > 0.0 && currentPrice > pos.entryPrice) {
+                val proposedTrailingSL = currentPrice * 0.975
+                if (proposedTrailingSL > pos.stopLossPrice) {
+                    activeSL = proposedTrailingSL
+                    val trailedPosition = pos.copy(stopLossPrice = proposedTrailingSL)
+                    repository.updatePosition(trailedPosition)
+                    triggerPositionAlert("TSL_TRAILED", symbol, "Trailing Stop Loss adjusted upward to ${String.format(Locale.US, "%.2f", proposedTrailingSL)} to protect profits on $symbol (Current: $currentPrice, Entry: ${pos.entryPrice})")
+                }
+            }
+
             // Calculate distance to targets
-            val distanceToSL = if (pos.stopLossPrice > 0.0) {
-                ((currentPrice - pos.stopLossPrice) / currentPrice) * 100.0
+            val distanceToSL = if (activeSL > 0.0) {
+                ((currentPrice - activeSL) / currentPrice) * 100.0
             } else Double.MAX_VALUE
 
             val distanceToTP = if (pos.takeProfitPrice > 0.0) {
                 ((pos.takeProfitPrice - currentPrice) / currentPrice) * 100.0
             } else Double.MAX_VALUE
 
-            // SL Hit check
-            if (pos.stopLossPrice > 0.0 && currentPrice <= pos.stopLossPrice) {
+            // SL Hit check with Liquidity-Packet Shield:
+            // Under thin liquidity (currentLiquidity < criticalLiquidityPercentile),
+            // apply a 1.2% dynamic buffer to prevent premature exit from short-lived stop-run sweeps.
+            val isThinLiquidity = dynamicExponentialEstimator.currentLiquidity < dynamicExponentialEstimator.criticalLiquidityPercentile
+            val effectiveSL = if (isThinLiquidity) activeSL * 0.988 else activeSL
+
+            if (activeSL > 0.0 && currentPrice <= effectiveSL) {
                 closePositionWithReview(pos, currentPrice, "STOP_LOSS_HIT")
+            } else if (activeSL > 0.0 && currentPrice <= activeSL && isThinLiquidity) {
+                // Price breached SL but is protected by the liquidity shield buffer
+                triggerPositionAlert("LIQUIDITY_SHIELD", symbol, "🛡️ LIQUIDITY PACKET SHIELD ACTIVE: Price ($currentPrice) breached stop loss ($activeSL) on thin liquidity (${String.format(Locale.US, "%.2f", dynamicExponentialEstimator.currentLiquidity)}). Holding position to avoid premature sweep exit.")
             }
             // TP Hit check
             else if (pos.takeProfitPrice > 0.0 && currentPrice >= pos.takeProfitPrice) {
@@ -3398,7 +3522,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             else {
                 // Warn when close
                 if (distanceToSL <= 1.5) {
-                    triggerPositionAlert("SL_APPROACHING", symbol, "Stop Loss is extremely close for $symbol! Current: $currentPrice, SL: ${pos.stopLossPrice} (Within ${String.format(Locale.US, "%.2f", distanceToSL)}%)")
+                    triggerPositionAlert("SL_APPROACHING", symbol, "Stop Loss is extremely close for $symbol! Current: $currentPrice, SL: ${activeSL} (Within ${String.format(Locale.US, "%.2f", distanceToSL)}%)")
                 }
                 if (distanceToTP <= 1.5) {
                     triggerPositionAlert("TP_APPROACHING", symbol, "Take Profit is approaching for $symbol! Current: $currentPrice, TP: ${pos.takeProfitPrice} (Within ${String.format(Locale.US, "%.2f", distanceToTP)}%)")
