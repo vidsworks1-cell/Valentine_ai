@@ -2170,6 +2170,107 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 searchPattern.find(text)
             } else null
 
+            // Conversational App Control Regexes
+            val autopilotPattern = """(?i)(?:turn\s+|toggle\s+)?autopilot\s+(on|off|enable|disable)""".toRegex()
+            val autopilotMatch = autopilotPattern.find(text)
+
+            val capTogglePattern = """(?i)(enable|disable|turn\s+on|turn\s+off)\s+(?:capability\s+)?(Binance\s+Capability|Content\s+Capability|YouTube\s+Capability|Freelance\s+Capability|Notification\s+Capability|Laptop\s+Agent\s+Capability|Binance|Content|YouTube|Freelance|Notification|Laptop\s+Agent)""".toRegex()
+            val capToggleMatch = capTogglePattern.find(text)
+
+            val capModePattern = """(?i)(?:set|configure)\s+(?:capability\s+)?(Binance\s+Capability|Content\s+Capability|YouTube\s+Capability|Freelance\s+Capability|Notification\s+Capability|Laptop\s+Agent\s+Capability|Binance|Content|YouTube|Freelance|Notification|Laptop\s+Agent)\s+(?:mode\s+(?:to\s+)?)?(live|mock|offline|active)""".toRegex()
+            val capModeMatch = capModePattern.find(text)
+
+            val capPolicyPattern = """(?i)(?:set|configure)\s+(?:capability\s+)?(Binance\s+Capability|Content\s+Capability|YouTube\s+Capability|Freelance\s+Capability|Notification\s+Capability|Laptop\s+Agent\s+Capability|Binance|Content|YouTube|Freelance|Notification|Laptop\s+Agent)\s+(?:auth\s+)?(?:policy\s+(?:to\s+)?)?(autonomous|approval_required|manual)""".toRegex()
+            val capPolicyMatch = capPolicyPattern.find(text)
+
+            val budgetPattern = """(?i)(?:set|configure)\s+(?:trading\s+|daily\s+)?budget\s+(?:to\s+)?\$?(\d+(?:\.\d+)?)""".toRegex()
+            val budgetMatch = budgetPattern.find(text)
+
+            val missionCreatePattern = """(?i)(?:create|start)\s+mission\s+["']?([^"']+)["']?(?:\s+with\s+objectives?\s+["']?([^"']+)["']?)?""".toRegex()
+            val missionCreateMatch = missionCreatePattern.find(text)
+
+            val missionPausePattern = """(?i)pause\s+mission\s+(\d+)""".toRegex()
+            val missionPauseMatch = missionPausePattern.find(text)
+
+            val missionResumePattern = """(?i)resume\s+mission\s+(\d+)""".toRegex()
+            val missionResumeMatch = missionResumePattern.find(text)
+
+            val missionCancelPattern = """(?i)cancel\s+mission\s+(\d+)""".toRegex()
+            val missionCancelMatch = missionCancelPattern.find(text)
+
+            val clearMissionsPattern = """(?i)(?:clear|purge|flush|delete)\s+(?:all\s+)?missions""".toRegex()
+            val clearMissionsMatch = clearMissionsPattern.find(text)
+
+            val clearObjectivePattern = """(?i)(?:clear|purge|flush)\s+(?:active\s+)?objective""".toRegex()
+            val clearObjectiveMatch = clearObjectivePattern.find(text)
+
+            val riskLevelPattern = """(?i)(?:set|change|configure|update)\s+(?:trading\s+)?risk\s*(?:level|tolerance|profile)?\s*(?:to\s+)?(conservative|moderate|aggressive|preservative)""".toRegex()
+            val riskLevelMatch = riskLevelPattern.find(text)
+
+            val tooConservativePattern = """(?i)(?:you\s+are\s+)?(?:too\s+|very\s+)?(?:conservative|preservative|preservatives|preservative-heavy)\s+(?:on\s+)?(?:trades|trading|market)""".toRegex()
+            val tooConservativeMatch = tooConservativePattern.find(text)
+
+            val trainSelfPattern = """(?i)(?:train\s+(?:yourself|lumina|trades|logic|strategy|strategies)|learn\s+from\s+trades|self-training|start\s+learning|optimize\s+(?:strategy|strategies|parameters))""".toRegex()
+            val trainSelfMatch = trainSelfPattern.find(text)
+
+            // Extended Control Patterns for Chat Integration:
+            val backtestCommandPattern = """(?i)(?:run\s+)?backtest\s+(?:on\s+)?(["']?[a-zA-Z0-9\s\-]+?["']?)(?:\s+with\s+(TREND|VOLATILE|RANGING|CRASH))?(?:\s+using\s+(\d+)\s+(?:candles|bars))?""".toRegex()
+            val backtestCommandMatch = backtestCommandPattern.find(text)
+
+            val stratTogglePattern = """(?i)(enable|disable|activate|deactivate|suspend)\s+strategy\s+["']?([^"']+)["']?""".toRegex()
+            val stratToggleMatch = stratTogglePattern.find(text)
+
+            val stratActivePattern = """(?i)(?:set|change)\s+(?:active\s+)?strategy\s+(?:to\s+)?["']?([^"']+)["']?""".toRegex()
+            val stratActiveMatch = stratActivePattern.find(text)
+
+            val closePosPattern = """(?i)(?:force\s+)?(?:close|exit|terminate)\s+(?:active\s+)?([a-zA-Z0-9]+)\s*(?:position)?""".toRegex()
+            val closePosMatch = closePosPattern.find(text)
+
+            val paperSignalPattern = """(?i)(?:run|trigger|start|simulate)\s+(?:paper\s+)?trade\s+(?:signal|simulation)\s+(?:for\s+)?([a-zA-Z0-9]+)""".toRegex()
+            val paperSignalMatch = paperSignalPattern.find(text)
+
+            val autoOptimizePattern = """(?i)(?:run\s+)?(?:autonomous\s+)?(?:evaluation|optimization)\s+(?:for\s+)?([a-zA-Z0-9]+)""".toRegex()
+            val autoOptimizeMatch = autoOptimizePattern.find(text)
+
+            val setBatteryPattern = """(?i)set\s+(?:simulated\s+)?battery\s+(?:to\s+)?(\d+)%?""".toRegex()
+            val setBatteryMatch = setBatteryPattern.find(text)
+
+            val setCpuPattern = """(?i)set\s+(?:simulated\s+)?cpu\s+(?:to\s+)?(\d+(?:\.\d+)?)%?""".toRegex()
+            val setCpuMatch = setCpuPattern.find(text)
+
+            val setMemPattern = """(?i)set\s+(?:simulated\s+)?memory\s+(?:to\s+)?(\d+(?:\.\d+)?)%?\s*(?:mb)?""".toRegex()
+            val setMemMatch = setMemPattern.find(text)
+
+            val stressScenarioPattern = """(?i)(?:run|simulate)\s+stress\s+(?:test\s+)?(?:scenario\s+)?([a-zA-Z0-9\s\-]+)""".toRegex()
+            val stressScenarioMatch = stressScenarioPattern.find(text)
+
+            val hardResetPattern = """(?i)(?:perform\s+)?hard\s+system\s+reset|wipe\s+system""".toRegex()
+            val hardResetMatch = hardResetPattern.find(text)
+
+            val clearChatPattern = """(?i)clear\s+chat\s+history|clear\s+chat""".toRegex()
+            val clearChatMatch = clearChatPattern.find(text)
+
+            val clearAuditLogsPattern = """(?i)clear\s+(?:all\s+)?(?:trade\s+)?audit\s+logs|purge\s+trade\s+history""".toRegex()
+            val clearAuditLogsMatch = clearAuditLogsPattern.find(text)
+
+            val linkTogglePattern = """(?i)(enable|disable|link|unlink|turn\s+on|turn\s+off)\s+(?:simulated\s+)?(?:instant\s+checkout|trading\s+connection|wallet\s+connection)""".toRegex()
+            val linkToggleMatch = linkTogglePattern.find(text)
+
+            val orderTogglePattern = """(?i)(enable|disable|turn\s+on|turn\s+off)\s+order\s+placement""".toRegex()
+            val orderToggleMatch = orderTogglePattern.find(text)
+
+            val contentStepPattern = """(?i)(?:run|execute)\s+content\s+(?:pipeline\s+)?(?:step|for|item)?\s*(\d+)""".toRegex()
+            val contentStepMatch = contentStepPattern.find(text)
+
+            val gigPipelinePattern = """(?i)(?:submit\s+proposal|run\s+freelance\s+proposal|run\s+proposal\s+pipeline|run\s+gig\s+proposal)\s+(?:for\s+)?(?:gig\s+)?(\d+)""".toRegex()
+            val gigPipelineMatch = gigPipelinePattern.find(text)
+
+            val gigCompletePattern = """(?i)(?:complete|payout)\s+gig\s+(\d+)""".toRegex()
+            val gigCompleteMatch = gigCompletePattern.find(text)
+
+            val statusCheckPattern = """(?i)(?:show\s+)?system\s+status|show\s+status""".toRegex()
+            val statusCheckMatch = statusCheckPattern.find(text)
+
             // Dynamic Asset Pricing Map to mirror databases
             val assetPrices = mapOf(
                 "BTC" to (67450.0 to "Bitcoin"),
@@ -2283,6 +2384,278 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     } catch (e: Exception) {
                         "⚠️ **Aza Web Explorer Error**: Search index connection lost: ${e.localizedMessage}"
                     }
+                }
+            } else if (autopilotMatch != null) {
+                val command = autopilotMatch.groupValues[1].lowercase(java.util.Locale.US)
+                val enable = command == "on" || command == "enable"
+                toggleAutopilot(enable)
+                actionExecutedNotice = "✅ **Action Executed:** Autopilot/Autonomous continuous channel optimizer turned ${if (enable) "ON" else "OFF"}."
+            } else if (capToggleMatch != null) {
+                val command = capToggleMatch.groupValues[1].lowercase(java.util.Locale.US)
+                val rawCapName = capToggleMatch.groupValues[2]
+                val resolvedName = when {
+                    rawCapName.lowercase().contains("binance") -> "Binance Capability"
+                    rawCapName.lowercase().contains("youtube") -> "YouTube Capability"
+                    rawCapName.lowercase().contains("content") -> "Content Capability"
+                    rawCapName.lowercase().contains("freelance") -> "Freelance Capability"
+                    rawCapName.lowercase().contains("notification") -> "Notification Capability"
+                    rawCapName.lowercase().contains("laptop") -> "Laptop Agent Capability"
+                    else -> rawCapName
+                }
+                val enable = command == "enable" || command.contains("on")
+                toggleCapability(resolvedName, enable)
+                actionExecutedNotice = "✅ **Action Executed:** Capability **$resolvedName** has been ${if (enable) "ENABLED" else "DISABLED"}."
+            } else if (capModeMatch != null) {
+                val rawCapName = capModeMatch.groupValues[1]
+                val mode = capModeMatch.groupValues[2].uppercase(java.util.Locale.US)
+                val resolvedName = when {
+                    rawCapName.lowercase().contains("binance") -> "Binance Capability"
+                    rawCapName.lowercase().contains("youtube") -> "YouTube Capability"
+                    rawCapName.lowercase().contains("content") -> "Content Capability"
+                    rawCapName.lowercase().contains("freelance") -> "Freelance Capability"
+                    rawCapName.lowercase().contains("notification") -> "Notification Capability"
+                    rawCapName.lowercase().contains("laptop") -> "Laptop Agent Capability"
+                    else -> rawCapName
+                }
+                toggleCapabilityMode(resolvedName, mode)
+                actionExecutedNotice = "✅ **Action Executed:** Capability **$resolvedName** mode configured to **$mode**."
+            } else if (capPolicyMatch != null) {
+                val rawCapName = capPolicyMatch.groupValues[1]
+                val policy = capPolicyMatch.groupValues[2].uppercase(java.util.Locale.US)
+                val resolvedName = when {
+                    rawCapName.lowercase().contains("binance") -> "Binance Capability"
+                    rawCapName.lowercase().contains("youtube") -> "YouTube Capability"
+                    rawCapName.lowercase().contains("content") -> "Content Capability"
+                    rawCapName.lowercase().contains("freelance") -> "Freelance Capability"
+                    rawCapName.lowercase().contains("notification") -> "Notification Capability"
+                    rawCapName.lowercase().contains("laptop") -> "Laptop Agent Capability"
+                    else -> rawCapName
+                }
+                updateCapabilityAuthPolicy(resolvedName, policy)
+                actionExecutedNotice = "✅ **Action Executed:** Capability **$resolvedName** authorization policy updated to **$policy**."
+            } else if (budgetMatch != null) {
+                val budgetVal = budgetMatch.groupValues[1].toDoubleOrNull() ?: 0.0
+                com.example.aza.security.SecureCredentialStore.saveTradingBudget(budgetVal)
+                actionExecutedNotice = "✅ **Action Executed:** Daily trading budget/allowance updated to **$$budgetVal**."
+            } else if (missionCreateMatch != null) {
+                val title = missionCreateMatch.groupValues[1].trim()
+                val objectives = (missionCreateMatch.groupValues[2]).trim().ifBlank { "Analyze market and optimize assets" }
+                createMission(
+                    title = title,
+                    description = "Created dynamically via User Chat command interface",
+                    priority = "HIGH",
+                    objectiveText = objectives,
+                    category = "Custom"
+                )
+                actionExecutedNotice = "✅ **Action Executed:** Mission **\"$title\"** successfully registered and high-level goal decomposition initiated."
+            } else if (missionPauseMatch != null) {
+                val mId = missionPauseMatch.groupValues[1].toIntOrNull() ?: 0
+                pauseMission(mId)
+                actionExecutedNotice = "✅ **Action Executed:** Mission **#$mId** has been paused."
+            } else if (missionResumeMatch != null) {
+                val mId = missionResumeMatch.groupValues[1].toIntOrNull() ?: 0
+                resumeMission(mId)
+                actionExecutedNotice = "✅ **Action Executed:** Mission **#$mId** has been resumed."
+            } else if (missionCancelMatch != null) {
+                val mId = missionCancelMatch.groupValues[1].toIntOrNull() ?: 0
+                cancelMission(mId)
+                actionExecutedNotice = "✅ **Action Executed:** Mission **#$mId** has been cancelled."
+            } else if (clearMissionsMatch != null) {
+                clearAllMissions()
+                actionExecutedNotice = "✅ **Action Executed:** Cleared all historic and active missions from SQLite register."
+            } else if (clearObjectiveMatch != null) {
+                clearActiveObjective()
+                actionExecutedNotice = "✅ **Action Executed:** Active objective and subtasks successfully purged."
+            } else if (riskLevelMatch != null) {
+                var levelInput = riskLevelMatch.groupValues[1].lowercase(java.util.Locale.US)
+                if (levelInput == "preservative" || levelInput == "preservatives") levelInput = "conservative"
+                val resolvedLevel = when (levelInput) {
+                    "aggressive" -> "AGGRESSIVE"
+                    "moderate" -> "MODERATE"
+                    else -> "CONSERVATIVE"
+                }
+                com.example.aza.security.SecureCredentialStore.saveTradingRiskLevel(resolvedLevel)
+                actionExecutedNotice = "✅ **Action Executed:** Lumina's active portfolio risk level updated to **$resolvedLevel**. Next automated and paper trades will run with ${if (resolvedLevel == "AGGRESSIVE") "wider limits and aggressive breakouts" else if (resolvedLevel == "MODERATE") "balanced momentum sizing" else "conservative grid safety"}."
+            } else if (tooConservativeMatch != null) {
+                // Autoshift to AGGRESSIVE
+                com.example.aza.security.SecureCredentialStore.saveTradingRiskLevel("AGGRESSIVE")
+                actionExecutedNotice = "✅ **Action Executed:** I hear you perfectly! Lumina's trading logic was indeed heavily preservative. I have instantly upgraded my secure execution parameter to **AGGRESSIVE** mode. I will now target active breakout entries with up to 25% of cash allocation per position and wider stop-loss buffers."
+            } else if (trainSelfMatch != null) {
+                actionExecutedNotice = withContext(Dispatchers.IO) {
+                    com.example.aza.strategy.StrategyEvaluationEngine.runSelfTrainingAndLearning(
+                        repository = repository,
+                        addLog = { addThought(it) }
+                    )
+                }
+            } else if (backtestCommandMatch != null) {
+                val rawStratName = backtestCommandMatch.groupValues[1].replace("\"", "").replace("'", "").trim()
+                val matchedPattern = backtestCommandMatch.groupValues[2].ifBlank { "TREND" }
+                val rawCount = backtestCommandMatch.groupValues[3]
+                val matchedCount = rawCount.toIntOrNull() ?: 100
+                
+                val matchedStratName = com.example.aza.strategy.StrategyRegistry.getAllStrategies()
+                    .map { it.name }
+                    .find { it.equals(rawStratName, ignoreCase = true) || it.replace(" ", "").equals(rawStratName.replace(" ", ""), ignoreCase = true) }
+                    ?: rawStratName
+                    
+                _selectedBacktestStrategy.value = matchedStratName
+                _backtestPattern.value = matchedPattern
+                _backtestCandleCount.value = matchedCount
+                
+                runBacktest()
+                actionExecutedNotice = "📊 **Action Executed:** Triggered offline walk-forward backtest for strategy **$matchedStratName** on **BTC** (Market Regime: **$matchedPattern**, Size: **$matchedCount** candles). Check terminal thoughts logs for details."
+            } else if (stratToggleMatch != null) {
+                val mode = stratToggleMatch.groupValues[1].lowercase(java.util.Locale.US)
+                val rawStratName = stratToggleMatch.groupValues[2].replace("\"", "").replace("'", "").trim()
+                val isEnable = mode == "enable" || mode == "activate"
+                
+                val allStrats = withContext(Dispatchers.IO) { repository.getAllStrategiesDirect() }
+                val dbStrat = allStrats.find { it.strategyName.equals(rawStratName, ignoreCase = true) }
+                if (dbStrat != null) {
+                    val updated = dbStrat.copy(isActive = isEnable)
+                    withContext(Dispatchers.IO) { repository.updateStrategy(updated) }
+                    actionExecutedNotice = "⚙️ **Action Executed:** Manually ${if (isEnable) "ENABLED" else "DISABLED"} strategy **${dbStrat.strategyName}** in SQLite registry."
+                } else {
+                    actionExecutedNotice = "⚠️ **Action Failed:** Strategy '$rawStratName' is not registered in the SQLite database."
+                }
+            } else if (stratActiveMatch != null) {
+                val rawStratName = stratActiveMatch.groupValues[1].replace("\"", "").replace("'", "").trim()
+                val allStrats = withContext(Dispatchers.IO) { repository.getAllStrategiesDirect() }
+                val dbStrat = allStrats.find { it.strategyName.equals(rawStratName, ignoreCase = true) }
+                if (dbStrat != null) {
+                    changeActiveStrategy(dbStrat.strategyName)
+                    actionExecutedNotice = "🎯 **Action Executed:** Updated active execution model to **${dbStrat.strategyName}**."
+                } else {
+                    actionExecutedNotice = "⚠️ **Action Failed:** Strategy '$rawStratName' is not registered in the SQLite database."
+                }
+            } else if (closePosMatch != null) {
+                val symbol = closePosMatch.groupValues[1].uppercase(java.util.Locale.US)
+                val position = withContext(Dispatchers.IO) { repository.getPositionBySymbol(symbol) }
+                if (position != null && position.status == "OPEN") {
+                    forceClosePosition(symbol)
+                    actionExecutedNotice = "✅ **Action Executed:** Initiated force-close sequence for active **$symbol** position @ current spot rate."
+                } else {
+                    actionExecutedNotice = "⚠️ **Action Failed:** No active open position found for symbol **$symbol**."
+                }
+            } else if (paperSignalMatch != null) {
+                val market = paperSignalMatch.groupValues[1].uppercase(java.util.Locale.US)
+                runPaperTradeSignal(market)
+                actionExecutedNotice = "📈 **Action Executed:** Triggered instant paper-trade evaluation signal cycle for market: **$market**."
+            } else if (autoOptimizeMatch != null) {
+                val market = autoOptimizeMatch.groupValues[1].uppercase(java.util.Locale.US)
+                runAutonomousEvaluationAndOptimization(market)
+                actionExecutedNotice = "🤖 **Action Executed:** Spun up autonomous walk-forward optimizer and ranking sweep for market: **$market**."
+            } else if (setBatteryMatch != null) {
+                val battery = setBatteryMatch.groupValues[1].toIntOrNull() ?: 100
+                updateSimulatedBattery(battery)
+                actionExecutedNotice = "⚡ **Action Executed:** Simulated device battery telemetry updated to **$battery%**."
+            } else if (setCpuMatch != null) {
+                val cpu = setCpuMatch.groupValues[1].toDoubleOrNull() ?: 10.0
+                updateSimulatedCpu(cpu)
+                actionExecutedNotice = "💻 **Action Executed:** Simulated CPU usage telemetry updated to **$cpu%**."
+            } else if (setMemMatch != null) {
+                val mem = setMemMatch.groupValues[1].toDoubleOrNull() ?: 256.0
+                updateSimulatedMemory(mem)
+                actionExecutedNotice = "💾 **Action Executed:** Simulated heap memory usage telemetry updated to **${mem}MB**."
+            } else if (stressScenarioMatch != null) {
+                val scenario = stressScenarioMatch.groupValues[1].trim()
+                simulateStressTest(scenario)
+                actionExecutedNotice = "💥 **Action Executed:** Injected **$scenario** stress scenario. Risk barriers calibrated and safety logs updated."
+            } else if (hardResetMatch != null) {
+                performHardSystemReset()
+                actionExecutedNotice = "🔄 **Action Executed:** Initiated hard system reset! All database tables wiped, configurations re-seeded, and session purged."
+            } else if (clearChatMatch != null) {
+                clearChat()
+                actionExecutedNotice = "🧹 **Action Executed:** Chat history successfully cleared."
+            } else if (clearAuditLogsMatch != null) {
+                clearAllTradeAuditLogs()
+                actionExecutedNotice = "🧹 **Action Executed:** Cleared all trade audit logs and execution records."
+            } else if (linkToggleMatch != null) {
+                val mode = linkToggleMatch.groupValues[1].lowercase(java.util.Locale.US)
+                val isEnable = mode == "enable" || mode == "link" || mode.contains("on")
+                setupAccountConnections(isTrading = isEnable, isSocial = true, isFreelance = true)
+                actionExecutedNotice = "🔌 **Action Executed:** Simulated instant checkout and trading wallet linking turned **${if (isEnable) "ON" else "OFF"}**."
+            } else if (orderToggleMatch != null) {
+                val mode = orderToggleMatch.groupValues[1].lowercase(java.util.Locale.US)
+                val isEnable = mode == "enable" || mode.contains("on")
+                setOrderPlacementEnabled(isEnable)
+                actionExecutedNotice = "🛡️ **Action Executed:** Live order placement (Safety Lock) has been turned **${if (isEnable) "ON (Enabled)" else "OFF (Safety Locked)"}**."
+            } else if (contentStepMatch != null) {
+                val cId = contentStepMatch.groupValues[1].toIntOrNull() ?: 0
+                val targetContent = contentList.find { it.id == cId }
+                if (targetContent != null) {
+                    runContentPipelineStep(cId)
+                    actionExecutedNotice = "🎬 **Action Executed:** Triggered creative content pipeline generation for item #$cId: **\"${targetContent.title}\"**."
+                } else {
+                    actionExecutedNotice = "⚠️ **Action Failed:** Content item #$cId was not found in your creative queue."
+                }
+            } else if (gigPipelineMatch != null) {
+                val gId = gigPipelineMatch.groupValues[1].toIntOrNull() ?: 0
+                val targetGig = gigs.find { it.id == gId }
+                if (targetGig != null) {
+                    runFreelanceProposalPipeline(gId)
+                    actionExecutedNotice = "💼 **Action Executed:** Initiated freelance agency proposal pipeline for Gig #$gId: **\"${targetGig.title}\"**."
+                } else {
+                    actionExecutedNotice = "⚠️ **Action Failed:** Freelance contract #$gId was not found."
+                }
+            } else if (gigCompleteMatch != null) {
+                val gId = gigCompleteMatch.groupValues[1].toIntOrNull() ?: 0
+                val targetGig = gigs.find { it.id == gId }
+                if (targetGig != null) {
+                    completeAndPayoutGig(targetGig)
+                    actionExecutedNotice = "💵 **Action Executed:** Completed Contract #$gId (**\"${targetGig.title}\"**) and processed secure bank payout of **$${targetGig.budget}**."
+                } else {
+                    actionExecutedNotice = "⚠️ **Action Failed:** Freelance contract #$gId was not found."
+                }
+            } else if (statusCheckMatch != null) {
+                actionExecutedNotice = withContext(Dispatchers.IO) {
+                    val activeMissions = allMissions.value.filter { it.status == "ACTIVE" }
+                    val activeStrats = repository.getAllStrategiesDirect().filter { it.isActive }
+                    val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
+                    val sysTelemetry = "Battery: ${resourceMetrics.value.batteryLevel}%, CPU: ${String.format(java.util.Locale.US, "%.1f", resourceMetrics.value.cpuUsage)}%, Memory: ${String.format(java.util.Locale.US, "%.1f", resourceMetrics.value.memoryUsageMb)}MB"
+                    val budget = try { com.example.aza.security.SecureCredentialStore.getTradingBudget() } catch (e: Exception) { 0.0 }
+                    val risk = try { com.example.aza.security.SecureCredentialStore.getTradingRiskLevel() } catch (e: Exception) { "CONSERVATIVE" }
+                    val checkout = if (account.isTradingLinked) "🟢 LINKED" else "🔴 OFFLINE (Paper Mode)"
+                    val safetyLock = if (com.example.aza.connector.BinanceConnector.isOrderPlacementEnabled.value) "🟢 ACTIVE" else "🔴 LOCKED"
+                    
+                    val sb = java.lang.StringBuilder()
+                    sb.append("📊 **LUMINA FULL SYSTEM INTEGRITY STATUS REPORT**\n\n")
+                    sb.append("• **Simulated Balance:** \$${String.format(java.util.Locale.US, "%,.2f", account.totalBalance)} USD\n")
+                    sb.append("• **Instant Checkout Wallet:** $checkout\n")
+                    sb.append("• **Live Execution Safety Lock:** $safetyLock\n")
+                    sb.append("• **Configured Trading Budget:** \$$budget USD\n")
+                    sb.append("• **Trading Risk Tolerance:** **$risk**\n\n")
+                    
+                    sb.append("📈 **Active Registered Strategies:**\n")
+                    if (activeStrats.isEmpty()) {
+                        sb.append("  - None currently enabled\n")
+                    } else {
+                        activeStrats.forEach {
+                            sb.append("  - **${it.strategyName}** (WinRate: ${String.format(java.util.Locale.US, "%.1f", it.winRate)}%, Conf: ${String.format(java.util.Locale.US, "%.2f", it.currentConfidenceScore)})\n")
+                        }
+                    }
+                    
+                    sb.append("\n💼 **Open Execution Positions:**\n")
+                    if (openPositions.isEmpty()) {
+                        sb.append("  - No active open positions in market.\n")
+                    } else {
+                        openPositions.forEach {
+                            sb.append("  - **${it.symbol}** (Size: ${it.amountOwned}, Entry: \$${it.entryPrice}, Unrealized PnL: \$${String.format(java.util.Locale.US, "%+.2f", (it.currentPrice - it.entryPrice) * it.amountOwned)})\n")
+                        }
+                    }
+                    
+                    sb.append("\n🎯 **Active Agent Missions:**\n")
+                    if (activeMissions.isEmpty()) {
+                        sb.append("  - No active missions running.\n")
+                    } else {
+                        activeMissions.forEach {
+                            sb.append("  - **#${it.id} [${it.title}]**: ${it.description} (Task: ${it.currentTask})\n")
+                        }
+                    }
+                    
+                    sb.append("\n🖥️ **Device Telemetry Stats:** $sysTelemetry\n")
+                    sb.append("🛡️ *Lumina Chat Commander is responsive and listening for your next operational instruction.*")
+                    sb.toString()
                 }
             } else if (lowerText.contains("check connection") || 
                        lowerText.contains("binance status") || 
@@ -2436,24 +2809,48 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         addThought("Retrieved $symbol ticker from $exchange: $$price USD.")
         addThought("Evaluating technicals: EMA(20) crossover on 1-Hour chart. RSI stands at healthy ${Random.nextInt(48, 62)}.")
         
-        // Conservative Trade Risk Assessment
-        val riskLevel = "Conservative Grid Strategy"
-        val stopLossPercent = 3.0
+        // Dynamic Trade Risk Assessment based on user risk preference
+        val savedRiskLevel = try { com.example.aza.security.SecureCredentialStore.getTradingRiskLevel() } catch(e: Exception) { "CONSERVATIVE" }
+        val riskLevel = when (savedRiskLevel) {
+            "AGGRESSIVE" -> "Aggressive Breakout Strategy"
+            "MODERATE" -> "Moderate Momentum Strategy"
+            else -> "Conservative Grid Strategy"
+        }
+        val stopLossPercent = when (savedRiskLevel) {
+            "AGGRESSIVE" -> 8.0
+            "MODERATE" -> 5.0
+            else -> 3.0
+        }
         val targetStopLoss = price * (1.0 - (stopLossPercent / 100.0))
-        addThought("Risk Guard active: Capping portfolio allocation to max 5.0% buffer.")
+        val allocationCapPercent = when (savedRiskLevel) {
+            "AGGRESSIVE" -> 25.0
+            "MODERATE" -> 12.0
+            else -> 5.0
+        }
+        addThought("Risk Guard active: Capping portfolio allocation to max $allocationCapPercent% buffer.")
         
         val totalAssets = portfolioAssets.value
         val existingAsset = totalAssets.find { it.symbol == symbol }
         
-        // Decide buy vs sell vs hold using conservative rules
+        val maxAssetAllocationRatio = when (savedRiskLevel) {
+            "AGGRESSIVE" -> 0.85
+            "MODERATE" -> 0.60
+            else -> 0.40
+        }
+        
+        // Decide buy vs sell vs hold using dynamic risk rules
         val decision = when {
-            account.totalBalance > 300.0 && (existingAsset == null || (existingAsset.amountOwned * price) < (account.totalBalance * 0.4)) -> "BUY"
+            account.totalBalance > 100.0 && (existingAsset == null || (existingAsset.amountOwned * price) < (account.totalBalance * maxAssetAllocationRatio)) -> "BUY"
             existingAsset != null && existingAsset.amountOwned > 0.001 && Random.nextBoolean() -> "SELL"
             else -> "HOLD"
         }
         
         if (decision == "BUY") {
-            val buyUSD = Random.nextDouble(100.0, 300.0)
+            val buyUSD = when (savedRiskLevel) {
+                "AGGRESSIVE" -> Random.nextDouble(300.0, 750.0)
+                "MODERATE" -> Random.nextDouble(200.0, 450.0)
+                else -> Random.nextDouble(100.0, 300.0)
+            }
             val units = buyUSD / price
             val unitsFormatted = String.format(Locale.US, "%.4f", units).toDouble()
             val finalCost = unitsFormatted * price
@@ -2499,9 +2896,9 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 
                 // Post Chat Announcement
                 val alertMessage = """
-                    🤖 **[Aza Autopilot Trade Executed]**
+                    🤖 **[Lumina Autopilot Trade Executed]**
                     
-                    I have autonomously analyzed market trend data and executed a conservative risk-minimized purchase on your behalf:
+                    I have autonomously analyzed market trend data and executed a ${savedRiskLevel.lowercase(java.util.Locale.US)} risk purchase on your behalf:
                     
                     • **Exchange Routing**: **$exchange**
                     • **Asset Traded**: **$symbol** ($name)
@@ -2510,7 +2907,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     • **Transaction Value**: **$${String.format("%,.2f", finalCost)} USD** (Settled via secure Cash Wallet balance)
                     
                     🛡️ **Compliance & Risk Guard Metrics:**
-                    - Risk Category: **$riskLevel** (Low exposure)
+                    - Risk Category: **$riskLevel** (${if (savedRiskLevel == "AGGRESSIVE") "High risk breakout configuration" else if (savedRiskLevel == "MODERATE") "Balanced standard settings" else "Low exposure"})
                     - Calculated Volatility Filter: **Active**
                     - Stop-Loss Configured: **$${String.format("%,.2f", targetStopLoss)} USD** (-$stopLossPercent%)
                     - Dynamic Rebalancing Adjustment: **Portfolio Optimized**
@@ -3177,7 +3574,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             ) ?: return@launch
 
             val account = repository.getAccountInfoDirect() ?: AccountLinking()
-            val proposal = strategy.evaluate(market, prices, account.totalBalance)
+            val savedRiskLevel = try { com.example.aza.security.SecureCredentialStore.getTradingRiskLevel() } catch(e: Exception) { "CONSERVATIVE" }
+            val riskPercent = when (savedRiskLevel) {
+                "AGGRESSIVE" -> 6.0
+                "MODERATE" -> 4.0
+                else -> 2.0
+            }
+            val proposal = strategy.evaluate(market, prices, account.totalBalance, riskPercent = riskPercent)
 
             val currentStrategyName = strategy.name
             val signalKey = "$market-$currentStrategyName-${proposal.signal}"
@@ -3294,6 +3697,20 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 currentPrices = prices,
                 addLog = { addThought(it) }
             )
+        }
+    }
+
+    fun runReinforcementSelfTraining() {
+        viewModelScope.launch {
+            addThought("🔄 Initiating on-demand Reinforcement Self-Training session...")
+            val result = withContext(Dispatchers.IO) {
+                com.example.aza.strategy.StrategyEvaluationEngine.runSelfTrainingAndLearning(
+                    repository = repository,
+                    addLog = { addThought(it) }
+                )
+            }
+            addThought(result)
+            addReasoningLog("Lumina self-training reinforcement loop completed successfully.", "KNOWLEDGE")
         }
     }
 

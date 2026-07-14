@@ -108,8 +108,13 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
             return 0.0
         }
 
-        // 2. Base Risk percentage determination (Starts at 2.0% of account balance)
-        var baseRiskPercent = 2.0
+        // 2. Base Risk percentage determination (Starts based on user-configured risk level)
+        val savedRiskLevel = try { com.example.aza.security.SecureCredentialStore.getTradingRiskLevel() } catch(e: Exception) { "CONSERVATIVE" }
+        var baseRiskPercent = when (savedRiskLevel) {
+            "AGGRESSIVE" -> 6.0
+            "MODERATE" -> 4.0
+            else -> 2.0
+        }
 
         // 3. Equity Curve Feedback: Scale back risk percentage proportionally to current drawdown
         // As drawdown approaches the maximum allowable drawdown (e.g. 10.0%), risk percentage scales down to 0%
@@ -193,9 +198,13 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
             atrSizeInDollars
         }
 
-        // Clamp final dollar position size between 1% and 15% of total account balance to guarantee capital preservation
+        // Clamp final dollar position size based on user-configured risk level to guarantee capital preservation
         val minSize = accountBalance * 0.01
-        val maxSize = accountBalance * 0.15
+        val maxSize = when (savedRiskLevel) {
+            "AGGRESSIVE" -> accountBalance * 0.40
+            "MODERATE" -> accountBalance * 0.25
+            else -> accountBalance * 0.15
+        }
         
         return finalSuggestedSizeInDollars.coerceIn(minSize, maxSize)
     }

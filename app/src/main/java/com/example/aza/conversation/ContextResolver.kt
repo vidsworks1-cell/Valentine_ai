@@ -24,7 +24,8 @@ data class UnifiedContext(
     val binanceApiKeyMasked: String,
     val binanceMode: String,
     val tradingBudget: Double,
-    val tradingBudgetPeriod: String
+    val tradingBudgetPeriod: String,
+    val tradingRiskLevel: String
 ) {
     fun formatToContextBlock(): String {
         val binanceLine = if (isBinanceConnected) {
@@ -33,9 +34,9 @@ data class UnifiedContext(
             "[Binance Integration] NOT CONNECTED / No API keys linked"
         }
         val budgetLine = if (tradingBudget > 0) {
-            "[Lumina Trading Budget] Allocated: $${String.format("%.2f", tradingBudget)} USD ($tradingBudgetPeriod)"
+            "[Lumina Trading Budget] Allocated: $${String.format("%.2f", tradingBudget)} USD ($tradingBudgetPeriod) | Risk Profile: $tradingRiskLevel"
         } else {
-            "[Lumina Trading Budget] No budget currently allocated"
+            "[Lumina Trading Budget] No budget currently allocated | Risk Profile: $tradingRiskLevel"
         }
         return """
             --- UNIFIED SYSTEM CONTEXT ---
@@ -81,6 +82,7 @@ object ContextResolver {
         
         val budget = try { com.example.aza.security.SecureCredentialStore.getTradingBudget() } catch (e: Exception) { 0.0 }
         val budgetPeriod = try { com.example.aza.security.SecureCredentialStore.getTradingBudgetPeriod() } catch (e: Exception) { "daily" }
+        val riskLevel = try { com.example.aza.security.SecureCredentialStore.getTradingRiskLevel() } catch (e: Exception) { "CONSERVATIVE" }
 
         return UnifiedContext(
             recentChatHistory = chatMessages.takeLast(10),
@@ -102,7 +104,8 @@ object ContextResolver {
             binanceApiKeyMasked = maskedKey,
             binanceMode = mode,
             tradingBudget = budget,
-            tradingBudgetPeriod = budgetPeriod
+            tradingBudgetPeriod = budgetPeriod,
+            tradingRiskLevel = riskLevel
         )
     }
 }

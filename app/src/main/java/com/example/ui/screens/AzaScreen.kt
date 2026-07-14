@@ -2758,6 +2758,16 @@ fun AzaScreen(
                                     ) {
                                         Text("Run Autonomous Evaluation & Optimization", fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                     }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Button(
+                                        onClick = { viewModel.runReinforcementSelfTraining() },
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth().height(28.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                    ) {
+                                        Text("Trigger Reinforcement Self-Training", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
 

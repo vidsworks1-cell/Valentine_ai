@@ -257,6 +257,14 @@ object SecureCredentialStore {
         return decrypt("trading_budget_period") ?: "daily"
     }
 
+    fun saveTradingRiskLevel(level: String) {
+        encrypt("trading_risk_level", level.uppercase(java.util.Locale.US))
+    }
+
+    fun getTradingRiskLevel(): String {
+        return decrypt("trading_risk_level") ?: "CONSERVATIVE"
+    }
+
     // --- ZKP & Homomorphic Encryption preferences ---
     fun isZkpEnabled(): Boolean {
         val context = getContext()
