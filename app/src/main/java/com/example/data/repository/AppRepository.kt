@@ -17,7 +17,7 @@ class AppRepository(private val db: AppDatabase) {
         val url = try {
             com.example.BuildConfig.CONTABO_VPS_URL
         } catch (e: Exception) {
-            "https://api.example.com/"
+            "http://169.58.34.76:8000/"
         }
         com.example.data.api.ContaboRetrofitClient.buildService(url)
     }
