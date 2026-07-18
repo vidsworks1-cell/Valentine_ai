@@ -1,0 +1,6 @@
+{
+  "backend/tests/test_trading_system.py::test_endpoint_health": true,
+  "backend/tests/test_trading_system.py::test_paper_wallet_lifecycle": true,
+  "backend/tests/test_trading_system.py::test_single_trade_lifecycle": true,
+  "backend/tests/test_trading_system.py::test_reproducibility_ledger_reconciliation": true
+}

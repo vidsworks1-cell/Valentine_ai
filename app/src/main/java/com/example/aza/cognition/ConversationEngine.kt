@@ -83,6 +83,9 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
             Unified Context Snapshot:
             ${unifiedCtx.formatToContextBlock()}
             
+            Retrieved Memories & Learned Insights:
+            ${if (relevantMemories.isEmpty()) "No direct matching insights recalled." else relevantMemories.joinToString("\n")}
+            
             Explanation Preference: ${unifiedCtx.preferences.preferredExplanationDepth}
             Response Length Preference: ${unifiedCtx.preferences.preferredResponseLength}
             

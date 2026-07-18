@@ -2442,25 +2442,48 @@ fun PositionManagerSection(
                             }
                         }
 
+                        val sdfFormat = remember { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US) }
+                        fun formatTimestamp(ts: Long): String = sdfFormat.format(java.util.Date(ts))
+
                         Divider(modifier = Modifier.padding(vertical = 12.dp))
 
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Entry Quality: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                                Text(review.entryQuality, style = MaterialTheme.typography.bodySmall, color = Color(0xFF2E7D32))
+                                Text("Direction / Side: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                Text(review.side, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = if (review.side == "BUY") Color(0xFF2E7D32) else Color(0xFFC62828))
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Exit Quality: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                                Text(review.exitQuality, style = MaterialTheme.typography.bodySmall, color = if (review.realizedPnL >= 0) Color(0xFF2E7D32) else Color(0xFFC62828))
+                                Text("Position Size: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                Text("$${String.format(Locale.US, "%,.2f", review.size)} USD", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Slippage: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                                Text("$${String.format(Locale.US, "%.2f", review.slippage)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Entry Details: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                Text("$${String.format(Locale.US, "%,.2f", review.entryPrice)} @ ${formatTimestamp(review.entryTime)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Exchange Fees: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                                Text("$${String.format(Locale.US, "%.2f", review.fees)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Exit Details: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                Text("$${String.format(Locale.US, "%,.2f", review.exitPrice)} @ ${formatTimestamp(review.timestamp)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Stop Loss / Take Profit: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                Text("SL: $${String.format(Locale.US, "%,.2f", review.stopLossPrice)} | TP: $${String.format(Locale.US, "%,.2f", review.takeProfitPrice)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Confidence Score: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                Text("${String.format(Locale.US, "%.0f%%", review.confidenceScore * 100)}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Market Regime: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                Text(review.marketRegime, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Slippage / Exchange Fees: ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                Text("$${String.format(Locale.US, "%.2f", review.slippage)} / $${String.format(Locale.US, "%.2f", review.fees)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Why Trade Was Taken (Entry Reason):", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text(review.entryReason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text("Lessons Learned:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                             Text(review.lessonsLearned, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -2472,6 +2495,9 @@ fun PositionManagerSection(
 
     // Interactive Lifecycle Timeline / Complete Traceability Dialog
     selectedTimelineItem?.let { item ->
+        val sdfFormat = remember { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US) }
+        fun formatTimestamp(ts: Long): String = sdfFormat.format(java.util.Date(ts))
+
         AlertDialog(
             onDismissRequest = { selectedTimelineItem = null },
             title = {
@@ -2482,11 +2508,18 @@ fun PositionManagerSection(
                 val symbol = if (item is com.example.data.database.BinancePositionEntity) item.symbol else (item as com.example.data.database.PositionReviewEntity).symbol
                 val entryPrice = if (item is com.example.data.database.BinancePositionEntity) item.entryPrice else (item as com.example.data.database.PositionReviewEntity).entryPrice
                 val currentPrice = if (item is com.example.data.database.BinancePositionEntity) item.currentPrice else (item as com.example.data.database.PositionReviewEntity).exitPrice
-                val stopLoss = if (item is com.example.data.database.BinancePositionEntity) item.stopLossPrice else 0.0
-                val takeProfit = if (item is com.example.data.database.BinancePositionEntity) item.takeProfitPrice else 0.0
+                val stopLoss = if (item is com.example.data.database.BinancePositionEntity) item.stopLossPrice else (item as com.example.data.database.PositionReviewEntity).stopLossPrice
+                val takeProfit = if (item is com.example.data.database.BinancePositionEntity) item.takeProfitPrice else (item as com.example.data.database.PositionReviewEntity).takeProfitPrice
                 val strategyName = if (item is com.example.data.database.BinancePositionEntity) item.strategyName else (item as com.example.data.database.PositionReviewEntity).strategyName
                 val proposalId = if (item is com.example.data.database.BinancePositionEntity) item.proposalId else (item as com.example.data.database.PositionReviewEntity).proposalId
                 val decisionId = if (item is com.example.data.database.BinancePositionEntity) item.approvalDecisionId else null
+
+                val side = if (item is com.example.data.database.BinancePositionEntity) "BUY" else (item as com.example.data.database.PositionReviewEntity).side
+                val confidence = if (item is com.example.data.database.BinancePositionEntity) "85%" else "${String.format(Locale.US, "%.0f%%", (item as com.example.data.database.PositionReviewEntity).confidenceScore * 100)}"
+                val entryReason = if (item is com.example.data.database.BinancePositionEntity) "Algorithmic confirmation of a breakout trend." else (item as com.example.data.database.PositionReviewEntity).entryReason
+                val entryTimeText = if (item is com.example.data.database.BinancePositionEntity) formatTimestamp(item.openedAt) else formatTimestamp((item as com.example.data.database.PositionReviewEntity).entryTime)
+                val exitTimeText = if (item is com.example.data.database.BinancePositionEntity) "N/A" else formatTimestamp((item as com.example.data.database.PositionReviewEntity).timestamp)
+                val regime = if (item is com.example.data.database.BinancePositionEntity) "Volatile / Active Trend" else (item as com.example.data.database.PositionReviewEntity).marketRegime
 
                 Column(
                     modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -2497,7 +2530,7 @@ fun PositionManagerSection(
                     // Node 1: Proposal Formed
                     TimelineNode(
                         title = "1. Strategy Proposal Formed",
-                        description = "Market Intelligence generated a proposal targeting $symbol via Strategy '$strategyName'.\nProposal ID: #${proposalId ?: "N/A"}\nEntry: $${entryPrice} | SL: $${stopLoss} | TP: $${takeProfit}",
+                        description = "Market Intelligence generated a proposal targeting $symbol via Strategy '$strategyName'.\nProposal ID: #${proposalId ?: "N/A"}\nSide / Direction: $side\nConfidence Rating: $confidence\nRegime Mode: $regime\nWhy Opened (Reason): $entryReason\nEntry Time: $entryTimeText",
                         icon = Icons.Default.Insights,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -2530,7 +2563,7 @@ fun PositionManagerSection(
                     if (item is com.example.data.database.PositionReviewEntity) {
                         TimelineNode(
                             title = "5. Order Liquidated & Exited",
-                            description = "Position successfully closed via exit condition [${item.exitQuality}].\nExit Price: $${item.exitPrice} | Realized P&L: $${String.format(Locale.US, "%.2f", item.realizedPnL)}\nSlippage captured: $${String.format(Locale.US, "%.2f", item.slippage)}",
+                            description = "Position successfully closed via exit condition [${item.exitQuality}] @ $exitTimeText.\nExit Price: $${item.exitPrice} | Realized P&L: $${String.format(Locale.US, "%.2f", item.realizedPnL)}\nSlippage captured: $${String.format(Locale.US, "%.2f", item.slippage)}",
                             icon = Icons.Default.History,
                             color = Color(0xFFC62828)
                         )

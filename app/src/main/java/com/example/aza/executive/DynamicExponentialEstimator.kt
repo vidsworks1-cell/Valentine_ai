@@ -169,9 +169,13 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
         // Convert final risk percentage to absolute dollar risk
         val dollarRiskAmount = accountBalance * (baseRiskPercent / 100.0)
 
+        // Load dynamic settings from Secure Store
+        val atrMultiplier = try { com.example.aza.security.SecureCredentialStore.getAtrMultiplier() } catch (e: Exception) { 2.0 }
+        val positionSlicePercent = try { com.example.aza.security.SecureCredentialStore.getPositionSlicePercent() } catch (e: Exception) { 10.0 }
+
         // 5. ATR Volatility Stop Distance Sizing
         val atr = com.example.aza.strategy.StrategyIndicators.calculateATR(prices, 14)
-        val stopLossDist = if (atr > 0.0) atr * 2.0 else entryPrice * 0.02
+        val stopLossDist = if (atr > 0.0) atr * atrMultiplier else entryPrice * 0.02
         
         // Raw ATR position units sizing
         val rawAtrUnits = dollarRiskAmount / stopLossDist
@@ -201,9 +205,9 @@ class DynamicExponentialEstimator(private val repository: AppRepository) {
         // Clamp final dollar position size based on user-configured risk level to guarantee capital preservation
         val minSize = accountBalance * 0.01
         val maxSize = when (savedRiskLevel) {
-            "AGGRESSIVE" -> accountBalance * 0.40
-            "MODERATE" -> accountBalance * 0.25
-            else -> accountBalance * 0.15
+            "AGGRESSIVE" -> accountBalance * (positionSlicePercent / 100.0) * 1.5
+            "MODERATE" -> accountBalance * (positionSlicePercent / 100.0)
+            else -> accountBalance * (positionSlicePercent / 100.0) * 0.75
         }
         
         return finalSuggestedSizeInDollars.coerceIn(minSize, maxSize)

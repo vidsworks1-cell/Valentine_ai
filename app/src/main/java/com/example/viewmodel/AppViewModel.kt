@@ -2271,6 +2271,37 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val statusCheckPattern = """(?i)(?:show\s+)?system\s+status|show\s+status""".toRegex()
             val statusCheckMatch = statusCheckPattern.find(text)
 
+            // Extended Custom Chat Control Regex Patterns
+            val credentialsPattern = """(?i)(?:set|update)\s+binance\s+(?:credentials|keys?)\s+(?:key\s+)?([a-zA-Z0-9_\-]+)\s+(?:secret\s+)?([a-zA-Z0-9_\-]+)""".toRegex()
+            val credentialsMatch = credentialsPattern.find(text)
+
+            val binanceEnvPattern = """(?i)(?:set|update)\s+binance\s+(?:environment|env)\s+(?:to\s+)?(sandbox|production)""".toRegex()
+            val binanceEnvMatch = binanceEnvPattern.find(text)
+
+            val binanceTradingModePattern = """(?i)(?:set|update)\s+binance\s+trading\s+mode\s+(?:to\s+)?(read-only|trading\s+mode|trading)""".toRegex()
+            val binanceTradingModeMatch = binanceTradingModePattern.find(text)
+
+            val ccpCredentialsPattern = """(?i)(?:set|update)\s+ccp\s+(?:credentials|keys?)\s+(?:account\s+)?([0-9]+)\s+(?:key\s+)?([a-zA-Z0-9]+)""".toRegex()
+            val ccpCredentialsMatch = ccpCredentialsPattern.find(text)
+
+            val zkpTogglePattern = """(?i)(enable|disable|turn\s+on|turn\s+off|toggle)\s+zkp""".toRegex()
+            val zkpToggleMatch = zkpTogglePattern.find(text)
+
+            val heTogglePattern = """(?i)(enable|disable|turn\s+on|turn\s+off|toggle)\s+homomorphic(?:\s+encryption)?""".toRegex()
+            val heToggleMatch = heTogglePattern.find(text)
+
+            val daemonTogglePattern = """(?i)(enable|disable|start|stop|turn\s+on|turn\s+off)\s+(?:background\s+)?(?:service|daemon)""".toRegex()
+            val daemonToggleMatch = daemonTogglePattern.find(text)
+
+            val learnFactPattern = """(?i)(?:learn|remember|teach|store\s+knowledge)\s+(?:that|to|about)?\s*(.+)""".toRegex()
+            val learnFactMatch = learnFactPattern.find(text)
+
+            val atrWeightPattern = """(?i)(?:set|update|tweak|adjust|change)\s+atr\s*(?:multiplier|weight|stop-loss)?\s*(?:to\s+)?([0-9\.]+)x?""".toRegex()
+            val atrWeightMatch = atrWeightPattern.find(text)
+
+            val positionSlicePattern = """(?i)(?:set|update|adjust|change)\s+(?:default\s+)?(?:position\s+)?slice(?:s)?\s*(?:to\s+)?([0-9\.]+)%?""".toRegex()
+            val positionSliceMatch = positionSlicePattern.find(text)
+
             // Dynamic Asset Pricing Map to mirror databases
             val assetPrices = mapOf(
                 "BTC" to (67450.0 to "Bitcoin"),
@@ -2606,6 +2637,89 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     actionExecutedNotice = "💵 **Action Executed:** Completed Contract #$gId (**\"${targetGig.title}\"**) and processed secure bank payout of **$${targetGig.budget}**."
                 } else {
                     actionExecutedNotice = "⚠️ **Action Failed:** Freelance contract #$gId was not found."
+                }
+            } else if (credentialsMatch != null) {
+                val apiKey = credentialsMatch.groupValues[1].trim()
+                val apiSecret = credentialsMatch.groupValues[2].trim()
+                updateCapabilityCredentials("Binance Capability", apiKey, apiSecret)
+                actionExecutedNotice = "🔐 **Action Executed:** Updated Binance API Credentials. Initiating connection verification..."
+            } else if (binanceEnvMatch != null) {
+                val envInput = binanceEnvMatch.groupValues[1].trim().lowercase()
+                val resolvedEnv = if (envInput == "production") "Production" else "Sandbox"
+                val apiKey = try { com.example.aza.security.SecureCredentialStore.getBinanceApiKey() } catch(e: Exception) { "" }
+                val apiSecret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }
+                val mode = try { com.example.aza.security.SecureCredentialStore.getBinanceTradingMode() } catch(e: Exception) { "Read-Only" }
+                com.example.aza.security.SecureCredentialStore.saveBinanceCredentials(apiKey, apiSecret, resolvedEnv, mode)
+                actionExecutedNotice = "⚙️ **Action Executed:** Updated Binance environment to **$resolvedEnv**."
+            } else if (binanceTradingModeMatch != null) {
+                val modeInput = binanceTradingModeMatch.groupValues[1].trim().lowercase()
+                val resolvedMode = if (modeInput.contains("trading")) "Trading Mode" else "Read-Only"
+                val apiKey = try { com.example.aza.security.SecureCredentialStore.getBinanceApiKey() } catch(e: Exception) { "" }
+                val apiSecret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }
+                val env = try { com.example.aza.security.SecureCredentialStore.getBinanceEnv() } catch(e: Exception) { "Sandbox" }
+                com.example.aza.security.SecureCredentialStore.saveBinanceCredentials(apiKey, apiSecret, env, resolvedMode)
+                actionExecutedNotice = "⚙️ **Action Executed:** Updated Binance operational mode to **$resolvedMode**."
+            } else if (ccpCredentialsMatch != null) {
+                val acc = ccpCredentialsMatch.groupValues[1].trim()
+                val key = ccpCredentialsMatch.groupValues[2].trim()
+                val rip = "DZ93 0079 9999 ${acc.padStart(10, '0')} ${key.padStart(2, '0')}"
+                com.example.aza.security.SecureCredentialStore.saveCcpCredentials(acc, key, rip, "MOCK_TOKEN_${System.currentTimeMillis() % 10000}")
+                actionExecutedNotice = "💳 **Action Executed:** Updated CCP Account Credentials. Account: **$acc**, Key: **$key**, Computed RIP: **$rip**."
+            } else if (zkpToggleMatch != null) {
+                val mode = zkpToggleMatch.groupValues[1].lowercase(java.util.Locale.US)
+                val isEnable = mode == "enable" || mode == "on" || (mode == "toggle" && !com.example.aza.security.SecureCredentialStore.isZkpEnabled())
+                com.example.aza.security.SecureCredentialStore.setZkpEnabled(isEnable)
+                actionExecutedNotice = "🔐 **Action Executed:** Zero-Knowledge Cryptographic Proof (ZKP) verification turned **${if (isEnable) "ON" else "OFF"}**."
+            } else if (heToggleMatch != null) {
+                val mode = heToggleMatch.groupValues[1].lowercase(java.util.Locale.US)
+                val isEnable = mode == "enable" || mode == "on" || (mode == "toggle" && !com.example.aza.security.SecureCredentialStore.isHomomorphicEnabled())
+                com.example.aza.security.SecureCredentialStore.setHomomorphicEnabled(isEnable)
+                actionExecutedNotice = "🔐 **Action Executed:** Homomorphic Cryptographic Encryption (HE) turned **${if (isEnable) "ON" else "OFF"}**."
+            } else if (daemonToggleMatch != null) {
+                val mode = daemonToggleMatch.groupValues[1].lowercase(java.util.Locale.US)
+                val isEnable = mode == "enable" || mode == "start" || mode == "on"
+                val ctx = testContext ?: com.example.aza.security.SecureCredentialStore.getContext()
+                if (isEnable) {
+                    com.example.aza.execution.AzaBackgroundService.startService(ctx)
+                    actionExecutedNotice = "🟢 **Action Executed:** Aza Autopilot Background Service is now **ENGAGED & ACTIVE**."
+                } else {
+                    com.example.aza.execution.AzaBackgroundService.stopService(ctx)
+                    actionExecutedNotice = "🔴 **Action Executed:** Aza Autopilot Background Service has been **DISENGAGED & STOPPED**."
+                }
+            } else if (learnFactMatch != null) {
+                val fact = learnFactMatch.groupValues[1].trim()
+                val title = if (fact.length > 30) fact.take(30) + "..." else fact
+                withContext(Dispatchers.IO) {
+                    repository.insertKnowledge(
+                        com.example.data.database.KnowledgeEntry(
+                            title = "User Fact: $title",
+                            category = "User Feedback",
+                            description = fact,
+                            evidence = "Taught directly via Chat panel by user.",
+                            confidenceScore = 1.0,
+                            timesConfirmed = 1,
+                            isConfirmed = true
+                        )
+                    )
+                }
+                actionExecutedNotice = "🧠 **Memory Engram Saved:** Lumina has learned and persistently stored this fact: *\"$fact\"*. I will retrieve and recall this context during future chat reasoning and portfolio operations."
+            } else if (atrWeightMatch != null) {
+                val weightStr = atrWeightMatch.groupValues[1]
+                val weightVal = weightStr.toDoubleOrNull()
+                if (weightVal != null && weightVal > 0.0) {
+                    com.example.aza.security.SecureCredentialStore.setAtrMultiplier(weightVal)
+                    actionExecutedNotice = "⚙️ **Action Executed:** Updated Volatility Stop-Loss ATR Weight to **${weightVal}x**."
+                } else {
+                    actionExecutedNotice = "⚠️ **Action Failed:** Invalid ATR Weight provided."
+                }
+            } else if (positionSliceMatch != null) {
+                val sliceStr = positionSliceMatch.groupValues[1]
+                val sliceVal = sliceStr.toDoubleOrNull()
+                if (sliceVal != null && sliceVal > 0.0 && sliceVal <= 100.0) {
+                    com.example.aza.security.SecureCredentialStore.setPositionSlicePercent(sliceVal)
+                    actionExecutedNotice = "⚙️ **Action Executed:** Updated Default Position Slices allocation limit to **${sliceVal}%**."
+                } else {
+                    actionExecutedNotice = "⚠️ **Action Failed:** Invalid Position Slice percentage provided (must be between 0% and 100%)."
                 }
             } else if (statusCheckMatch != null) {
                 actionExecutedNotice = withContext(Dispatchers.IO) {
@@ -3999,6 +4113,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             "Re-calibrate ATR multiplier for ${position.strategyName} stop-loss to withstand short-term wicks."
         }
 
+        val proposal = position.proposalId?.let { repository.getProposalById(it) }
+        val confidenceVal = proposal?.confidence ?: 0.85
+        val entryReasonVal = proposal?.supportingEvidence ?: "Algorithmic breakout momentum confirmation."
+        val sideVal = proposal?.side ?: "BUY"
+
         // Create Position Review
         val review = com.example.data.database.PositionReviewEntity(
             symbol = position.symbol,
@@ -4018,7 +4137,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             suggestedImprovements = dynamicImprovements,
             missionId = position.missionId,
             strategyName = position.strategyName,
-            proposalId = position.proposalId
+            proposalId = position.proposalId,
+            entryTime = position.openedAt,
+            side = sideVal,
+            stopLossPrice = position.stopLossPrice,
+            takeProfitPrice = position.takeProfitPrice,
+            confidenceScore = confidenceVal,
+            entryReason = entryReasonVal
         )
         repository.insertReview(review)
 

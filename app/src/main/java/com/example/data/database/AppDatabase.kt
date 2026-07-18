@@ -54,7 +54,7 @@ import kotlinx.coroutines.launch
         GraphNodeEntity::class,
         GraphEdgeEntity::class
     ],
-    version = 25,
+    version = 26,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

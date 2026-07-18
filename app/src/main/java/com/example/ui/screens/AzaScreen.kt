@@ -6547,8 +6547,11 @@ fun ExecutiveControlTabContent(viewModel: AppViewModel) {
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
+                    val slicePercent = try { com.example.aza.security.SecureCredentialStore.getPositionSlicePercent() } catch (e: Exception) { 10.0 }
+                    val formattedSlice = if (slicePercent == slicePercent.toInt().toDouble()) slicePercent.toInt().toString() else String.format(Locale.US, "%.1f", slicePercent)
+
                     Text(
-                        text = "Once confirmed, Lumina manages allocated funds autonomously. High-probability market structural targets are sourced, and trades are completed using 10% risk slices per position directly from this allowance.",
+                        text = "Once confirmed, Lumina manages allocated funds autonomously. High-probability market structural targets are sourced, and trades are completed using ${formattedSlice}% risk slices per position directly from this allowance.",
                         fontSize = 11.sp,
                         lineHeight = 15.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)

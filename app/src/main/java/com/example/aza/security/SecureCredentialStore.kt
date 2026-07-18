@@ -289,4 +289,28 @@ object SecureCredentialStore {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putBoolean("homomorphic_enabled", enabled).apply()
     }
+
+    fun getAtrMultiplier(): Double {
+        val context = getContext()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getFloat("atr_multiplier", 2.0f).toDouble()
+    }
+
+    fun setAtrMultiplier(multiplier: Double) {
+        val context = getContext()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putFloat("atr_multiplier", multiplier.toFloat()).apply()
+    }
+
+    fun getPositionSlicePercent(): Double {
+        val context = getContext()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getFloat("position_slice_percent", 10.0f).toDouble()
+    }
+
+    fun setPositionSlicePercent(percent: Double) {
+        val context = getContext()
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putFloat("position_slice_percent", percent.toFloat()).apply()
+    }
 }

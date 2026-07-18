@@ -1,0 +1,13 @@
+[
+  "backend/tests/test_trading_system.py::TestTradingSystem::test_endpoint_health",
+  "backend/tests/test_trading_system.py::TestTradingSystem::test_laptop_documents",
+  "backend/tests/test_trading_system.py::TestTradingSystem::test_laptop_exchange",
+  "backend/tests/test_trading_system.py::TestTradingSystem::test_laptop_ping",
+  "backend/tests/test_trading_system.py::TestTradingSystem::test_paper_wallet_lifecycle",
+  "backend/tests/test_trading_system.py::TestTradingSystem::test_reproducibility_ledger_reconciliation",
+  "backend/tests/test_trading_system.py::TestTradingSystem::test_single_trade_lifecycle",
+  "backend/tests/test_trading_system.py::test_endpoint_health",
+  "backend/tests/test_trading_system.py::test_paper_wallet_lifecycle",
+  "backend/tests/test_trading_system.py::test_reproducibility_ledger_reconciliation",
+  "backend/tests/test_trading_system.py::test_single_trade_lifecycle"
+]

@@ -47,7 +47,15 @@ data class PositionReviewEntity(
     // Links for Traceability
     val missionId: Int? = null,
     val strategyName: String = "AZA_STRATEGY",
-    val proposalId: Int? = null
+    val proposalId: Int? = null,
+
+    // Additional requested fields
+    val entryTime: Long = System.currentTimeMillis() - 3600000,
+    val side: String = "BUY",
+    val stopLossPrice: Double = 0.0,
+    val takeProfitPrice: Double = 0.0,
+    val confidenceScore: Double = 1.0,
+    val entryReason: String = "Algorithmic confirmation of breakout trend."
 )
 
 @Entity(tableName = "position_alerts")

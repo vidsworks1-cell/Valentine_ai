@@ -17,7 +17,9 @@ data class UnifiedContext(
     val binanceMode: String,
     val tradingBudget: Double,
     val tradingBudgetPeriod: String,
-    val tradingRiskLevel: String
+    val tradingRiskLevel: String,
+    val atrMultiplier: Double,
+    val positionSlicePercent: Double
 ) {
     fun formatToContextBlock(): String {
         val binanceLine = if (isBinanceConnected) {
@@ -26,9 +28,9 @@ data class UnifiedContext(
             "[Binance Integration] NOT CONNECTED / No API keys linked"
         }
         val budgetLine = if (tradingBudget > 0) {
-            "[Lumina Trading Budget] Allocated: $${String.format("%.2f", tradingBudget)} USD ($tradingBudgetPeriod) | Risk Level: $tradingRiskLevel"
+            "[Lumina Trading Budget] Allocated: $${String.format("%.2f", tradingBudget)} USD ($tradingBudgetPeriod) | Risk Level: $tradingRiskLevel | ATR Stop Weight: ${atrMultiplier}x | Position Slice: ${positionSlicePercent}%"
         } else {
-            "[Lumina Trading Budget] No budget currently allocated | Risk Level: $tradingRiskLevel"
+            "[Lumina Trading Budget] No budget currently allocated | Risk Level: $tradingRiskLevel | ATR Stop Weight: ${atrMultiplier}x | Position Slice: ${positionSlicePercent}%"
         }
         return """
             --- COGNITIVE WORLD MODEL ---
@@ -64,6 +66,8 @@ object ContextResolver {
         val budget = try { com.example.aza.security.SecureCredentialStore.getTradingBudget() } catch (e: Exception) { 0.0 }
         val budgetPeriod = try { com.example.aza.security.SecureCredentialStore.getTradingBudgetPeriod() } catch (e: Exception) { "daily" }
         val riskLevel = try { com.example.aza.security.SecureCredentialStore.getTradingRiskLevel() } catch (e: Exception) { "CONSERVATIVE" }
+        val atrMultiplier = try { com.example.aza.security.SecureCredentialStore.getAtrMultiplier() } catch (e: Exception) { 2.0 }
+        val positionSlicePercent = try { com.example.aza.security.SecureCredentialStore.getPositionSlicePercent() } catch (e: Exception) { 10.0 }
 
         return UnifiedContext(
             recentHistory = memory.recentMessages,
@@ -79,7 +83,9 @@ object ContextResolver {
             binanceMode = mode,
             tradingBudget = budget,
             tradingBudgetPeriod = budgetPeriod,
-            tradingRiskLevel = riskLevel
+            tradingRiskLevel = riskLevel,
+            atrMultiplier = atrMultiplier,
+            positionSlicePercent = positionSlicePercent
         )
     }
 }

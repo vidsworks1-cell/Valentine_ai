@@ -1,0 +1,63 @@
+from contextlib import asynccontextmanager
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
+from app.api.api import api_router
+from app.api.endpoints import laptop
+from app.database.session import engine
+from app.database.base import Base
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Performs dynamic base initialization for local environments if using SQLite."""
+    if "sqlite" in settings.DATABASE_URL:
+        # Create tables automatically for ease of local evaluation / development
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    yield
+
+# Initialize FastAPI with metadata and lifespan
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    description="Scalable trading intelligence, risk mitigation and paper simulation engine for Lumina",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    lifespan=lifespan
+)
+
+# Configure CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_HOSTS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Root-level health endpoint
+@app.get("/health", tags=["health"])
+async def root_health_check():
+    """Application-wide root health check, yielding live operational telemetry."""
+    return {
+        "status": "healthy",
+        "app_name": settings.PROJECT_NAME,
+        "version": settings.VERSION
+    }
+
+# Include API v1 router
+app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Include Laptop Agent Capability router under /api
+app.include_router(laptop.router, prefix="/api", tags=["laptop"])
+
+@app.get("/")
+async def root_index():
+    return {
+        "message": f"Welcome to {settings.PROJECT_NAME}",
+        "docs_url": "/docs",
+        "health_url": "/health"
+    }
+
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
