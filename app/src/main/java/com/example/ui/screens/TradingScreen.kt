@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import com.example.data.database.PortfolioAsset
 import com.example.viewmodel.AppViewModel
 import java.util.Locale
@@ -3405,6 +3406,414 @@ fun TradingDiagnosticsDashboard(
                                 color = Color.White,
                                 modifier = Modifier.padding(vertical = 2.dp)
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Contabo FastAPI VPS Cloud Backend integration
+        item {
+            Text(
+                "CONTABO VPS CLOUD API HUB",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        item {
+            val contaboStatus by viewModel.contaboHealthStatus.collectAsState()
+            val contaboDetails by viewModel.contaboHealthDetails.collectAsState()
+            val contaboWallet by viewModel.contaboPaperWallet.collectAsState()
+            val contaboRisk by viewModel.contaboRiskProfile.collectAsState()
+            val contaboTradesList by viewModel.contaboTrades.collectAsState()
+            val contaboLogsList by viewModel.contaboAuditLogs.collectAsState()
+            val isContaboLoading by viewModel.isContaboLoading.collectAsState()
+
+            var paperSymbol by remember { mutableStateOf("BTCUSDT") }
+            var paperSide by remember { mutableStateOf("BUY") }
+            var paperPrice by remember { mutableStateOf("67000.0") }
+            var paperQty by remember { mutableStateOf("0.12") } // Defaulting to user's requested 12% default slice
+            var paperStopLoss by remember { mutableStateOf("65500.0") }
+            var paperTakeProfit by remember { mutableStateOf("70000.0") }
+
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("contabo_vps_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // Title and status badge
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Cloud,
+                                contentDescription = "VPS Hub",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Contabo FastAPI Server",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Status indicator Badge
+                        val badgeColor = when (contaboStatus) {
+                            "HEALTHY" -> Color(0xFF2E7D32)
+                            "ERROR" -> Color(0xFFD32F2F)
+                            else -> Color(0xFFEF6C00)
+                        }
+                        Badge(containerColor = badgeColor.copy(alpha = 0.12f), contentColor = badgeColor) {
+                            Text(
+                                contaboStatus,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Base API Endpoint: ${com.example.BuildConfig.CONTABO_VPS_URL}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (contaboDetails.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = contaboDetails,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (contaboStatus == "HEALTHY") Color(0xFF2E7D32) else Color(0xFFD32F2F),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Re-check / Refresh button
+                    Button(
+                        onClick = { viewModel.checkContaboHealthStatus() },
+                        enabled = !isContaboLoading,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("contabo_sync_button"),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        if (isContaboLoading) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(16.dp).padding(end = 8.dp)
+                            )
+                            Text("Pinging VPS API...", style = MaterialTheme.typography.labelMedium)
+                        } else {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Sync,
+                                contentDescription = "Sync",
+                                modifier = Modifier.size(16.dp).padding(end = 6.dp)
+                            )
+                            Text("Re-verify Server Health", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+
+                    // If we are healthy, render trading / risk / audit log operations
+                    if (contaboStatus == "HEALTHY") {
+                        Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+                        // A. Paper Wallet details
+                        Text(
+                            "PAPER TRADING WALLET",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text("Account ID", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(contaboWallet?.accountId ?: "default_account", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("Unrealized Credit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        val balance = contaboWallet?.balance ?: 100000.0
+                                        Text("$${String.format(Locale.US, "%,.2f", balance)} USD", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { viewModel.adjustContaboPaperWalletBalance(10000.0) },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text("+10k Credits", fontSize = 10.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { viewModel.adjustContaboPaperWalletBalance(-10000.0) },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text("-10k Credits", fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        // B. Risk Profile details
+                        Text(
+                            "RISK CONTROL PROFILE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column {
+                                        Text("Strategy", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(contaboRisk?.strategyName ?: "AZA_STRATEGY", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    }
+                                    Column {
+                                        Text("Max Drawdown", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("${((contaboRisk?.maxDrawdown ?: 0.10) * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("Max Risk/Trade", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("${((contaboRisk?.maxRiskPerTrade ?: 0.02) * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
+                        // C. Rapid Manual Paper Trade form
+                        Text(
+                            "VPS PAPER ORDER PLACEMENT",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = paperSymbol,
+                                onValueChange = { paperSymbol = it },
+                                label = { Text("Symbol", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1.2f).testTag("paper_symbol_input"),
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall
+                            )
+                            OutlinedTextField(
+                                value = paperQty,
+                                onValueChange = { paperQty = it },
+                                label = { Text("Size (Slices)", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f).testTag("paper_qty_input"),
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = paperPrice,
+                                onValueChange = { paperPrice = it },
+                                label = { Text("Entry Price", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1f).testTag("paper_price_input"),
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                            OutlinedTextField(
+                                value = paperStopLoss,
+                                onValueChange = { paperStopLoss = it },
+                                label = { Text("Stop Loss (1.75x)", fontSize = 10.sp) },
+                                modifier = Modifier.weight(1.1f).testTag("paper_sl_input"),
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { paperSide = "BUY" },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (paperSide == "BUY") Color(0xFF2E7D32) else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (paperSide == "BUY") Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                Text("BUY")
+                            }
+                            Button(
+                                onClick = { paperSide = "SELL" },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (paperSide == "SELL") Color(0xFFD32F2F) else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (paperSide == "SELL") Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                Text("SELL")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val sym = paperSymbol.trim().uppercase()
+                                val qty = paperQty.toDoubleOrNull() ?: 0.12
+                                val price = paperPrice.toDoubleOrNull() ?: 67000.0
+                                val sl = paperStopLoss.toDoubleOrNull() ?: 65500.0
+                                val tp = paperTakeProfit.toDoubleOrNull() ?: 70000.0
+                                viewModel.executeContaboPaperTrade(
+                                    symbol = sym,
+                                    side = paperSide,
+                                    entryPrice = price,
+                                    positionSize = qty,
+                                    stopLoss = sl,
+                                    takeProfit = tp
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = if (paperSide == "BUY") Color(0xFF2E7D32) else Color(0xFFD32F2F)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("paper_execute_button")
+                        ) {
+                            Text("Dispatch VPS Paper $paperSide Order", style = MaterialTheme.typography.labelMedium)
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // D. Live Paper Trades from VPS
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "ACTIVE VPS TRADES (${contaboTradesList.size})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        if (contaboTradesList.isEmpty()) {
+                            Text(
+                                "No paper trades logged on Contabo VPS yet. Trigger a paper trade above.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        } else {
+                            contaboTradesList.take(5).forEach { trade ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Badge(containerColor = if (trade.side == "BUY") Color(0xFFE8F5E9) else Color(0xFFFFF3E0)) {
+                                                    Text(trade.side, color = if (trade.side == "BUY") Color(0xFF2E7D32) else Color(0xFFEF6C00), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                                                }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(trade.symbol, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                            }
+                                            Text("Outcome: ${trade.outcome ?: "ACTIVE"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Entry Price: $${trade.entryPrice}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Slices Qty: ${trade.positionSize}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // E. Audit logs
+                        Text(
+                            "VPS REMOTE AUDIT LOGS (${contaboLogsList.size})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                if (contaboLogsList.isEmpty()) {
+                                    Text(
+                                        "No VPS audit logs found.",
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                        color = Color.LightGray
+                                    )
+                                } else {
+                                    contaboLogsList.take(6).forEach { log ->
+                                        Text(
+                                            text = "[${log.timestamp.take(19)}] ${log.level}: ${log.message}",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                            color = when (log.level) {
+                                                "ERROR" -> Color(0xFFE57373)
+                                                "WARNING" -> Color(0xFFFFB74D)
+                                                else -> Color(0xFF81C784)
+                                            },
+                                            modifier = Modifier.padding(vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

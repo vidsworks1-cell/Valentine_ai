@@ -12,6 +12,64 @@ import kotlinx.coroutines.withContext
 
 class AppRepository(private val db: AppDatabase) {
 
+    // --- Contabo VPS FastAPI Integration ---
+    private val contaboService: com.example.data.api.ContaboApiService by lazy {
+        val url = try {
+            com.example.BuildConfig.CONTABO_VPS_URL
+        } catch (e: Exception) {
+            "https://api.example.com/"
+        }
+        com.example.data.api.ContaboRetrofitClient.buildService(url)
+    }
+
+    suspend fun checkContaboHealth(): com.example.data.api.ContaboHealthResponse = withContext(Dispatchers.IO) {
+        contaboService.checkHealth()
+    }
+
+    suspend fun getContaboTrades(skip: Int = 0, limit: Int = 100): List<com.example.data.api.ContaboTrade> = withContext(Dispatchers.IO) {
+        contaboService.getTrades(skip, limit)
+    }
+
+    suspend fun getContaboTradeById(tradeId: Int): com.example.data.api.ContaboTrade = withContext(Dispatchers.IO) {
+        contaboService.getTradeById(tradeId)
+    }
+
+    suspend fun createContaboTrade(trade: com.example.data.api.ContaboTradeCreate): com.example.data.api.ContaboTrade = withContext(Dispatchers.IO) {
+        contaboService.createTrade(trade)
+    }
+
+    suspend fun updateContaboTrade(tradeId: Int, update: com.example.data.api.ContaboTradeUpdate): com.example.data.api.ContaboTrade = withContext(Dispatchers.IO) {
+        contaboService.updateTrade(tradeId, update)
+    }
+
+    suspend fun getContaboPaperWallet(accountId: String): com.example.data.api.ContaboPaperWallet = withContext(Dispatchers.IO) {
+        contaboService.getPaperWallet(accountId)
+    }
+
+    suspend fun createContaboPaperWallet(accountId: String, initialBalance: Double = 100000.0): com.example.data.api.ContaboPaperWallet = withContext(Dispatchers.IO) {
+        contaboService.createPaperWallet(accountId, initialBalance)
+    }
+
+    suspend fun adjustContaboPaperWallet(accountId: String, amountChange: Double): com.example.data.api.ContaboPaperWallet = withContext(Dispatchers.IO) {
+        contaboService.adjustPaperWallet(accountId, amountChange)
+    }
+
+    suspend fun getContaboRiskProfile(strategyName: String): com.example.data.api.ContaboRiskProfile = withContext(Dispatchers.IO) {
+        contaboService.getRiskProfile(strategyName)
+    }
+
+    suspend fun createOrUpdateContaboRiskProfile(profile: com.example.data.api.ContaboRiskProfileCreate): com.example.data.api.ContaboRiskProfile = withContext(Dispatchers.IO) {
+        contaboService.createOrUpdateRiskProfile(profile)
+    }
+
+    suspend fun getContaboAuditLogs(skip: Int = 0, limit: Int = 100): List<com.example.data.api.ContaboAuditLog> = withContext(Dispatchers.IO) {
+        contaboService.getAuditLogs(skip, limit)
+    }
+
+    suspend fun createContaboAuditLog(log: com.example.data.api.ContaboAuditLogCreate): com.example.data.api.ContaboAuditLog = withContext(Dispatchers.IO) {
+        contaboService.createAuditLog(log)
+    }
+
     // DAOs
     private val portfolioDao = db.portfolioDao()
     private val contentDao = db.contentDao()

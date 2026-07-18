@@ -124,6 +124,157 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     val allAlerts: StateFlow<List<com.example.data.database.PositionAlertEntity>> = repository.allAlerts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // --- Contabo VPS Integration States ---
+    private val _contaboHealthStatus = MutableStateFlow("UNKNOWN")
+    val contaboHealthStatus = _contaboHealthStatus.asStateFlow()
+
+    private val _contaboHealthDetails = MutableStateFlow("")
+    val contaboHealthDetails = _contaboHealthDetails.asStateFlow()
+
+    private val _contaboTrades = MutableStateFlow<List<com.example.data.api.ContaboTrade>>(emptyList())
+    val contaboTrades = _contaboTrades.asStateFlow()
+
+    private val _contaboPaperWallet = MutableStateFlow<com.example.data.api.ContaboPaperWallet?>(null)
+    val contaboPaperWallet = _contaboPaperWallet.asStateFlow()
+
+    private val _contaboRiskProfile = MutableStateFlow<com.example.data.api.ContaboRiskProfile?>(null)
+    val contaboRiskProfile = _contaboRiskProfile.asStateFlow()
+
+    private val _contaboAuditLogs = MutableStateFlow<List<com.example.data.api.ContaboAuditLog>>(emptyList())
+    val contaboAuditLogs = _contaboAuditLogs.asStateFlow()
+
+    private val _isContaboLoading = MutableStateFlow(false)
+    val isContaboLoading = _isContaboLoading.asStateFlow()
+
+    fun checkContaboHealthStatus() {
+        viewModelScope.launch {
+            _isContaboLoading.value = true
+            try {
+                val response = repository.checkContaboHealth()
+                _contaboHealthStatus.value = "HEALTHY"
+                _contaboHealthDetails.value = "Name: ${response.name} | Version: ${response.version}"
+                // After health check succeeds, fetch remaining data from other endpoints
+                fetchContaboData()
+            } catch (e: Exception) {
+                _contaboHealthStatus.value = "ERROR"
+                _contaboHealthDetails.value = e.localizedMessage ?: "Connection failed"
+            } finally {
+                _isContaboLoading.value = false
+            }
+        }
+    }
+
+    private fun fetchContaboData() {
+        viewModelScope.launch {
+            try {
+                val trades = repository.getContaboTrades()
+                _contaboTrades.value = trades
+            } catch (e: Exception) {
+                // Ignore silently
+            }
+            try {
+                val wallet = repository.getContaboPaperWallet("default_account")
+                _contaboPaperWallet.value = wallet
+            } catch (e: Exception) {
+                // If it fails with 404/not found, let's create the default wallet configuration
+                try {
+                    val newWallet = repository.createContaboPaperWallet("default_account", 100000.0)
+                    _contaboPaperWallet.value = newWallet
+                } catch (ex: Exception) {
+                    // Ignore
+                }
+            }
+            try {
+                val risk = repository.getContaboRiskProfile("AZA_STRATEGY")
+                _contaboRiskProfile.value = risk
+            } catch (e: Exception) {
+                // If it fails with 404, let's establish a default risk cap configuration
+                try {
+                    val newRisk = repository.createOrUpdateContaboRiskProfile(
+                        com.example.data.api.ContaboRiskProfileCreate(strategyName = "AZA_STRATEGY")
+                    )
+                    _contaboRiskProfile.value = newRisk
+                } catch (ex: Exception) {
+                    // Ignore
+                }
+            }
+            try {
+                val logs = repository.getContaboAuditLogs()
+                _contaboAuditLogs.value = logs
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
+    fun executeContaboPaperTrade(symbol: String, side: String, entryPrice: Double, positionSize: Double, stopLoss: Double, takeProfit: Double, strategyUsed: String = "AZA_STRATEGY") {
+        viewModelScope.launch {
+            _isContaboLoading.value = true
+            try {
+                val createdTrade = repository.createContaboTrade(
+                    com.example.data.api.ContaboTradeCreate(
+                        symbol = symbol,
+                        side = side,
+                        entryPrice = entryPrice,
+                        positionSize = positionSize,
+                        stopLoss = stopLoss,
+                        takeProfit = takeProfit,
+                        strategyUsed = strategyUsed,
+                        marketRegime = "TREND",
+                        confidenceScore = 0.95,
+                        entryReason = "App manually initiated paper trade",
+                        indicators = "{}"
+                    )
+                )
+                // Refresh trades list
+                _contaboTrades.value = repository.getContaboTrades()
+                // Adjust paper wallet balance
+                val cost = entryPrice * positionSize
+                repository.adjustContaboPaperWallet("default_account", if (side == "BUY") -cost else cost)
+                _contaboPaperWallet.value = repository.getContaboPaperWallet("default_account")
+                // Log audit
+                repository.createContaboAuditLog(
+                    com.example.data.api.ContaboAuditLogCreate(
+                        level = "INFO",
+                        category = "TRADING",
+                        message = "Manually created paper trade for $symbol ($side) on Contabo VPS",
+                        tradeId = createdTrade.id
+                    )
+                )
+                _contaboAuditLogs.value = repository.getContaboAuditLogs()
+            } catch (e: Exception) {
+                repository.insertChatMessage(com.example.data.database.ChatMessage(
+                    sender = "Lumina",
+                    text = "⚠️ **Contabo Paper Trade Failed:** ${e.localizedMessage ?: "Unknown error"}"
+                ))
+            } finally {
+                _isContaboLoading.value = false
+            }
+        }
+    }
+
+    fun adjustContaboPaperWalletBalance(amountChange: Double) {
+        viewModelScope.launch {
+            _isContaboLoading.value = true
+            try {
+                val updatedWallet = repository.adjustContaboPaperWallet("default_account", amountChange)
+                _contaboPaperWallet.value = updatedWallet
+                repository.createContaboAuditLog(
+                    com.example.data.api.ContaboAuditLogCreate(
+                        level = "INFO",
+                        category = "WALLET",
+                        message = "Manually adjusted paper wallet balance by $amountChange"
+                    )
+                )
+                _contaboAuditLogs.value = repository.getContaboAuditLogs()
+            } catch (e: Exception) {
+                // Ignore
+            } finally {
+                _isContaboLoading.value = false
+            }
+        }
+    }
+
     fun insertExportedReport(report: com.example.data.database.ExportedReportHistory) {
         viewModelScope.launch {
             repository.insertExportedReport(report)
@@ -1730,6 +1881,9 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     val registeredAgents = planningEngine.registry.getAllAgents()
 
     init {
+        // Trigger health check for the Contabo FastAPI VPS backend on startup
+        checkContaboHealthStatus()
+
         // Wire up dynamic estimation parameters to safety gates
         scheduler.dynamicExponentialEstimator = dynamicExponentialEstimator
 
