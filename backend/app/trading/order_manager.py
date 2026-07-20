@@ -3,7 +3,7 @@ import logging
 import json
 from typing import Dict, Any, List, Optional
 from app.risk.evaluator import RiskEvaluator
-from app.database.session import SessionLocal
+from app.database.session import AsyncSessionLocal
 from app.services.trading_service import TradingService
 from app.services.paper_trading_service import PaperTradingService
 from app.services.binance_connector import BinanceConnector
@@ -36,7 +36,7 @@ class OrderManager:
         allowed, reason = await scheduler.is_trading_enabled()
         if not allowed:
             logger.warning(f"⚠️ ORDER PIPELINE REJECTED: {reason}")
-            async with SessionLocal() as db:
+            async with AsyncSessionLocal() as db:
                 await AuditService.create_audit_log(db, AuditLogCreate(
                     level="WARNING",
                     category="SYSTEM",
@@ -45,7 +45,7 @@ class OrderManager:
                 ))
             return
 
-        async with SessionLocal() as db:
+        async with AsyncSessionLocal() as db:
             try:
                 trading_mode = scheduler.global_trading_mode
                 
@@ -180,4 +180,4 @@ class OrderManager:
 
             except Exception as e:
                 logger.error(f"Failed to execute trade proposal in database: {e}")
-                db.rollback()
+                await db.rollback()

@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from app.workers.price_cache import PriceCache
-from app.database.session import SessionLocal
+from app.database.session import AsyncSessionLocal
 from app.services.trading_service import TradingService
 from app.services.paper_trading_service import PaperTradingService
 from app.api.schemas import TradeUpdate, AuditLogCreate
@@ -192,7 +192,7 @@ class PositionManager:
             
             if "error" in binance_res or "msg" in binance_res and binance_res.get("error"):
                 logger.error(f"❌ BINANCE PARTIAL CLOSE ORDER FAILED: {binance_res}")
-                async with SessionLocal() as db:
+                async with AsyncSessionLocal() as db:
                     await AuditService.create_audit_log(db, AuditLogCreate(
                         level="ERROR",
                         category="TRADING",
@@ -220,7 +220,7 @@ class PositionManager:
             
         outcome = "WIN" if pnl > 0 else "LOSS"
         
-        async with SessionLocal() as db:
+        async with AsyncSessionLocal() as db:
             try:
                 # 1. Update Trade Record in DB
                 trade = await TradingService.get_trade_by_id(db, trade_id)
@@ -250,7 +250,7 @@ class PositionManager:
                 
             except Exception as e:
                 logger.error(f"Error finalizing partial trade exit in DB: {e}")
-                db.rollback()
+                await db.rollback()
 
     async def _close_position(self, trade_id: int, exit_price: float, outcome_type: str):
         """Finalizes the trade, logs audit, and updates the DB."""
@@ -285,7 +285,7 @@ class PositionManager:
             
             if "error" in binance_res or "msg" in binance_res and binance_res.get("error"):
                 logger.error(f"❌ BINANCE CLOSE ORDER FAILED: {binance_res}")
-                async with SessionLocal() as db:
+                async with AsyncSessionLocal() as db:
                     await AuditService.create_audit_log(db, AuditLogCreate(
                         level="ERROR",
                         category="TRADING",
@@ -316,7 +316,7 @@ class PositionManager:
             
         outcome = "WIN" if pnl > 0 else "LOSS"
         
-        async with SessionLocal() as db:
+        async with AsyncSessionLocal() as db:
             try:
                 # 1. Update Trade Record in DB
                 trade_update = TradeUpdate(
@@ -344,7 +344,7 @@ class PositionManager:
                 
             except Exception as e:
                 logger.error(f"Error finalizing trade exit in DB: {e}")
-                db.rollback()
+                await db.rollback()
                 
     async def trigger_emergency_liquidation(self) -> int:
         """Emergency Protection trigger: Liquidates all active positions instantly and stops entries."""
@@ -352,7 +352,7 @@ class PositionManager:
         scheduler = await LayeredSchedulerManager.get_instance()
         scheduler.emergency_stop_active = True
         
-        async with SessionLocal() as db:
+        async with AsyncSessionLocal() as db:
             await AuditService.create_audit_log(db, AuditLogCreate(
                 level="CRITICAL",
                 category="SYSTEM",

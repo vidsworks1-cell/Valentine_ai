@@ -3,7 +3,7 @@ import random
 import logging
 import time
 from app.workers.price_cache import PriceCache
-from app.database.session import SessionLocal
+from app.database.session import AsyncSessionLocal
 from app.services.audit_service import AuditService
 from app.api.schemas import AuditLogCreate
 
@@ -48,7 +48,7 @@ class BinanceWebSocketWorker:
                     logger.warning("⚠️ Binance WebSocket connection lost! Simulating disconnection and self-healing...")
                     cache.connection_status = "DISCONNECTED"
                     
-                    async with SessionLocal() as db:
+                    async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
                             category="SYSTEM",
@@ -68,7 +68,7 @@ class BinanceWebSocketWorker:
                     cache.connection_status = "CONNECTED"
                     self._retry_count += 1
                     logger.info("🟢 Binance WebSocket connection successfully re-established.")
-                    async with SessionLocal() as db:
+                    async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="INFO",
                             category="SYSTEM",
