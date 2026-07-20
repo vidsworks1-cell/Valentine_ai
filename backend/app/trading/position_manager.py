@@ -192,13 +192,16 @@ class PositionManager:
             
             if "error" in binance_res or "msg" in binance_res and binance_res.get("error"):
                 logger.error(f"❌ BINANCE PARTIAL CLOSE ORDER FAILED: {binance_res}")
-                async with AsyncSessionLocal() as db:
-                    await AuditService.create_audit_log(db, AuditLogCreate(
-                        level="ERROR",
-                        category="TRADING",
-                        message=f"Binance partial close order failed for {symbol}",
-                        details=f"Error: {binance_res}"
-                    ))
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="ERROR",
+                            category="TRADING",
+                            message=f"Binance partial close order failed for {symbol}",
+                            details=f"Error: {binance_res}"
+                        ))
+                except Exception as ae:
+                    logger.error(f"Failed to log partial close failure audit event: {ae}")
                 return
                 
             logger.info(f"Binance partial close order placed successfully: {binance_res}")
@@ -240,13 +243,16 @@ class PositionManager:
                     await PaperTradingService.adjust_balance(db, "lumina_default", pnl)
                 
                 # 3. Save Audit Log
-                await AuditService.create_audit_log(db, AuditLogCreate(
-                    level="INFO",
-                    category="TRADING",
-                    message=f"Lumina VPS Partial Take-Profit Hit on Trade {trade_id}",
-                    details=f"Stage: {stage_label}. Closed {close_size} units at ${exit_price}. Realized P&L: ${round(pnl, 2)} ({outcome}). Remaining: {round(pos['position_size'] - close_size, 4)} units.",
-                    trade_id=trade_id
-                ))
+                try:
+                    await AuditService.create_audit_log(db, AuditLogCreate(
+                        level="INFO",
+                        category="TRADING",
+                        message=f"Lumina VPS Partial Take-Profit Hit on Trade {trade_id}",
+                        details=f"Stage: {stage_label}. Closed {close_size} units at ${exit_price}. Realized P&L: ${round(pnl, 2)} ({outcome}). Remaining: {round(pos['position_size'] - close_size, 4)} units.",
+                        trade_id=trade_id
+                    ))
+                except Exception as ae:
+                    logger.error(f"Failed to log partial take-profit hit audit event: {ae}")
                 
             except Exception as e:
                 logger.error(f"Error finalizing partial trade exit in DB: {e}")
@@ -285,13 +291,16 @@ class PositionManager:
             
             if "error" in binance_res or "msg" in binance_res and binance_res.get("error"):
                 logger.error(f"❌ BINANCE CLOSE ORDER FAILED: {binance_res}")
-                async with AsyncSessionLocal() as db:
-                    await AuditService.create_audit_log(db, AuditLogCreate(
-                        level="ERROR",
-                        category="TRADING",
-                        message=f"Binance closing order failed for {symbol}",
-                        details=f"Error response: {binance_res}"
-                    ))
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="ERROR",
+                            category="TRADING",
+                            message=f"Binance closing order failed for {symbol}",
+                            details=f"Error response: {binance_res}"
+                        ))
+                except Exception as ae:
+                    logger.error(f"Failed to log close order failure audit event: {ae}")
                 # Put position back into active tracking so we can try again or alert operator
                 self._positions[trade_id] = pos
                 return
@@ -334,13 +343,16 @@ class PositionManager:
                         await PaperTradingService.adjust_balance(db, "lumina_default", pnl)
                 
                 # 3. Save Audit Log
-                await AuditService.create_audit_log(db, AuditLogCreate(
-                    level="INFO",
-                    category="TRADING",
-                    message=f"Lumina VPS Closed Position {trade_id} ({outcome_type})",
-                    details=f"Exit Price: {exit_price}. P&L: ${round(pnl, 2)} ({outcome}).",
-                    trade_id=trade_id
-                ))
+                try:
+                    await AuditService.create_audit_log(db, AuditLogCreate(
+                        level="INFO",
+                        category="TRADING",
+                        message=f"Lumina VPS Closed Position {trade_id} ({outcome_type})",
+                        details=f"Exit Price: {exit_price}. P&L: ${round(pnl, 2)} ({outcome}).",
+                        trade_id=trade_id
+                    ))
+                except Exception as ae:
+                    logger.error(f"Failed to log close position success audit event: {ae}")
                 
             except Exception as e:
                 logger.error(f"Error finalizing trade exit in DB: {e}")
@@ -352,13 +364,16 @@ class PositionManager:
         scheduler = await LayeredSchedulerManager.get_instance()
         scheduler.emergency_stop_active = True
         
-        async with AsyncSessionLocal() as db:
-            await AuditService.create_audit_log(db, AuditLogCreate(
-                level="CRITICAL",
-                category="SYSTEM",
-                message="EMERGENCY STOP TRIGGERED BY OPERATOR",
-                details="Emergency liquidation initiated. All new trading opportunities are now blocked."
-            ))
+        try:
+            async with AsyncSessionLocal() as db:
+                await AuditService.create_audit_log(db, AuditLogCreate(
+                    level="CRITICAL",
+                    category="SYSTEM",
+                    message="EMERGENCY STOP TRIGGERED BY OPERATOR",
+                    details="Emergency liquidation initiated. All new trading opportunities are now blocked."
+                ))
+        except Exception as ae:
+            logger.error(f"Failed to log emergency stop audit event: {ae}")
 
         active_ids = list(self._positions.keys())
         cache = await PriceCache.get_instance()

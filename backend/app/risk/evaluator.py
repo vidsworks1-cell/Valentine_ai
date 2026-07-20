@@ -32,7 +32,9 @@ class RiskEvaluator:
         # 3. Dynamic unit size based on ATR stop-loss distance (e.g. 1.5 * ATR buffer)
         risk_per_unit = atr * 1.5
         allowed_risk_amt = balance * adjusted_risk_pct
-        position_size = round(allowed_risk_amt / risk_per_unit, 4)
+        import math
+        # Round down (floor) to 4 decimal places to prevent floating-point rounding up from exceeding max risk
+        position_size = math.floor((allowed_risk_amt / risk_per_unit) * 10000) / 10000.0
         
         logger.info(f"📊 ATR Position Sizing: Entry={entry_price}, ATR={atr}, Risk%={adjusted_risk_pct*100:.2f}%, AllowedRisk=${allowed_risk_amt:.2f}, Size={position_size}")
         return max(position_size, 0.0001)
@@ -56,7 +58,18 @@ class RiskEvaluator:
             max_allowed_risk = balance * max_risk_pct
             
             if total_risk_amt > max_allowed_risk:
-                logger.warning(f"Order exceeds max risk allocation: {total_risk_amt} > {max_allowed_risk}")
-                return False
+                excess = total_risk_amt - max_allowed_risk
+                tolerance = max(1.0, max_allowed_risk * 0.001)
+                if excess <= tolerance:
+                    import math
+                    clamped_size = max_allowed_risk / risk_per_unit
+                    clamped_size = math.floor(clamped_size * 10000) / 10000.0
+                    logger.info(f"Clamping position size from {size} to {clamped_size} to satisfy risk constraint (excess was {excess:.6f} <= {tolerance:.6f})")
+                    order["position_size"] = clamped_size
+                    total_risk_amt = risk_per_unit * clamped_size
+                
+                if total_risk_amt > max_allowed_risk:
+                    logger.warning(f"Order exceeds max risk allocation: {total_risk_amt} > {max_allowed_risk}")
+                    return False
                 
         return True

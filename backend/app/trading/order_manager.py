@@ -36,13 +36,16 @@ class OrderManager:
         allowed, reason = await scheduler.is_trading_enabled()
         if not allowed:
             logger.warning(f"⚠️ ORDER PIPELINE REJECTED: {reason}")
-            async with AsyncSessionLocal() as db:
-                await AuditService.create_audit_log(db, AuditLogCreate(
-                    level="WARNING",
-                    category="SYSTEM",
-                    message=f"Order pipeline blocked for {opportunity['symbol']}",
-                    details=f"Reason: {reason}. Strategy {opportunity['strategy_used']} signals suppressed."
-                ))
+            try:
+                async with AsyncSessionLocal() as db:
+                    await AuditService.create_audit_log(db, AuditLogCreate(
+                        level="WARNING",
+                        category="SYSTEM",
+                        message=f"Order pipeline blocked for {opportunity['symbol']}",
+                        details=f"Reason: {reason}. Strategy {opportunity['strategy_used']} signals suppressed."
+                    ))
+            except Exception as ae:
+                logger.error(f"Failed to log blocked order pipeline audit event: {ae}")
             return
 
         async with AsyncSessionLocal() as db:
@@ -83,12 +86,15 @@ class OrderManager:
                 
                 if not passed_risk:
                     logger.warning(f"❌ RISK REJECTED: Opportunity for {opportunity['symbol']} failed Layer 1 Risk check.")
-                    await AuditService.create_audit_log(db, AuditLogCreate(
-                        level="WARNING",
-                        category="RISK",
-                        message=f"Opportunity {opportunity['strategy_used']} on {opportunity['symbol']} REJECTED by risk engine.",
-                        details=f"Price: {price}, SL: {stop_loss}, Required balance risk limits exceeded."
-                    ))
+                    try:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="WARNING",
+                            category="RISK",
+                            message=f"Opportunity {opportunity['strategy_used']} on {opportunity['symbol']} REJECTED by risk engine.",
+                            details=f"Price: {price}, SL: {stop_loss}, Required balance risk limits exceeded."
+                        ))
+                    except Exception as ae:
+                        logger.error(f"Failed to log risk rejected audit event: {ae}")
                     return
 
                 # If we are in TESTNET or LIVE mode, we place the real order on Binance first!
@@ -105,12 +111,15 @@ class OrderManager:
                     
                     if "error" in binance_res or "msg" in binance_res and binance_res.get("error"):
                         logger.error(f"❌ BINANCE ORDER PLACEMENT FAILED: {binance_res}")
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="ERROR",
-                            category="TRADING",
-                            message=f"Binance order placement failed for {opportunity['symbol']}",
-                            details=f"Error response: {binance_res}"
-                        ))
+                        try:
+                            await AuditService.create_audit_log(db, AuditLogCreate(
+                                level="ERROR",
+                                category="TRADING",
+                                message=f"Binance order placement failed for {opportunity['symbol']}",
+                                details=f"Error response: {binance_res}"
+                            ))
+                        except Exception as ae:
+                            logger.error(f"Failed to log binance placement failure audit event: {ae}")
                         return
                     
                     logger.info(f"Binance order placed successfully: {binance_res}")
@@ -149,13 +158,16 @@ class OrderManager:
                 
                 logger.info(f"🟢 TRADE EXECUTED SUCCESSFULLY: {trade.id} | {trade.symbol} | size: {trade.position_size}")
                 
-                await AuditService.create_audit_log(db, AuditLogCreate(
-                    level="INFO",
-                    category="TRADING",
-                    message=f"Lumina VPS Executed Order {trade.id} ({trade.side} {trade.symbol})",
-                    details=f"Entered at {trade.entry_price}. Position size: {trade.position_size}. Strategy: {trade.strategy_used}.",
-                    trade_id=trade.id
-                ))
+                try:
+                    await AuditService.create_audit_log(db, AuditLogCreate(
+                        level="INFO",
+                        category="TRADING",
+                        message=f"Lumina VPS Executed Order {trade.id} ({trade.side} {trade.symbol})",
+                        details=f"Entered at {trade.entry_price}. Position size: {trade.position_size}. Strategy: {trade.strategy_used}.",
+                        trade_id=trade.id
+                    ))
+                except Exception as ae:
+                    logger.error(f"Failed to log order execution audit event: {ae}")
 
                 # Deduct margin/fee simulated balance only for paper
                 if trading_mode not in ["TESTNET", "LIVE"]:

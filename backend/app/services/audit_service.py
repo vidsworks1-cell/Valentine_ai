@@ -7,6 +7,18 @@ class AuditService:
     """Service handling system, indicator, and risk mitigation event logs."""
 
     @staticmethod
+    async def create_audit_log(db: AsyncSession, log_in: AuditLogCreate):
+        """Helper to log event using an AuditLogCreate schema."""
+        return await AuditService.log_event(
+            db=db,
+            message=log_in.message,
+            category=log_in.category,
+            level=log_in.level,
+            details=log_in.details,
+            trade_id=log_in.trade_id
+        )
+
+    @staticmethod
     async def get_logs(db: AsyncSession, skip: int = 0, limit: int = 100):
         """Fetch audit trail events chronologically descending."""
         query = select(AuditLog).order_by(AuditLog.timestamp.desc()).offset(skip).limit(limit)

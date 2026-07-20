@@ -48,13 +48,16 @@ class BinanceWebSocketWorker:
                     logger.warning("⚠️ Binance WebSocket connection lost! Simulating disconnection and self-healing...")
                     cache.connection_status = "DISCONNECTED"
                     
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="WARNING",
-                            category="SYSTEM",
-                            message="Binance WebSocket disconnected (stale channel detected)",
-                            details="Simulating network jitter on Contabo VPS. Attempting automatic reconnection sequence..."
-                        ))
+                    try:
+                        async with AsyncSessionLocal() as db:
+                            await AuditService.create_audit_log(db, AuditLogCreate(
+                                level="WARNING",
+                                category="SYSTEM",
+                                message="Binance WebSocket disconnected (stale channel detected)",
+                                details="Simulating network jitter on Contabo VPS. Attempting automatic reconnection sequence..."
+                            ))
+                    except Exception as ae:
+                        logger.error(f"Failed to log WebSocket disconnection audit event: {ae}")
                     
                     # Wait in DISCONNECTED state
                     await asyncio.sleep(2.0)
@@ -68,13 +71,16 @@ class BinanceWebSocketWorker:
                     cache.connection_status = "CONNECTED"
                     self._retry_count += 1
                     logger.info("🟢 Binance WebSocket connection successfully re-established.")
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="INFO",
-                            category="SYSTEM",
-                            message="Binance WebSocket reconnected successfully",
-                            details=f"Channel restored after temporary failover. Reconnection took 3.5s. Total reconnects: {self._retry_count}"
-                        ))
+                    try:
+                        async with AsyncSessionLocal() as db:
+                            await AuditService.create_audit_log(db, AuditLogCreate(
+                                level="INFO",
+                                category="SYSTEM",
+                                message="Binance WebSocket reconnected successfully",
+                                details=f"Channel restored after temporary failover. Reconnection took 3.5s. Total reconnects: {self._retry_count}"
+                            ))
+                    except Exception as ae:
+                        logger.error(f"Failed to log WebSocket reconnection audit event: {ae}")
                 
                 # Simulating raw tick stream when connected
                 if cache.connection_status == "CONNECTED":
