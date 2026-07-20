@@ -19,11 +19,12 @@ data class UnifiedContext(
     val tradingBudgetPeriod: String,
     val tradingRiskLevel: String,
     val atrMultiplier: Double,
-    val positionSlicePercent: Double
+    val positionSlicePercent: Double,
+    val binanceLiveBalances: String = ""
 ) {
     fun formatToContextBlock(): String {
         val binanceLine = if (isBinanceConnected) {
-            "[Binance Integration] CONNECTED in $binanceMode mode (Key: $binanceApiKeyMasked)"
+            "[Binance Integration] CONNECTED in $binanceMode mode (Key: $binanceApiKeyMasked)\n            [Binance Live Balances] $binanceLiveBalances"
         } else {
             "[Binance Integration] NOT CONNECTED / No API keys linked"
         }
@@ -69,6 +70,26 @@ object ContextResolver {
         val atrMultiplier = try { com.example.aza.security.SecureCredentialStore.getAtrMultiplier() } catch (e: Exception) { 2.0 }
         val positionSlicePercent = try { com.example.aza.security.SecureCredentialStore.getPositionSlicePercent() } catch (e: Exception) { 10.0 }
 
+        val liveBalancesText = if (isConnected) {
+            val result = try {
+                com.example.aza.connector.BinanceConnector.fetchAccountBalances()
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+            if (result.isSuccess) {
+                val list = result.getOrThrow()
+                if (list.isEmpty()) {
+                    "No assets with non-zero balances found on Binance."
+                } else {
+                    list.joinToString(", ") { "${it.asset}: ${String.format(java.util.Locale.US, "%.6f", it.total)} (Free: ${String.format(java.util.Locale.US, "%.6f", it.free)}, Locked: ${String.format(java.util.Locale.US, "%.6f", it.locked)})" }
+                }
+            } else {
+                "Failed to fetch live balances: ${result.exceptionOrNull()?.message}"
+            }
+        } else {
+            "N/A (Integration inactive)"
+        }
+
         return UnifiedContext(
             recentHistory = memory.recentMessages,
             cashBalance = balance,
@@ -85,7 +106,8 @@ object ContextResolver {
             tradingBudgetPeriod = budgetPeriod,
             tradingRiskLevel = riskLevel,
             atrMultiplier = atrMultiplier,
-            positionSlicePercent = positionSlicePercent
+            positionSlicePercent = positionSlicePercent,
+            binanceLiveBalances = liveBalancesText
         )
     }
 }

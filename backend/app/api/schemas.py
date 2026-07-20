@@ -26,6 +26,7 @@ class TradeUpdate(BaseModel):
     profit_loss: Optional[float] = None
     exit_time: Optional[datetime] = None
     outcome: Optional[str] = None
+    position_size: Optional[float] = None
 
 class TradeResponse(TradeBase):
     id: int

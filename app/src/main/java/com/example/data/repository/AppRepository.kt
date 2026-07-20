@@ -26,6 +26,22 @@ class AppRepository(private val db: AppDatabase) {
         contaboService.checkHealth()
     }
 
+    suspend fun getLayeredVpsStatus(): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.getLayeredStatus()
+    }
+
+    suspend fun updateContaboTradingMode(mode: String): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.updateGlobalTradingMode(mode)
+    }
+
+    suspend fun resetContaboEmergencyStop(): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.resetEmergencyStop()
+    }
+
+    suspend fun triggerContaboEmergencyLiquidation(): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.triggerEmergencyLiquidation()
+    }
+
     suspend fun getContaboTrades(skip: Int = 0, limit: Int = 100): List<com.example.data.api.ContaboTrade> = withContext(Dispatchers.IO) {
         contaboService.getTrades(skip, limit)
     }
@@ -68,6 +84,22 @@ class AppRepository(private val db: AppDatabase) {
 
     suspend fun createContaboAuditLog(log: com.example.data.api.ContaboAuditLogCreate): com.example.data.api.ContaboAuditLog = withContext(Dispatchers.IO) {
         contaboService.createAuditLog(log)
+    }
+
+    suspend fun getBinanceStatus(): com.example.data.api.BinanceStatusResponse = withContext(Dispatchers.IO) {
+        contaboService.getBinanceStatus()
+    }
+
+    suspend fun getBinanceBalances(): List<com.example.data.api.BinanceBalance> = withContext(Dispatchers.IO) {
+        contaboService.getBinanceBalances()
+    }
+
+    suspend fun getBinanceOrders(symbol: String? = null): List<com.example.data.api.BinanceOpenOrder> = withContext(Dispatchers.IO) {
+        contaboService.getBinanceOrders(symbol)
+    }
+
+    suspend fun cancelBinanceOrder(symbol: String, orderId: String): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.cancelBinanceOrder(symbol, orderId)
     }
 
     // DAOs
@@ -1075,6 +1107,10 @@ class AppRepository(private val db: AppDatabase) {
     // Aza Mission Operations
     suspend fun getMissionById(id: Int): AzaMission? = withContext(Dispatchers.IO) {
         azaMissionDao.getMissionById(id)
+    }
+
+    suspend fun getAllMissionsDirect(): List<AzaMission> = withContext(Dispatchers.IO) {
+        azaMissionDao.getAllMissionsDirect()
     }
 
     suspend fun getActiveMissionDirect(): AzaMission? = withContext(Dispatchers.IO) {

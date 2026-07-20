@@ -14,9 +14,12 @@ import java.util.concurrent.TimeUnit
 
 data class ContaboHealthResponse(
     val status: String,
-    val name: String,
-    val version: String
-)
+    @Json(name = "app_name") val appName: String? = null,
+    val name: String? = null,
+    val version: String? = null
+) {
+    val displayName: String get() = appName ?: name ?: "Contabo VPS"
+}
 
 data class ContaboTrade(
     val id: Int,
@@ -104,12 +107,68 @@ data class ContaboAuditLogCreate(
     @Json(name = "trade_id") val tradeId: Int? = null
 )
 
+data class BinanceStatusResponse(
+    @Json(name = "is_authenticated") val isAuthenticated: Boolean,
+    @Json(name = "is_connected") val isConnected: Boolean,
+    @Json(name = "latency_ms") val latencyMs: Int,
+    val mode: String,
+    @Json(name = "rate_limit_status") val rateLimitStatus: String
+)
+
+data class BinanceBalance(
+    val asset: String,
+    val free: Double,
+    val locked: Double
+)
+
+data class BinanceOpenOrder(
+    val symbol: String,
+    val orderId: Long,
+    val price: String,
+    val origQty: String,
+    val status: String,
+    val side: String,
+    val type: String,
+    val time: Long
+)
+
 // --- API Service Definition ---
 
 interface ContaboApiService {
 
     @GET("health")
     suspend fun checkHealth(): ContaboHealthResponse
+
+    @GET("trading/layers/status")
+    suspend fun getLayeredStatus(): Map<String, Any>
+
+    @GET("trading/binance/status")
+    suspend fun getBinanceStatus(): BinanceStatusResponse
+
+    @GET("trading/binance/balances")
+    suspend fun getBinanceBalances(): List<BinanceBalance>
+
+    @GET("trading/binance/orders")
+    suspend fun getBinanceOrders(
+        @Query("symbol") symbol: String? = null
+    ): List<BinanceOpenOrder>
+
+    @DELETE("trading/binance/order/{symbol}/{order_id}")
+    suspend fun cancelBinanceOrder(
+        @Path("symbol") symbol: String,
+        @Path("order_id") orderId: String
+    ): Map<String, Any>
+
+    @POST("trading/mode")
+    suspend fun updateGlobalTradingMode(
+        @Query("mode") mode: String
+    ): Map<String, Any>
+
+    @POST("trading/emergency/reset")
+    suspend fun resetEmergencyStop(): Map<String, Any>
+
+    @POST("trading/emergency/liquidate")
+    suspend fun triggerEmergencyLiquidation(): Map<String, Any>
 
     @GET("trading")
     suspend fun getTrades(

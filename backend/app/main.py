@@ -7,6 +7,7 @@ from app.api.api import api_router
 from app.api.endpoints import laptop
 from app.database.session import engine
 from app.database.base import Base
+from app.scheduler.manager import LayeredSchedulerManager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -15,7 +16,15 @@ async def lifespan(app: FastAPI):
         # Create tables automatically for ease of local evaluation / development
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            
+    # Start the Layered VPS Operational Daemon (Layer 2, 3, and 4)
+    scheduler_manager = await LayeredSchedulerManager.get_instance()
+    await scheduler_manager.start_all()
+    
     yield
+    
+    # Graceful shutdown of daemon threads
+    await scheduler_manager.stop_all()
 
 # Initialize FastAPI with metadata and lifespan
 app = FastAPI(

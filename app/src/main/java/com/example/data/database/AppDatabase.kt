@@ -548,6 +548,17 @@ abstract class AppDatabase : RoomDatabase() {
             )
             db.knowledgeDao().insertKnowledge(
                 KnowledgeEntry(
+                    title = "RSI divergence predicts reversals",
+                    category = "Strategy",
+                    description = "Entering counter-trend positions when local asset prices exhibit a divergence with the 14-period Relative Strength Index.",
+                    evidence = "Verified across historic 4-hour interval market reversals.",
+                    confidenceScore = 0.92,
+                    timesConfirmed = 1,
+                    isConfirmed = true
+                )
+            )
+            db.knowledgeDao().insertKnowledge(
+                KnowledgeEntry(
                     title = "Avoiding breakout buys during overbought RSI conditions",
                     category = "Risk",
                     description = "Buying breakouts when RSI exceeds 70 on short-term scales results in high stop-out frequency.",

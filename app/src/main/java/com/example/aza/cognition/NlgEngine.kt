@@ -11,42 +11,42 @@ import com.example.aza.conversation.RelationshipProfile
 object NlgEngine {
 
     private val APPRECIATIONS = listOf(
-        "I appreciate your focus on",
-        "It's highly strategic to discuss",
-        "Looking into our roadmap regarding",
-        "Synthesizing active operational parameters for",
+        "I'm focusing directly on",
+        "It's a great strategy to look into",
+        "Regarding our roadmap and milestones for",
+        "Reviewing the operational parameters of",
         "Analyzing our central milestones around"
     )
 
     private val COGNITIVE_OPENERS = listOf(
-        "Aza's cognitive pipeline is fully aligned.",
-        "System telemetry and objectives are synchronized.",
-        "Ready to formulate tactical recommendations.",
-        "Central reasoning engine is executing in real-time.",
-        "Our business heuristics are fully calibrated."
+        "I'm fully synchronized and ready to assist.",
+        "I've processed our current status and am fully aligned with our direction.",
+        "Ready to formulate some clear tactical options.",
+        "Our operations are running smoothly in real-time.",
+        "I've calibrated our current business indicators."
     )
 
     private val ANALYTICAL_TRANSITIONS = listOf(
-        "Specifically, evaluating our current position reveals that",
-        "A deep-dive into our active parameters confirms that",
-        "Looking closely at our operational landscape indicates that",
-        "Based on our primary objective constraints,",
-        "Assessing the underlying risk-benefit profile shows that"
+        "When we evaluate our current position, we find that",
+        "Checking our active parameters confirms that",
+        "Looking closely at our operations shows that",
+        "Based on our primary objective parameters,",
+        "An analysis of our current progress shows that"
     )
 
     private val STRATEGIC_PROMPTS = listOf(
-        "How would you like to prioritize this in our next sprint?",
+        "How would you like to prioritize this next?",
         "What are your thoughts on this tactical direction?",
-        "We can adjust our dynamic models as needed. What's your next move?",
-        "Shall we proceed with this allocation or explore alternatives?",
-        "I am ready to coordinate our specialist agents on your command."
+        "We can adjust our dynamic models anytime. What is your next move?",
+        "Shall we move forward with this approach or look at other areas?",
+        "Let me know your thoughts on our next steps."
     )
 
     private val CONCLUSIONS_NLG = listOf(
-        "Let me know if we should refine our parameters or deploy additional agent workflows.",
-        "I will continue monitoring these systems in autopilot mode. What is your next strategic objective?",
-        "Our coordination engines are locked and ready. Tell me how you wish to proceed.",
-        "Let's stay aligned on these goals. Ready for your next instruction."
+        "Let me know if we should refine our parameters or start a new task.",
+        "I'll continue monitoring these systems in autopilot. What is our next objective?",
+        "I'm ready whenever you are. Let me know how you'd like to proceed.",
+        "Let's stay focused on these goals. What should we tackle next?"
     )
 
     private val METAPHORS = mapOf(
@@ -164,7 +164,7 @@ object NlgEngine {
         } else ""
 
         val actionBlock = if (actionExecutedNotice.isNotEmpty()) {
-            "\n\n### ⚡ Action Executed Successfully\n$actionExecutedNotice"
+            "\n\n✨ **System Update:**\n$actionExecutedNotice"
         } else ""
 
         val conclusion = CONCLUSIONS_NLG[rand.nextInt(CONCLUSIONS_NLG.size)]
@@ -177,7 +177,7 @@ object NlgEngine {
             """.trimIndent()
         } else {
             """
-                ### 🚀 AZA Intelligence Briefing
+                ### 💫 Lumina Briefing
                 
                 $greeting
                 

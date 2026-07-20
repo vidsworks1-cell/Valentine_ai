@@ -33,6 +33,9 @@ interface AzaMissionDao {
     @Query("SELECT * FROM aza_missions ORDER BY createdAt DESC")
     fun getAllMissionsFlow(): Flow<List<AzaMission>>
 
+    @Query("SELECT * FROM aza_missions ORDER BY createdAt DESC")
+    suspend fun getAllMissionsDirect(): List<AzaMission>
+
     @Query("SELECT * FROM aza_missions WHERE id = :id LIMIT 1")
     suspend fun getMissionById(id: Int): AzaMission?
 

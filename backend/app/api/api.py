@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import health, trading, paper_trading, risk, audit
+from app.api.endpoints import health, trading, paper_trading, risk, audit, market
 
 api_router = APIRouter()
 
@@ -8,3 +8,4 @@ api_router.include_router(trading.router, prefix="/trading", tags=["trading"])
 api_router.include_router(paper_trading.router, prefix="/paper-trading", tags=["paper-trading"])
 api_router.include_router(risk.router, prefix="/risk", tags=["risk"])
 api_router.include_router(audit.router, prefix="/audit", tags=["audit"])
+api_router.include_router(market.router, prefix="/market", tags=["market"])
