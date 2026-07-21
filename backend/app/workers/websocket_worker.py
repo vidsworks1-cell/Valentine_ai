@@ -40,12 +40,11 @@ class BinanceWebSocketWorker:
         symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
         
         is_testnet = getattr(settings, "BINANCE_TESTNET", True)
-        if is_testnet:
-            base_url = "wss://testnet.binance.vision/ws"
-        else:
-            base_url = "wss://stream.binance.com:9443/ws"
+        # Public market data streams (like ticker) are not hosted on testnet.binance.vision (which returns 404).
+        # Therefore, we use the production stream URL for market data feeds in both environments.
+        base_url = "wss://stream.binance.com:9443/ws"
             
-        logger.info(f"Connecting to Binance Spot WebSocket at: {base_url} (Testnet={is_testnet})")
+        logger.info(f"Connecting to Binance Spot WebSocket at: {base_url} (Testnet Mode={is_testnet})")
         
         while self.running:
             try:
