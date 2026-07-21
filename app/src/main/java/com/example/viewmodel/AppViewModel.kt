@@ -149,6 +149,24 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _isContaboLoading = MutableStateFlow(false)
     val isContaboLoading = _isContaboLoading.asStateFlow()
 
+    private val _contaboMarketStatus = MutableStateFlow<com.example.data.api.ContaboMarketStatus?>(null)
+    val contaboMarketStatus = _contaboMarketStatus.asStateFlow()
+
+    private val _contaboActivePositions = MutableStateFlow<List<com.example.data.api.ContaboActivePosition>>(emptyList())
+    val contaboActivePositions = _contaboActivePositions.asStateFlow()
+
+    private val _contaboClosedTrades = MutableStateFlow<List<com.example.data.api.ContaboTrade>>(emptyList())
+    val contaboClosedTrades = _contaboClosedTrades.asStateFlow()
+
+    private val _contaboTradingSummary = MutableStateFlow<com.example.data.api.ContaboPortfolioSummary?>(null)
+    val contaboTradingSummary = _contaboTradingSummary.asStateFlow()
+
+    private val _pipelineValidationResult = MutableStateFlow<com.example.data.api.PipelineValidationResponse?>(null)
+    val pipelineValidationResult = _pipelineValidationResult.asStateFlow()
+
+    private val _isPipelineValidating = MutableStateFlow(false)
+    val isPipelineValidating = _isPipelineValidating.asStateFlow()
+
     private val _binanceApiStatus = MutableStateFlow<com.example.data.api.BinanceStatusResponse?>(null)
     val binanceApiStatus = _binanceApiStatus.asStateFlow()
 
@@ -222,8 +240,56 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             } catch (e: Exception) {
                 // Ignore
             }
+            // Fetch new verified endpoints
+            try {
+                val marketStatus = repository.getContaboMarketStatus()
+                _contaboMarketStatus.value = marketStatus
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch Market Status: ${e.message}", e)
+                onAppEventOccurred("CONN_ERROR_MARKET_STATUS", "Connection failed for GET /market/status: ${e.localizedMessage ?: "Timeout or Unknown Error"}")
+            }
+            try {
+                val activePositions = repository.getContaboActivePositions()
+                _contaboActivePositions.value = activePositions
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch Active Positions: ${e.message}", e)
+                onAppEventOccurred("CONN_ERROR_ACTIVE_POSITIONS", "Connection failed for GET /trading/active-positions: ${e.localizedMessage ?: "Timeout or Unknown Error"}")
+            }
+            try {
+                val closedTrades = repository.getContaboClosedTrades()
+                _contaboClosedTrades.value = closedTrades
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch Closed Trades: ${e.message}", e)
+                onAppEventOccurred("CONN_ERROR_CLOSED_TRADES", "Connection failed for GET /trading/closed-trades: ${e.localizedMessage ?: "Timeout or Unknown Error"}")
+            }
+            try {
+                val summary = repository.getContaboTradingSummary()
+                _contaboTradingSummary.value = summary
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch Trading Summary: ${e.message}", e)
+                onAppEventOccurred("CONN_ERROR_TRADING_SUMMARY", "Connection failed for GET /trading/summary: ${e.localizedMessage ?: "Timeout or Unknown Error"}")
+            }
+
             fetchLayeredVpsStatus()
             fetchBinanceData()
+        }
+    }
+
+    fun triggerPipelineValidation() {
+        viewModelScope.launch {
+            _isPipelineValidating.value = true
+            try {
+                val response = repository.validateContaboTradingPipeline()
+                _pipelineValidationResult.value = response
+                onAppEventOccurred("PIPELINE_VALIDATION_SUCCESS", "End-to-end trading pipeline validated successfully. Trade ID: ${response.tradeId}")
+                // Refresh data to fetch the new state
+                fetchContaboData()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to validate end-to-end trading pipeline: ${e.message}", e)
+                onAppEventOccurred("PIPELINE_VALIDATION_FAILED", "Failed to validate end-to-end trading pipeline: ${e.localizedMessage ?: "Timeout"}")
+            } finally {
+                _isPipelineValidating.value = false
+            }
         }
     }
 

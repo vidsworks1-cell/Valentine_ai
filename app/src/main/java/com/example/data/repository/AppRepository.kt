@@ -17,7 +17,7 @@ class AppRepository(private val db: AppDatabase) {
         val url = try {
             com.example.BuildConfig.CONTABO_VPS_URL
         } catch (e: Exception) {
-            "http://169.58.34.76:8000/"
+            "http://169.58.34.76:8000/api/v1/"
         }
         com.example.data.api.ContaboRetrofitClient.buildService(url)
     }
@@ -100,6 +100,26 @@ class AppRepository(private val db: AppDatabase) {
 
     suspend fun cancelBinanceOrder(symbol: String, orderId: String): Map<String, Any> = withContext(Dispatchers.IO) {
         contaboService.cancelBinanceOrder(symbol, orderId)
+    }
+
+    suspend fun getContaboActivePositions(): List<com.example.data.api.ContaboActivePosition> = withContext(Dispatchers.IO) {
+        contaboService.getActivePositions()
+    }
+
+    suspend fun getContaboClosedTrades(): List<com.example.data.api.ContaboTrade> = withContext(Dispatchers.IO) {
+        contaboService.getClosedTrades()
+    }
+
+    suspend fun getContaboTradingSummary(): com.example.data.api.ContaboPortfolioSummary = withContext(Dispatchers.IO) {
+        contaboService.getTradingSummary()
+    }
+
+    suspend fun validateContaboTradingPipeline(): com.example.data.api.PipelineValidationResponse = withContext(Dispatchers.IO) {
+        contaboService.validateTradingPipeline()
+    }
+
+    suspend fun getContaboMarketStatus(): com.example.data.api.ContaboMarketStatus = withContext(Dispatchers.IO) {
+        contaboService.getMarketStatus()
     }
 
     // DAOs

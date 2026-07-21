@@ -3529,6 +3529,13 @@ fun TradingDiagnosticsDashboard(
             val contaboLogsList by viewModel.contaboAuditLogs.collectAsState()
             val isContaboLoading by viewModel.isContaboLoading.collectAsState()
 
+            val contaboMarketStatus by viewModel.contaboMarketStatus.collectAsState()
+            val contaboActivePositions by viewModel.contaboActivePositions.collectAsState()
+            val contaboClosedTrades by viewModel.contaboClosedTrades.collectAsState()
+            val contaboTradingSummary by viewModel.contaboTradingSummary.collectAsState()
+            val pipelineValidationResult by viewModel.pipelineValidationResult.collectAsState()
+            val isPipelineValidating by viewModel.isPipelineValidating.collectAsState()
+
             var paperSymbol by remember { mutableStateOf("BTCUSDT") }
             var paperSide by remember { mutableStateOf("BUY") }
             var paperPrice by remember { mutableStateOf("67000.0") }
@@ -4150,57 +4157,432 @@ fun TradingDiagnosticsDashboard(
                             Text("Dispatch VPS Paper $paperSide Order", style = MaterialTheme.typography.labelMedium)
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                        // D. Live Paper Trades from VPS
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "ACTIVE VPS TRADES (${contaboTradesList.size})",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        // --- 1. E2E PIPELINE VALIDATION MODULE ---
+                        Text(
+                            "E2E TRADING PIPELINE VALIDATION",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        if (contaboTradesList.isEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    "Simulate a live end-to-end paper trading sequence: Signal Generation ➔ Risk Compliance ➔ Order Recording ➔ Execution Monitoring.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Button(
+                                    onClick = { viewModel.triggerPipelineValidation() },
+                                    enabled = !isPipelineValidating,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth().testTag("validate_pipeline_button"),
+                                    contentPadding = PaddingValues(vertical = 10.dp)
+                                ) {
+                                    if (isPipelineValidating) {
+                                        CircularProgressIndicator(
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(16.dp).padding(end = 8.dp)
+                                        )
+                                        Text("Validating Pipeline...", style = MaterialTheme.typography.labelMedium)
+                                    } else {
+                                        Icon(
+                                            imageVector = androidx.compose.material.icons.Icons.Default.PlayArrow,
+                                            contentDescription = "Run",
+                                            modifier = Modifier.size(16.dp).padding(end = 6.dp)
+                                        )
+                                        Text("Run End-to-End E2E Validation", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+
+                                pipelineValidationResult?.let { result ->
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                        border = BorderStroke(1.dp, if (result.status == "SUCCESS") Color(0xFF2E7D32).copy(alpha = 0.3f) else Color(0xFFD32F2F).copy(alpha = 0.3f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        imageVector = if (result.status == "SUCCESS") androidx.compose.material.icons.Icons.Default.CheckCircle else androidx.compose.material.icons.Icons.Default.Error,
+                                                        contentDescription = "Status",
+                                                        tint = if (result.status == "SUCCESS") Color(0xFF2E7D32) else Color(0xFFD32F2F),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = "Status: ${result.status}",
+                                                        fontWeight = FontWeight.Bold,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = if (result.status == "SUCCESS") Color(0xFF2E7D32) else Color(0xFFD32F2F)
+                                                    )
+                                                }
+                                                Text(
+                                                    text = "Trade ID: #${result.tradeId}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = result.message,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                "PIPELINE PIPES STATUS:",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            result.steps.forEach { step ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Badge(
+                                                            containerColor = if (step.status == "PASS") Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
+                                                            contentColor = if (step.status == "PASS") Color(0xFF2E7D32) else Color(0xFFC62828)
+                                                        ) {
+                                                            Text(
+                                                                text = step.status,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                modifier = Modifier.padding(horizontal = 6.dp)
+                                                            )
+                                                        }
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(
+                                                            text = step.step,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            style = MaterialTheme.typography.bodySmall
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = step.detail,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // --- 2. LIVE MARKET FEED DASHBOARD ---
+                        Text(
+                            "LIVE BINANCE WEBSOCKET FEED STATUS",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val isConnected = contaboMarketStatus?.connectionStatus == "CONNECTED"
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .background(if (isConnected) Color(0xFF2E7D32) else Color(0xFFD32F2F), shape = RoundedCornerShape(50.dp))
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = contaboMarketStatus?.connectionStatus ?: "CONNECTING",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isConnected) Color(0xFF2E7D32) else Color(0xFFD32F2F)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Last ping: ${contaboMarketStatus?.lastUpdateTime?.let { String.format(Locale.US, "%.1fs ago", System.currentTimeMillis() / 1000.0 - it) } ?: "never"}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Cached Streamed Symbols:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    val symbols = contaboMarketStatus?.cachedSymbols ?: listOf("BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT")
+                                    symbols.forEach { sym ->
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = sym,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // --- 3. LUMINA PORTFOLIO PERFORMANCE SUMMARY ---
+                        Text(
+                            "PORTFOLIO PERFORMANCE & RISK SUMMARY",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        contaboTradingSummary?.let { summary ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Column {
+                                            Text("Net P&L Balance", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            val pnlColor = if (summary.totalPnl >= 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
+                                            Text(
+                                                text = "${if (summary.totalPnl >= 0) "+" else ""}$${String.format(Locale.US, "%,.2f", summary.totalPnl)} USD",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = pnlColor
+                                            )
+                                        }
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                            contentColor = MaterialTheme.colorScheme.primary
+                                        ) {
+                                            Text(
+                                                text = "MODE: ${summary.globalTradingMode}",
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text("Realized P&L", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                text = "$${String.format(Locale.US, "%,.2f", summary.totalRealizedPnl)}",
+                                                fontWeight = FontWeight.SemiBold,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (summary.totalRealizedPnl >= 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
+                                            )
+                                        }
+                                        Column {
+                                            Text("Unrealized P&L", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                text = "$${String.format(Locale.US, "%,.2f", summary.totalUnrealizedPnl)}",
+                                                fontWeight = FontWeight.SemiBold,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (summary.totalUnrealizedPnl >= 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
+                                            )
+                                        }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text("Positions (Active/Closed)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                text = "${summary.activePositionsCount} Active / ${summary.closedTradesCount} Closed",
+                                                fontWeight = FontWeight.SemiBold,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // --- 4. LUMINA ACTIVE POSITIONS ---
+                        Text(
+                            "ACTIVE TRADING POSITIONS (${contaboActivePositions.size})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        if (contaboActivePositions.isEmpty()) {
                             Text(
-                                "No paper trades logged on Contabo VPS yet. Trigger a paper trade above.",
+                                "No active paper trading positions recorded currently.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 4.dp)
                             )
                         } else {
-                            contaboTradesList.take(5).forEach { trade ->
+                            contaboActivePositions.forEach { position ->
                                 Card(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
                                 ) {
                                     Column(modifier = Modifier.padding(10.dp)) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Badge(containerColor = if (position.side == "BUY") Color(0xFFE8F5E9) else Color(0xFFFFF3E0)) {
+                                                    Text(
+                                                        text = position.side,
+                                                        color = if (position.side == "BUY") Color(0xFF2E7D32) else Color(0xFFEF6C00),
+                                                        fontWeight = FontWeight.Bold,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(position.symbol, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                            }
+                                            val unrealizedPct = if (position.entryPrice > 0.0) {
+                                                if (position.side == "BUY") {
+                                                    ((position.currentPrice - position.entryPrice) / position.entryPrice) * 100.0
+                                                } else {
+                                                    ((position.entryPrice - position.currentPrice) / position.entryPrice) * 100.0
+                                                }
+                                            } else 0.0
+                                            val pnlColor = if (position.unrealizedPnl >= 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
+                                            Text(
+                                                text = "${if (position.unrealizedPnl >= 0) "+" else ""}$${String.format(Locale.US, "%.2f", position.unrealizedPnl)} (${String.format(Locale.US, "%.2f", unrealizedPct)}%)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = pnlColor
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Size: ${position.positionSize}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Entry Price: $${position.entryPrice}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Mark Price: $${position.currentPrice}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Stop Loss: $${position.stopLoss}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Take Profit: $${position.takeProfit}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Trailing Stop: $${if (position.trailingStop > 0.0) position.trailingStop else "NONE"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // --- 5. LUMINA CLOSED TRADES ---
+                        Text(
+                            "CLOSED TRADES HISTORY (${contaboClosedTrades.size})",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        if (contaboClosedTrades.isEmpty()) {
+                            Text(
+                                "No closed trading positions recorded.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        } else {
+                            contaboClosedTrades.take(5).forEach { trade ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f))
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Badge(containerColor = if (trade.side == "BUY") Color(0xFFE8F5E9) else Color(0xFFFFF3E0)) {
-                                                    Text(trade.side, color = if (trade.side == "BUY") Color(0xFF2E7D32) else Color(0xFFEF6C00), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                                                    Text(
+                                                        text = trade.side,
+                                                        color = if (trade.side == "BUY") Color(0xFF2E7D32) else Color(0xFFEF6C00),
+                                                        fontWeight = FontWeight.Bold,
+                                                        style = MaterialTheme.typography.labelSmall
+                                                    )
                                                 }
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(trade.symbol, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                                             }
-                                            Text("Outcome: ${trade.outcome ?: "ACTIVE"}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                            val realizedPnl = trade.profitLoss ?: 0.0
+                                            val pnlColor = if (realizedPnl >= 0) Color(0xFF2E7D32) else Color(0xFFD32F2F)
+                                            Text(
+                                                text = "Realized: ${if (realizedPnl >= 0) "+" else ""}$${String.format(Locale.US, "%.2f", realizedPnl)}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = pnlColor
+                                            )
                                         }
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            Text("Entry Price: $${trade.entryPrice}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            Text("Slices Qty: ${trade.positionSize}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Entry: $${trade.entryPrice}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Exit: $${trade.exitPrice ?: "N/A"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Outcome: ${trade.outcome ?: "CLOSED"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }

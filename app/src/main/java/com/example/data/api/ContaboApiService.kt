@@ -169,6 +169,12 @@ data class PipelineValidationResponse(
     val steps: List<PipelineValidationStep>
 )
 
+data class ContaboMarketStatus(
+    @Json(name = "last_update_time") val lastUpdateTime: Double,
+    @Json(name = "connection_status") val connectionStatus: String,
+    @Json(name = "cached_symbols") val cachedSymbols: List<String>
+)
+
 // --- API Service Definition ---
 
 interface ContaboApiService {
@@ -275,6 +281,9 @@ interface ContaboApiService {
 
     @GET("trading/summary")
     suspend fun getTradingSummary(): ContaboPortfolioSummary
+
+    @GET("market/status")
+    suspend fun getMarketStatus(): ContaboMarketStatus
 
     @POST("trading/validate-pipeline")
     suspend fun validateTradingPipeline(): PipelineValidationResponse
