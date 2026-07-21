@@ -93,19 +93,21 @@ class PositionManager:
                     # 1. Trailing Stop Management
                     if side == "BUY":
                         if current_price > pos["highest_price"]:
+                            old_sl = pos["trailing_stop"]
                             pos["highest_price"] = current_price
                             new_sl = round(current_price * 0.985, 2)
-                            if new_sl > pos["trailing_stop"] and new_sl < current_price:
+                            if new_sl > old_sl and new_sl < current_price:
                                 pos["trailing_stop"] = new_sl
-                                logger.info(f"📈 TRAILING STOP UP: Trade {trade_id} {symbol} SL raised to {new_sl}")
+                                logger.info(f"[STAGE: MANAGEMENT] Trailing stop updated for Trade {trade_id} {symbol} ({side}). SL raised from {old_sl} to {new_sl}.")
                                 
                     elif side == "SELL":
                         if current_price < pos["lowest_price"]:
+                            old_sl = pos["trailing_stop"]
                             pos["lowest_price"] = current_price
                             new_sl = round(current_price * 1.015, 2)
-                            if new_sl < pos["trailing_stop"] and new_sl > current_price:
+                            if new_sl < old_sl and new_sl > current_price:
                                 pos["trailing_stop"] = new_sl
-                                logger.info(f"📉 TRAILING STOP DOWN: Trade {trade_id} {symbol} SL lowered to {new_sl}")
+                                logger.info(f"[STAGE: MANAGEMENT] Trailing stop updated for Trade {trade_id} {symbol} ({side}). SL lowered from {old_sl} to {new_sl}.")
                     
                     # 2. Check Multi-Stage Partial Take Profits
                     stages = pos.get("tp_stages", [])
@@ -223,6 +225,8 @@ class PositionManager:
             
         outcome = "WIN" if pnl > 0 else "LOSS"
         
+        logger.info(f"[STAGE: MANAGEMENT] Partial take-profit stage hit for Trade {trade_id} {symbol} ({side}). Stage: {stage_label}, Price: {exit_price}, Realized P&L: {pnl} ({outcome}).")
+        
         async with AsyncSessionLocal() as db:
             try:
                 # 1. Update Trade Record in DB
@@ -324,6 +328,8 @@ class PositionManager:
             pnl = (entry - exit_price) * size
             
         outcome = "WIN" if pnl > 0 else "LOSS"
+        
+        logger.info(f"[STAGE: CLOSE] Closing Trade {trade_id} {symbol} ({side}) at exit price {exit_price} due to {outcome_type}. Realized P&L: {pnl} ({outcome}).")
         
         async with AsyncSessionLocal() as db:
             try:

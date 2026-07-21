@@ -132,6 +132,43 @@ data class BinanceOpenOrder(
     val time: Long
 )
 
+data class ContaboActivePosition(
+    val id: Int,
+    val symbol: String,
+    val side: String,
+    @Json(name = "entry_price") val entryPrice: Double,
+    @Json(name = "position_size") val positionSize: Double,
+    @Json(name = "stop_loss") val stopLoss: Double,
+    @Json(name = "take_profit") val takeProfit: Double,
+    @Json(name = "trailing_stop") val trailingStop: Double,
+    @Json(name = "current_price") val currentPrice: Double,
+    @Json(name = "unrealized_pnl") val unrealizedPnl: Double,
+    @Json(name = "tp_stages") val tpStages: List<Map<String, Any>> = emptyList()
+)
+
+data class ContaboPortfolioSummary(
+    @Json(name = "wallet_balance") val walletBalance: Double,
+    @Json(name = "total_realized_pnl") val totalRealizedPnl: Double,
+    @Json(name = "total_unrealized_pnl") val totalUnrealizedPnl: Double,
+    @Json(name = "total_pnl") val totalPnl: Double,
+    @Json(name = "active_positions_count") val activePositionsCount: Int,
+    @Json(name = "closed_trades_count") val closedTradesCount: Int,
+    @Json(name = "global_trading_mode") val globalTradingMode: String
+)
+
+data class PipelineValidationStep(
+    val step: String,
+    val status: String,
+    val detail: String
+)
+
+data class PipelineValidationResponse(
+    val status: String,
+    val message: String,
+    @Json(name = "trade_id") val tradeId: Int,
+    val steps: List<PipelineValidationStep>
+)
+
 // --- API Service Definition ---
 
 interface ContaboApiService {
@@ -229,6 +266,18 @@ interface ContaboApiService {
     suspend fun createAuditLog(
         @Body log: ContaboAuditLogCreate
     ): ContaboAuditLog
+
+    @GET("trading/active-positions")
+    suspend fun getActivePositions(): List<ContaboActivePosition>
+
+    @GET("trading/closed-trades")
+    suspend fun getClosedTrades(): List<ContaboTrade>
+
+    @GET("trading/summary")
+    suspend fun getTradingSummary(): ContaboPortfolioSummary
+
+    @POST("trading/validate-pipeline")
+    suspend fun validateTradingPipeline(): PipelineValidationResponse
 }
 
 // --- Contabo Retrofit Client ---

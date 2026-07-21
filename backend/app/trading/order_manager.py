@@ -28,7 +28,7 @@ class OrderManager:
 
     async def receive_opportunity(self, opportunity: Dict[str, Any]):
         """Receives a setup from Layer 3, evaluates risk profile, and executes if cleared."""
-        logger.info(f"OrderManager reviewing setup: {opportunity['strategy_used']} on {opportunity['symbol']}")
+        logger.info(f"[STAGE: SIGNAL] Reviewing trade opportunity from AI Scanner: {opportunity['symbol']} ({opportunity['side']}) at {opportunity['entry_price']} via {opportunity['strategy_used']}")
         
         # 0. Check central circuit breakers and global trading modes
         from app.scheduler.manager import LayeredSchedulerManager
@@ -81,11 +81,13 @@ class OrderManager:
                     "position_size": position_size
                 }
 
+                logger.info(f"[STAGE: RISK] Evaluating boundaries for {opportunity['symbol']} entry at {price} against wallet balance {balance}. Max allowed risk: {allowed_risk_amt} ({risk_pct*100.0}%)")
+
                 # 3. Perform Layer 1 Risk Engine check
                 passed_risk = RiskEvaluator.validate_order(order_dict, balance, risk_pct)
                 
                 if not passed_risk:
-                    logger.warning(f"❌ RISK REJECTED: Opportunity for {opportunity['symbol']} failed Layer 1 Risk check.")
+                    logger.warning(f"[STAGE: RISK] REJECTED. Failed risk checks for {opportunity['symbol']}. Position size {position_size} exceeds risk limits.")
                     try:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
@@ -97,10 +99,12 @@ class OrderManager:
                         logger.error(f"Failed to log risk rejected audit event: {ae}")
                     return
 
+                logger.info(f"[STAGE: RISK] PASSED. Calculated position size: {position_size} units, allowed risk amount: {allowed_risk_amt} USD.")
+
                 # If we are in TESTNET or LIVE mode, we place the real order on Binance first!
                 binance_order_id = None
                 if trading_mode in ["TESTNET", "LIVE"]:
-                    logger.info(f"Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}) in {trading_mode} mode...")
+                    logger.info(f"[STAGE: EXECUTION] Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}) in {trading_mode} mode...")
                     binance_res = await BinanceConnector.get_instance().create_order(
                         mode=trading_mode,
                         symbol=opportunity["symbol"],
@@ -135,6 +139,8 @@ class OrderManager:
                             total_quote += qty * px
                         if total_qty > 0.0:
                             price = round(total_quote / total_qty, 6)
+                else:
+                    logger.info(f"[STAGE: EXECUTION] Executing paper {opportunity['side']} order for {opportunity['symbol']}. Entry Price: {price}, Quantity: {position_size}.")
 
                 # 4. Success: Create a new Trade record
                 trade_create = TradeCreate(
@@ -156,7 +162,7 @@ class OrderManager:
                 
                 trade = await TradingService.create_trade(db, trade_create)
                 
-                logger.info(f"🟢 TRADE EXECUTED SUCCESSFULLY: {trade.id} | {trade.symbol} | size: {trade.position_size}")
+                logger.info(f"[STAGE: EXECUTION] SUCCESS. Recorded Trade #{trade.id} ({trade.symbol}) in database.")
                 
                 try:
                     await AuditService.create_audit_log(db, AuditLogCreate(

@@ -40,9 +40,10 @@ class BinanceWebSocketWorker:
         symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
         
         is_testnet = getattr(settings, "BINANCE_TESTNET", True)
-        # Public market data streams (like ticker) are not hosted on testnet.binance.vision (which returns 404).
-        # Therefore, we use the production stream URL for market data feeds in both environments.
-        base_url = "wss://stream.binance.com:9443/ws"
+        if is_testnet:
+            base_url = "wss://testnet.binance.vision/stream"
+        else:
+            base_url = "wss://stream.binance.com:9443/stream"
             
         logger.info(f"Connecting to Binance Spot WebSocket at: {base_url} (Testnet Mode={is_testnet})")
         
@@ -53,7 +54,10 @@ class BinanceWebSocketWorker:
                     cache.connection_status = "RECONNECTING"
                 
                 async with websockets.connect(base_url, ping_interval=20, ping_timeout=20) as websocket:
-                    logger.info("Connected to Binance WebSocket")
+                    if is_testnet:
+                        logger.info("Connected to Binance Testnet")
+                    else:
+                        logger.info("Connected to Binance WebSocket")
                     cache.connection_status = "CONNECTED"
                     self._retry_count = 0  # Reset retry count on successful connection
                     
@@ -64,7 +68,7 @@ class BinanceWebSocketWorker:
                                 category="SYSTEM",
                                 message="Binance WebSocket connected",
                                 details=f"Successfully connected to Binance stream at {base_url}."
-                            ))
+                             ))
                     except Exception as ae:
                         logger.error(f"Failed to log WebSocket connection audit event: {ae}")
                         
@@ -74,7 +78,8 @@ class BinanceWebSocketWorker:
                         "id": 1
                     }
                     await websocket.send(json.dumps(subscribe_payload))
-                    logger.info("Subscribed streams")
+                    for symbol in symbols:
+                        logger.info(f"Subscribed to {symbol.lower()}@ticker")
                     
                     try:
                         async with AsyncSessionLocal() as db:
@@ -94,10 +99,13 @@ class BinanceWebSocketWorker:
                             data = json.loads(message)
                             if "result" in data and data.get("id") == 1:
                                 logger.info("Subscribed streams success")
-                            elif "s" in data and "c" in data:
-                                symbol = data["s"]
-                                price = float(data["c"])
-                                cache.update_price(symbol, price)
+                            else:
+                                # Handle both single stream format and combined stream wrapper format
+                                ticker_data = data.get("data", data) if "stream" in data else data
+                                if "s" in ticker_data and "c" in ticker_data:
+                                    symbol = ticker_data["s"]
+                                    price = float(ticker_data["c"])
+                                    cache.update_price(symbol, price)
                         except Exception as inner_e:
                             logger.error(f"Error parsing ticker message: {inner_e}")
                     
