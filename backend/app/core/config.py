@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "super-secret-lumina-key-change-in-production"
     ALLOWED_HOSTS: List[str] = ["*"]
     
+    # Binance API & WebSocket configurations
+    BINANCE_API_KEY: str = ""
+    BINANCE_API_SECRET: str = ""
+    BINANCE_TESTNET: bool = True
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
