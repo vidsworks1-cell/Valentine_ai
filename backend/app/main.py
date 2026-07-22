@@ -1,3 +1,5 @@
+import logging
+import sys
 from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
@@ -8,6 +10,15 @@ from app.api.endpoints import laptop
 from app.database.session import engine
 from app.database.base import Base
 from app.scheduler.manager import LayeredSchedulerManager
+
+# Configure logging for Lumina application modules
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True
+)
+logging.getLogger("lumina").setLevel(logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
