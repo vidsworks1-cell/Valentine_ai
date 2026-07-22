@@ -54,8 +54,10 @@ async def root_health_check():
         "version": settings.VERSION
     }
 
-# Include API v1 router
+# Include API router at /api/v1, /api, and root level to support all client route patterns
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(api_router, prefix="/api")
+app.include_router(api_router)
 
 # Include Laptop Agent Capability router under /api
 app.include_router(laptop.router, prefix="/api", tags=["laptop"])
