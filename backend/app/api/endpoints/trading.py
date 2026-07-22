@@ -264,6 +264,48 @@ async def get_closed_trades_endpoint(db: AsyncSession = Depends(get_db)):
     res = await db.execute(query)
     return res.scalars().all()
 
+@router.get("/portfolio-exposure")
+async def get_portfolio_exposure_endpoint(db: AsyncSession = Depends(get_db)):
+    """Exposes portfolio exposure metrics, risk utilization, and daily circuit breaker status."""
+    from app.trading.portfolio_guard import PortfolioGuard
+    from app.services.paper_trading_service import PaperTradingService
+    from app.scheduler.manager import LayeredSchedulerManager
+    
+    scheduler = await LayeredSchedulerManager.get_instance()
+    trading_mode = scheduler.global_trading_mode
+    
+    if trading_mode in ["TESTNET", "LIVE"]:
+        from app.services.binance_connector import BinanceConnector
+        balances = await BinanceConnector.get_instance().get_wallet_balances(trading_mode)
+        usdt_balance = next((float(b["free"]) for b in balances if b["asset"] == "USDT"), 0.0)
+        if usdt_balance <= 0.0:
+            usdt_balance = 10000.0 if trading_mode == "TESTNET" else 1000.0
+        balance = usdt_balance
+    else:
+        wallet = await PaperTradingService.get_wallet(db, "lumina_default")
+        if not wallet:
+            wallet = await PaperTradingService.create_wallet(db, "lumina_default", 100000.0)
+        balance = wallet.balance
+
+    metrics = await PortfolioGuard.get_instance().get_dashboard_metrics(balance)
+    return metrics
+
+@router.get("/self-adaptation")
+async def get_self_adaptation_endpoint():
+    """Exposes Lumina performance self-adaptation state, strategy weightings, and learning insights."""
+    from app.ai.self_adaptation import SelfAdaptationEngine
+    engine = SelfAdaptationEngine.get_instance()
+    await engine.analyze_performance()
+    return engine.get_adaptation_summary()
+
+@router.post("/self-adaptation/reanalyze")
+async def trigger_self_adaptation_reanalysis():
+    """Triggers immediate performance self-adaptation re-analysis across past trade history."""
+    from app.ai.self_adaptation import SelfAdaptationEngine
+    engine = SelfAdaptationEngine.get_instance()
+    await engine.analyze_performance()
+    return {"status": "SUCCESS", "message": "Performance self-adaptation re-analysis triggered.", "data": engine.get_adaptation_summary()}
+
 @router.get("/summary")
 async def get_trading_summary_endpoint(db: AsyncSession = Depends(get_db)):
     """Calculates performance overview (total realized/unrealized P&L, balance, etc.)."""
@@ -274,6 +316,7 @@ async def get_trading_summary_endpoint(db: AsyncSession = Depends(get_db)):
     from app.trading.position_manager import PositionManager
     from app.workers.price_cache import PriceCache
     from app.scheduler.manager import LayeredSchedulerManager
+    from app.trading.portfolio_guard import PortfolioGuard
     
     scheduler = await LayeredSchedulerManager.get_instance()
     trading_mode = scheduler.global_trading_mode
@@ -317,6 +360,14 @@ async def get_trading_summary_endpoint(db: AsyncSession = Depends(get_db)):
     query_closed_count = select(func.count(Trade.id)).where(Trade.exit_price.isnot(None))
     res_closed = await db.execute(query_closed_count)
     closed_count = res_closed.scalar() or 0
+
+    # Portfolio Guard metrics
+    exposure_metrics = await PortfolioGuard.get_instance().get_dashboard_metrics(balance)
+    
+    # Self-adaptation metrics
+    from app.ai.self_adaptation import SelfAdaptationEngine
+    adaptation_engine = SelfAdaptationEngine.get_instance()
+    adaptation_summary = adaptation_engine.get_adaptation_summary()
     
     return {
         "wallet_balance": round(balance, 2),
@@ -325,7 +376,9 @@ async def get_trading_summary_endpoint(db: AsyncSession = Depends(get_db)):
         "total_pnl": round(total_realized_pnl + total_unrealized_pnl, 2),
         "active_positions_count": len(active_positions),
         "closed_trades_count": closed_count,
-        "global_trading_mode": trading_mode
+        "global_trading_mode": trading_mode,
+        "portfolio_exposure": exposure_metrics,
+        "self_adaptation": adaptation_summary
     }
 
 @router.post("/validate-pipeline")

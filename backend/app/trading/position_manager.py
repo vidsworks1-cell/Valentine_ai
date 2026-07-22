@@ -359,6 +359,13 @@ class PositionManager:
                     ))
                 except Exception as ae:
                     logger.error(f"Failed to log close position success audit event: {ae}")
+
+                # 4. Trigger Self-Adaptation Engine performance re-evaluation
+                try:
+                    from app.ai.self_adaptation import SelfAdaptationEngine
+                    asyncio.create_task(SelfAdaptationEngine.get_instance().analyze_performance())
+                except Exception as sae:
+                    logger.error(f"Failed to trigger self-adaptation re-evaluation: {sae}")
                 
             except Exception as e:
                 logger.error(f"Error finalizing trade exit in DB: {e}")

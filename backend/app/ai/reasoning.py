@@ -55,7 +55,8 @@ class AiReasoningEngine:
                         stop_loss = round(price - (1.5 * atr) if side == "BUY" else price + (1.5 * atr), 2)
                         take_profit = round(price + (2.5 * atr) if side == "BUY" else price - (2.5 * atr), 2)
                         
-                        confidence = round(0.80 + (random.random() * 0.15), 2)
+                        raw_confidence = round(0.80 + (random.random() * 0.15), 2)
+                        market_regime = "VOLATILE" if volatility_factor > 0.014 else ("TRENDING" if (int(price * 10) % 3 == 0) else "RANGING")
                         
                         # Dynamically scale entry confidence threshold based on relative volatility
                         relative_volatility = atr / price if price > 0 else 0.01
@@ -66,8 +67,31 @@ class AiReasoningEngine:
                         else:
                             dynamic_threshold = base_threshold - (0.012 - relative_volatility) * 2.0
                         dynamic_threshold = round(max(0.80, min(0.90, dynamic_threshold)), 2)
+
+                        # Evaluate performance self-adaptation
+                        from app.ai.self_adaptation import SelfAdaptationEngine
+                        candidate_setup = {
+                            "symbol": symbol,
+                            "side": side,
+                            "entry_price": price,
+                            "stop_loss": stop_loss,
+                            "take_profit": take_profit,
+                            "strategy_used": strategy,
+                            "market_regime": market_regime,
+                            "atr": atr,
+                            "price": price
+                        }
                         
-                        passed_filter = confidence >= dynamic_threshold
+                        is_allowed, adaptive_modifier, adaptation_reasons = await SelfAdaptationEngine.get_instance().evaluate_opportunity_adaptation(candidate_setup)
+                        
+                        if not is_allowed:
+                            logger.warning(f"🚫 [SELF-ADAPTATION REJECTED] {symbol} {side} via {strategy} blocked by adaptation layer. Reasons: {adaptation_reasons}")
+                            continue
+
+                        adapted_confidence = round(max(0.0, min(1.0, raw_confidence + adaptive_modifier)), 2)
+                        passed_filter = adapted_confidence >= dynamic_threshold
+
+                        adaptation_log_str = "; ".join(adaptation_reasons) if adaptation_reasons else "Performance nominal."
                         
                         self.last_detected_setup = {
                             "symbol": symbol,
@@ -76,21 +100,26 @@ class AiReasoningEngine:
                             "stop_loss": stop_loss,
                             "take_profit": take_profit,
                             "strategy_used": strategy,
-                            "market_regime": "VOLATILE" if volatility_factor > 0.014 else "RANGING",
-                            "confidence_score": confidence,
+                            "market_regime": market_regime,
+                            "confidence_score": adapted_confidence,
+                            "raw_confidence_score": raw_confidence,
+                            "adaptive_modifier": adaptive_modifier,
                             "confidence_threshold": dynamic_threshold,
                             "passed_filter": passed_filter,
-                            "entry_reason": f"AI Engine evaluated ticker telemetry. Symbol {symbol} trading at ${price} with live update count {tally}. High conviction {strategy} trigger generated based on dynamic ATR of ${atr}. Applied dynamic confidence threshold: {dynamic_threshold}.",
+                            "entry_reason": f"AI Engine evaluated ticker telemetry. Symbol {symbol} trading at ${price} with live update count {tally}. High conviction {strategy} trigger generated based on dynamic ATR of ${atr}. Applied dynamic confidence threshold: {dynamic_threshold}. Self-Adaptation: {adaptation_log_str}",
+                            "adaptation_insights": adaptation_reasons,
                             "atr": atr,
                             "timestamp": asyncio.get_event_loop().time()
                         }
                         
                         if passed_filter:
-                            logger.info(f"🚨 OPPORTUNITY DETECTED & PASSED FILTER: {symbol} {side} via {strategy} at {price} (Conf: {confidence} >= Threshold: {dynamic_threshold})")
+                            logger.info(f"🚨 OPPORTUNITY DETECTED & PASSED FILTER: {symbol} {side} via {strategy} at {price} (Raw Conf: {raw_confidence}, Mod: {adaptive_modifier:+.2f} -> Adapted Conf: {adapted_confidence} >= Threshold: {dynamic_threshold})")
+                            if adaptation_reasons:
+                                logger.info(f"🧠 [SELF-ADAPTATION INSIGHTS] {adaptation_log_str}")
                             # Trigger automated order placement if autonomy rules permit
                             await self._propose_trade_to_manager(self.last_detected_setup)
                         else:
-                            logger.info(f"⚠️ OPPORTUNITY REJECTED BY CONFIDENCE FILTER: {symbol} {side} via {strategy} at {price} (Conf: {confidence} < Threshold: {dynamic_threshold})")
+                            logger.info(f"⚠️ OPPORTUNITY REJECTED BY CONFIDENCE FILTER: {symbol} {side} via {strategy} at {price} (Adapted Conf: {adapted_confidence} < Threshold: {dynamic_threshold})")
 
                 await asyncio.sleep(3.0) # Check every 3 seconds
             except asyncio.CancelledError:

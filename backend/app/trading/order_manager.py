@@ -77,7 +77,7 @@ class OrderManager:
                     logger.error(f"Error checking duplicate position in DB: {de}")
 
             if is_duplicate:
-                logger.warning(f"[DUPLICATE GUARD] Existing {side} position already open for {symbol}. Ignoring duplicate AI signal.")
+                logger.warning(f"[DUPLICATE GUARD]\nExisting {side} position already open for {symbol}.\nIgnoring duplicate AI signal.")
                 try:
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
@@ -112,7 +112,17 @@ class OrderManager:
                 price = opportunity["entry_price"]
                 stop_loss = opportunity["stop_loss"]
                 atr_val = opportunity.get("atr", price * 0.01)
-                
+
+                # 2b. Portfolio Exposure Guard Check
+                from app.trading.portfolio_guard import PortfolioGuard
+                passed_pg, pg_reason = await PortfolioGuard.get_instance().evaluate_trade(
+                    opportunity=opportunity,
+                    incoming_risk_pct=risk_pct,
+                    balance=balance
+                )
+                if not passed_pg:
+                    return
+
                 # Dynamic position sizing based on ATR Risk Engine calculation
                 position_size = RiskEvaluator.calculate_atr_position_size(balance, price, atr_val, risk_pct)
                 allowed_risk_amt = balance * risk_pct
