@@ -41,9 +41,9 @@ class BinanceWebSocketWorker:
         
         is_testnet = getattr(settings, "BINANCE_TESTNET", True)
         if is_testnet:
-            base_url = "wss://testnet.binance.vision/stream"
+            base_url = "wss://testnet.binance.vision/ws"
         else:
-            base_url = "wss://stream.binance.com:9443/stream"
+            base_url = "wss://stream.binance.com:9443/ws"
             
         logger.info(f"Connecting to Binance Spot WebSocket at: {base_url} (Testnet Mode={is_testnet})")
         
