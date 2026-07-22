@@ -28,25 +28,67 @@ class OrderManager:
 
     async def receive_opportunity(self, opportunity: Dict[str, Any]):
         """Receives a setup from Layer 3, evaluates risk profile, and executes if cleared."""
-        logger.info(f"[STAGE: SIGNAL] Reviewing trade opportunity from AI Scanner: {opportunity['symbol']} ({opportunity['side']}) at {opportunity['entry_price']} via {opportunity['strategy_used']}")
-        
-        # 0. Check central circuit breakers and global trading modes
-        from app.scheduler.manager import LayeredSchedulerManager
-        scheduler = await LayeredSchedulerManager.get_instance()
-        allowed, reason = await scheduler.is_trading_enabled()
-        if not allowed:
-            logger.warning(f"⚠️ ORDER PIPELINE REJECTED: {reason}")
-            try:
-                async with AsyncSessionLocal() as db:
-                    await AuditService.create_audit_log(db, AuditLogCreate(
-                        level="WARNING",
-                        category="SYSTEM",
-                        message=f"Order pipeline blocked for {opportunity['symbol']}",
-                        details=f"Reason: {reason}. Strategy {opportunity['strategy_used']} signals suppressed."
-                    ))
-            except Exception as ae:
-                logger.error(f"Failed to log blocked order pipeline audit event: {ae}")
-            return
+        async with self._lock:
+            symbol = opportunity["symbol"]
+            side = opportunity["side"]
+            
+            logger.info(f"[STAGE: SIGNAL] Reviewing trade opportunity from AI Scanner: {symbol} ({side}) at {opportunity['entry_price']} via {opportunity['strategy_used']}")
+            
+            # 0. Check central circuit breakers and global trading modes
+            from app.scheduler.manager import LayeredSchedulerManager
+            scheduler = await LayeredSchedulerManager.get_instance()
+            allowed, reason = await scheduler.is_trading_enabled()
+            if not allowed:
+                logger.warning(f"⚠️ ORDER PIPELINE REJECTED: {reason}")
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="WARNING",
+                            category="SYSTEM",
+                            message=f"Order pipeline blocked for {symbol}",
+                            details=f"Reason: {reason}. Strategy {opportunity['strategy_used']} signals suppressed."
+                        ))
+                except Exception as ae:
+                    logger.error(f"Failed to log blocked order pipeline audit event: {ae}")
+                return
+
+            # 0b. Duplicate Position Protection Guard: check if an active position already exists for symbol and side (status == OPEN)
+            from app.trading.position_manager import PositionManager
+            active_positions = PositionManager.get_instance().get_active_positions()
+            is_duplicate = any(
+                p.get("symbol") == symbol and p.get("side") == side
+                for p in active_positions
+            )
+
+            if not is_duplicate:
+                from sqlalchemy.future import select
+                from app.models.trading import Trade
+                try:
+                    async with AsyncSessionLocal() as db:
+                        query = select(Trade).where(
+                            Trade.symbol == symbol,
+                            Trade.side == side,
+                            Trade.exit_price.is_(None)
+                        )
+                        res = await db.execute(query)
+                        if res.scalars().first() is not None:
+                            is_duplicate = True
+                except Exception as de:
+                    logger.error(f"Error checking duplicate position in DB: {de}")
+
+            if is_duplicate:
+                logger.warning(f"[DUPLICATE GUARD] Existing {side} position already open for {symbol}. Ignoring duplicate AI signal.")
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="WARNING",
+                            category="TRADING",
+                            message=f"[DUPLICATE GUARD] Rejected duplicate {side} signal for {symbol}",
+                            details=f"Existing {side} position already open for {symbol}. Ignoring duplicate AI signal."
+                        ))
+                except Exception as ae:
+                    logger.error(f"Failed to log duplicate guard audit event: {ae}")
+                return
 
         async with AsyncSessionLocal() as db:
             try:
