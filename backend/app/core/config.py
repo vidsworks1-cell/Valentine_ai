@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # Binance API & WebSocket configurations
     BINANCE_API_KEY: str = ""
     BINANCE_API_SECRET: str = ""
-    BINANCE_TESTNET: bool = True
+    BINANCE_TESTNET: bool = False
     
     model_config = SettingsConfigDict(
         env_file=".env",

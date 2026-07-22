@@ -54,6 +54,7 @@ class BinanceWebSocketWorker:
                     logger.info("Reconnecting...")
                     cache.connection_status = "RECONNECTING"
                 
+                logger.info(f"Connecting to Binance WebSocket: {base_url}")
                 async with websockets.connect(base_url, ping_interval=20, ping_timeout=20) as websocket:
                     if is_testnet:
                         logger.info("Connected to Binance Testnet")
