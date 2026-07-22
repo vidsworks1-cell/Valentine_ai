@@ -38,13 +38,12 @@ class BinanceWebSocketWorker:
     async def _loop(self):
         cache = await PriceCache.get_instance()
         symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
-        stream_names = "/".join([f"{symbol.lower()}@ticker" for symbol in symbols])
         
-        is_testnet = getattr(settings, "BINANCE_TESTNET", True)
+        is_testnet = getattr(settings, "BINANCE_TESTNET", False)
         if is_testnet:
-            base_url = f"wss://testnet.binance.vision/stream?streams={stream_names}"
+            base_url = "wss://testnet.binance.vision/ws"
         else:
-            base_url = f"wss://stream.binance.com:9443/stream?streams={stream_names}"
+            base_url = "wss://stream.binance.com:9443/ws"
             
         logger.info(f"Connecting to Binance Spot WebSocket at: {base_url} (Testnet Mode={is_testnet})")
         
