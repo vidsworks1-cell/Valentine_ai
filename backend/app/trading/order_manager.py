@@ -52,6 +52,24 @@ class OrderManager:
                     logger.error(f"Failed to log blocked order pipeline audit event: {ae}")
                 return
 
+            # 0a. Market Data Guard Check: Verify live WebSocket feed is active, recent, and synchronized
+            from app.workers.price_cache import PriceCache
+            cache = await PriceCache.get_instance()
+            passed_md, md_reason = cache.validate_market_data(symbol, max_age_seconds=5.0)
+            if not passed_md:
+                logger.warning(md_reason)
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="WARNING",
+                            category="RISK",
+                            message=f"[MARKET DATA GUARD] Rejected {symbol} trade",
+                            details=md_reason
+                        ))
+                except Exception as ae:
+                    logger.error(f"Failed to log market data guard audit event: {ae}")
+                return
+
             # 0b. Duplicate Position Protection Guard: check if an active position already exists for symbol and side (status == OPEN)
             from app.trading.position_manager import PositionManager
             active_positions = PositionManager.get_instance().get_active_positions()
@@ -76,18 +94,27 @@ class OrderManager:
                 except Exception as de:
                     logger.error(f"Error checking duplicate position in DB: {de}")
 
-            if is_duplicate:
-                logger.warning(f"[DUPLICATE GUARD]\nExisting {side} position already open for {symbol}.\nIgnoring duplicate AI signal.")
+            # 0c. Multi-Timeframe Confirmation Guard Check (5m, 15m, 1h alignment)
+            from app.trading.mtf_confirmation import MTFConfirmationGuard
+            passed_mtf, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(symbol, side, opportunity.get("entry_price", 0.0))
+            if not passed_mtf:
+                mtf_reason = (
+                    f"[MTF GUARD]\n"
+                    f"Rejected {side} trade for {symbol}.\n"
+                    f"Reason: Multi-timeframe alignment insufficient ({mtf_align_pct:.1f}%).\n"
+                    f"5m: {mtf_details['tf_5m_bias']} | 15m: {mtf_details['tf_15m_bias']} | 1h: {mtf_details['tf_1h_bias']}."
+                )
+                logger.warning(mtf_reason)
                 try:
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
-                            category="TRADING",
-                            message=f"[DUPLICATE GUARD] Rejected duplicate {side} signal for {symbol}",
-                            details=f"Existing {side} position already open for {symbol}. Ignoring duplicate AI signal."
+                            category="RISK",
+                            message=f"[MTF GUARD] Rejected {side} trade for {symbol}",
+                            details=mtf_reason
                         ))
                 except Exception as ae:
-                    logger.error(f"Failed to log duplicate guard audit event: {ae}")
+                    logger.error(f"Failed to log MTF guard audit event: {ae}")
                 return
 
         async with AsyncSessionLocal() as db:

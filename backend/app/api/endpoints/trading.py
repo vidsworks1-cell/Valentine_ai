@@ -306,6 +306,141 @@ async def trigger_self_adaptation_reanalysis():
     await engine.analyze_performance()
     return {"status": "SUCCESS", "message": "Performance self-adaptation re-analysis triggered.", "data": engine.get_adaptation_summary()}
 
+@router.get("/journal")
+async def get_trade_journals_endpoint(db: AsyncSession = Depends(get_db)):
+    """Retrieves all trade journal entries with quality scores and explainability."""
+    from app.trading.trade_journal import TradeJournalEngine
+    from app.models.trading import Trade
+    from sqlalchemy.future import select
+    from sqlalchemy import desc
+
+    engine = TradeJournalEngine.get_instance()
+    
+    # Pre-populate journal cache for closed trades if needed
+    query = select(Trade).where(Trade.exit_price.isnot(None)).order_by(desc(Trade.exit_time)).limit(50)
+    res = await db.execute(query)
+    trades = res.scalars().all()
+    
+    for t in trades:
+        if not engine.get_journal_for_trade(t.id):
+            await engine.journal_closed_trade(t.id, db_trade=t)
+            
+    return engine.get_all_journals()
+
+@router.get("/journal/{trade_id}")
+async def get_trade_journal_by_id_endpoint(trade_id: int, db: AsyncSession = Depends(get_db)):
+    """Retrieves detailed journal, quality score, and counterfactual analysis for a specific trade."""
+    from app.trading.trade_journal import TradeJournalEngine
+    engine = TradeJournalEngine.get_instance()
+    journal = engine.get_journal_for_trade(trade_id)
+    if not journal:
+        journal = await engine.journal_closed_trade(trade_id)
+    return journal
+
+@router.get("/champion-challenger")
+async def get_champion_challenger_endpoint():
+    """Retrieves strategy champion/challenger standings, leaderboard, and promotion history."""
+    from app.trading.champion_challenger import ChampionChallengerEngine
+    engine = ChampionChallengerEngine.get_instance()
+    await engine.evaluate_strategies()
+    return engine.get_champion_challenger_summary()
+
+@router.get("/mtf-status")
+async def get_mtf_status_endpoint(symbol: str = "BTCUSDT", side: str = "BUY"):
+    """Evaluates multi-timeframe alignment for a symbol."""
+    from app.trading.mtf_confirmation import MTFConfirmationGuard
+    from app.workers.price_cache import PriceCache
+    cache = await PriceCache.get_instance()
+    price = cache.get_price(symbol)
+    passed, align_pct, details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(symbol, side, price)
+    return {
+        "passed": passed,
+        "alignment_pct": align_pct,
+        "details": details,
+        "current_price": price
+    }
+
+@router.get("/walk-forward")
+async def get_walk_forward_endpoint():
+    """Retrieves latest Walk-Forward optimization and strategy stability report."""
+    from app.ai.walk_forward import WalkForwardValidator
+    validator = WalkForwardValidator.get_instance()
+    report = validator.get_latest_report()
+    if not report:
+        report = await validator.run_walk_forward_validation()
+    return report
+
+@router.post("/walk-forward/run")
+async def run_walk_forward_endpoint():
+    """Triggers an immediate Walk-Forward optimization cycle."""
+    from app.ai.walk_forward import WalkForwardValidator
+    validator = WalkForwardValidator.get_instance()
+    report = await validator.run_walk_forward_validation()
+    return report
+
+@router.get("/quant-metrics")
+async def get_live_quant_metrics_endpoint(db: AsyncSession = Depends(get_db)):
+    """
+    Live Quantitative Monitoring Dashboard endpoint.
+    Aggregates: Equity Curve, Win Rate, Profit Factor, Sharpe Ratio, Quality Scores, Active Champion/Challengers, Portfolio Risk & Circuit Breaker.
+    """
+    from sqlalchemy.future import select
+    from sqlalchemy import desc
+    from app.models.trading import Trade
+    from app.trading.champion_challenger import ChampionChallengerEngine
+    from app.trading.portfolio_guard import PortfolioGuard
+    from app.ai.self_adaptation import SelfAdaptationEngine
+    from app.services.paper_trading_service import PaperTradingService
+
+    wallet = await PaperTradingService.get_wallet(db, "lumina_default")
+    balance = wallet.balance if wallet else 100000.0
+
+    # Fetch closed trades
+    query = select(Trade).where(Trade.exit_price.isnot(None)).order_by(Trade.exit_time.asc())
+    res = await db.execute(query)
+    trades = res.scalars().all()
+
+    total_closed = len(trades)
+    pnl_list = [(t.profit_loss or 0.0) for t in trades]
+    wins = [p for p in pnl_list if p > 0]
+    losses = [p for p in pnl_list if p <= 0]
+
+    win_rate_pct = round((len(wins) / total_closed * 100.0), 1) if total_closed > 0 else 0.0
+    gross_profit = sum(wins)
+    gross_loss = abs(sum(losses))
+    profit_factor = round((gross_profit / gross_loss), 2) if gross_loss > 0 else (round(gross_profit, 2) if gross_profit > 0 else 1.0)
+
+    # Build cumulative equity curve data
+    equity_curve = []
+    running_balance = 100000.0
+    for idx, t in enumerate(trades):
+        running_balance += (t.profit_loss or 0.0)
+        equity_curve.append({
+            "trade_num": idx + 1,
+            "timestamp": t.exit_time.isoformat() if t.exit_time else None,
+            "balance": round(running_balance, 2),
+            "trade_pnl": round(t.profit_loss or 0.0, 2)
+        })
+
+    champ_engine = ChampionChallengerEngine.get_instance()
+    await champ_engine.evaluate_strategies()
+    champ_summary = champ_engine.get_champion_challenger_summary()
+
+    portfolio_guard_metrics = await PortfolioGuard.get_instance().get_dashboard_metrics(balance)
+    adaptation_summary = SelfAdaptationEngine.get_instance().get_adaptation_summary()
+
+    return {
+        "total_closed_trades": total_closed,
+        "win_rate_pct": win_rate_pct,
+        "profit_factor": profit_factor,
+        "current_balance": round(balance, 2),
+        "equity_curve": equity_curve[-30:], # Last 30 data points
+        "champion_strategy": champ_summary.get("champion_strategy"),
+        "strategy_leaderboard": champ_summary.get("leaderboard", []),
+        "portfolio_guard": portfolio_guard_metrics,
+        "self_adaptation_insights": adaptation_summary.get("learning_insights", [])
+    }
+
 @router.get("/summary")
 async def get_trading_summary_endpoint(db: AsyncSession = Depends(get_db)):
     """Calculates performance overview (total realized/unrealized P&L, balance, etc.)."""

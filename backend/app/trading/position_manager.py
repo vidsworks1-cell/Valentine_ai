@@ -360,12 +360,17 @@ class PositionManager:
                 except Exception as ae:
                     logger.error(f"Failed to log close position success audit event: {ae}")
 
-                # 4. Trigger Self-Adaptation Engine performance re-evaluation
+                # 4. Trigger Self-Adaptation Engine performance re-evaluation, Trade Journaling, and Champion/Challenger evaluation
                 try:
                     from app.ai.self_adaptation import SelfAdaptationEngine
+                    from app.trading.trade_journal import TradeJournalEngine
+                    from app.trading.champion_challenger import ChampionChallengerEngine
+                    
                     asyncio.create_task(SelfAdaptationEngine.get_instance().analyze_performance())
+                    asyncio.create_task(TradeJournalEngine.get_instance().journal_closed_trade(trade_id))
+                    asyncio.create_task(ChampionChallengerEngine.get_instance().evaluate_strategies())
                 except Exception as sae:
-                    logger.error(f"Failed to trigger self-adaptation re-evaluation: {sae}")
+                    logger.error(f"Failed to trigger post-trade research & adaptation workflows: {sae}")
                 
             except Exception as e:
                 logger.error(f"Error finalizing trade exit in DB: {e}")

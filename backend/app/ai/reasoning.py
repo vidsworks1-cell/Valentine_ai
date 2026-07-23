@@ -47,6 +47,12 @@ class AiReasoningEngine:
                     # Generate a buy/sell setup based on price cache micro-variations
                     setup_chance = random.random()
                     if setup_chance > 0.92:  # Increased chance for demonstration/testing
+                        # Hard Safety Gate: Verify live market data before generating trade
+                        passed_md, md_reason = cache.validate_market_data(symbol, max_age_seconds=5.0)
+                        if not passed_md:
+                            logger.warning(f"🚫 [MARKET DATA GUARD REJECTED] {md_reason}")
+                            continue
+
                         side = "BUY" if (int(price * 100) % 2 == 0) else "SELL"
                         strategy = "Breakout Momentum" if side == "BUY" else "Mean Reversion"
                         
