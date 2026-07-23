@@ -70,29 +70,60 @@ class OrderManager:
                     logger.error(f"Failed to log market data guard audit event: {ae}")
                 return
 
-            # 0b. Duplicate Position Protection Guard: check if an active position already exists for symbol and side (status == OPEN)
+            # 0b. Position Exposure & Pyramiding Protection Guard:
+            # Do not open another position on a symbol unless the existing position is closed OR has reached TP1 (derisked).
             from app.trading.position_manager import PositionManager
             active_positions = PositionManager.get_instance().get_active_positions()
-            is_duplicate = any(
-                p.get("symbol") == symbol and p.get("side") == side
-                for p in active_positions
-            )
+            symbol_positions = [p for p in active_positions if p.get("symbol") == symbol]
 
-            if not is_duplicate:
+            block_entry = False
+            block_reason = ""
+
+            for pos in symbol_positions:
+                tp_stages = pos.get("tp_stages", [])
+                tp1_hit = tp_stages[0].get("hit", False) if tp_stages else False
+                if not tp1_hit:
+                    block_entry = True
+                    block_reason = (
+                        f"[POSITION EXPOSURE GUARD]\n"
+                        f"Rejected {side} trade for {symbol}.\n"
+                        f"Reason: An active position for {symbol} is already open and has not reached TP1 yet."
+                    )
+                    break
+
+            if not block_entry and not symbol_positions:
                 from sqlalchemy.future import select
                 from app.models.trading import Trade
                 try:
                     async with AsyncSessionLocal() as db:
                         query = select(Trade).where(
                             Trade.symbol == symbol,
-                            Trade.side == side,
                             Trade.exit_price.is_(None)
                         )
                         res = await db.execute(query)
                         if res.scalars().first() is not None:
-                            is_duplicate = True
+                            block_entry = True
+                            block_reason = (
+                                f"[POSITION EXPOSURE GUARD]\n"
+                                f"Rejected {side} trade for {symbol}.\n"
+                                f"Reason: An unclosed trade for {symbol} exists in database."
+                            )
                 except Exception as de:
-                    logger.error(f"Error checking duplicate position in DB: {de}")
+                    logger.error(f"Error checking open position in DB: {de}")
+
+            if block_entry:
+                logger.warning(block_reason)
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="WARNING",
+                            category="RISK",
+                            message=f"[POSITION EXPOSURE GUARD] Rejected {side} trade for {symbol}",
+                            details=block_reason
+                        ))
+                except Exception as ae:
+                    logger.error(f"Failed to log position exposure guard audit event: {ae}")
+                return
 
             # 0c. Multi-Timeframe Confirmation Guard Check (5m, 15m, 1h alignment)
             from app.trading.mtf_confirmation import MTFConfirmationGuard

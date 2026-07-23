@@ -22,9 +22,15 @@ class PortfolioGuard:
     _instance: Optional['PortfolioGuard'] = None
     
     MAX_OPEN_POSITIONS = 5
-    MAX_PORTFOLIO_RISK = 0.06   # 6%
-    MAX_SYMBOL_EXPOSURE = 0.02  # 2%
-    MAX_DAILY_LOSS = 0.05       # 5%
+    MAX_PORTFOLIO_RISK = 0.06   # 6% Portfolio Heat Limit
+    MAX_SYMBOL_EXPOSURE = 0.02  # 2% Max Per-Symbol Exposure
+    MAX_DAILY_LOSS = 0.05       # 5% Daily Loss Circuit Breaker
+    MAX_CLUSTER_POSITIONS = 2   # Max 2 simultaneous positions per correlation cluster
+
+    # Correlation Clusters Mapping
+    CORRELATION_CLUSTERS = {
+        "MAJOR_L1": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
+    }
     
     def __init__(self):
         self._circuit_breaker_active = False
@@ -155,6 +161,34 @@ class PortfolioGuard:
                     logger.error(f"Failed to create audit log for symbol concentration: {ae}")
 
                 return False, log_msg
+
+            # 3b. Correlation Guard (Sector / Cluster Limits)
+            for cluster_name, cluster_symbols in self.CORRELATION_CLUSTERS.items():
+                if symbol in cluster_symbols:
+                    active_cluster_positions = [
+                        p.get("symbol") for p in active_positions 
+                        if p.get("symbol") in cluster_symbols
+                    ]
+                    if len(active_cluster_positions) >= self.MAX_CLUSTER_POSITIONS:
+                        log_msg = (
+                            f"[CORRELATION GUARD]\n"
+                            f"Rejected {symbol} trade.\n"
+                            f"Reason: Correlation cluster '{cluster_name}' already has {len(active_cluster_positions)} active position(s) "
+                            f"({', '.join(active_cluster_positions)}). Limit: {self.MAX_CLUSTER_POSITIONS}."
+                        )
+                        logger.warning(log_msg)
+                        try:
+                            async with AsyncSessionLocal() as db:
+                                await AuditService.create_audit_log(db, AuditLogCreate(
+                                    level="WARNING",
+                                    category="RISK",
+                                    message=f"[CORRELATION GUARD] Cluster limit reached for {cluster_name}",
+                                    details=log_msg
+                                ))
+                        except Exception as ae:
+                            logger.error(f"Failed to log correlation guard audit event: {ae}")
+
+                        return False, log_msg
 
             # 4. Maximum Portfolio Risk Guard
             current_portfolio_risk_pct = 0.0
