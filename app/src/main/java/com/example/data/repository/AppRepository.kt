@@ -122,6 +122,85 @@ class AppRepository(private val db: AppDatabase) {
         contaboService.getMarketStatus()
     }
 
+    suspend fun getContaboReplayStatus(): com.example.data.api.ReplayStatusResponse = withContext(Dispatchers.IO) {
+        contaboService.getReplayStatus()
+    }
+
+    suspend fun startContaboReplay(
+        symbol: String = "BTCUSDT",
+        initialBalance: Double = 100000.0,
+        speedMultiplier: Double = 5.0,
+        numCandles: Int = 120,
+        startPrice: Double = 65000.0
+    ): com.example.data.api.ReplayStatusResponse = withContext(Dispatchers.IO) {
+        contaboService.startReplay(symbol, initialBalance, speedMultiplier, numCandles, startPrice)
+    }
+
+    suspend fun pauseContaboReplay(): com.example.data.api.ReplayStatusResponse = withContext(Dispatchers.IO) {
+        contaboService.pauseReplay()
+    }
+
+    suspend fun resumeContaboReplay(): com.example.data.api.ReplayStatusResponse = withContext(Dispatchers.IO) {
+        contaboService.resumeReplay()
+    }
+
+    suspend fun stepContaboReplay(): com.example.data.api.ReplayStatusResponse = withContext(Dispatchers.IO) {
+        contaboService.stepReplay()
+    }
+
+    suspend fun stopContaboReplay(): com.example.data.api.ReplayStatusResponse = withContext(Dispatchers.IO) {
+        contaboService.stopReplay()
+    }
+
+    suspend fun getContaboCoachInsights(): com.example.data.api.CoachInsightsResponse = withContext(Dispatchers.IO) {
+        contaboService.getCoachInsights()
+    }
+
+    suspend fun applyContaboCoachRecommendation(recId: String): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.applyCoachRecommendation(recId)
+    }
+
+    suspend fun applyAllContaboCoachRecommendations(): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.applyAllCoachRecommendations()
+    }
+
+    suspend fun getContaboMacroGuardStatus(): com.example.data.api.MacroGuardStatusResponse = withContext(Dispatchers.IO) {
+        contaboService.getMacroGuardStatus()
+    }
+
+    suspend fun getContaboMonteCarloSimulation(): com.example.data.api.MonteCarloResponse = withContext(Dispatchers.IO) {
+        contaboService.getMonteCarloSimulation()
+    }
+
+    suspend fun applyContaboKellyFraction(fraction: Double): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.applyKellyFraction(fraction)
+    }
+
+    suspend fun reconcileExchangePositions(): com.example.data.api.ExecutionReconciliationResponse = withContext(Dispatchers.IO) {
+        contaboService.reconcileExchangePositions()
+    }
+
+    suspend fun getInstitutionalRiskStatus(): com.example.data.api.InstitutionalRiskStatusResponse = withContext(Dispatchers.IO) {
+        contaboService.getInstitutionalRiskStatus()
+    }
+
+    suspend fun resetInstitutionalRiskHalt(): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.resetInstitutionalRiskHalt()
+    }
+
+    suspend fun getProductionMonitoringHealth(): com.example.data.api.ProductionMonitoringHealthResponse = withContext(Dispatchers.IO) {
+        contaboService.getProductionMonitoringHealth()
+    }
+
+    suspend fun getPaperValidationReport(): com.example.data.api.PaperValidationReportResponse = withContext(Dispatchers.IO) {
+        contaboService.getPaperValidationReport()
+    }
+
+    suspend fun promoteRolloutPhase(targetPhase: String): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.promoteRolloutPhase(targetPhase)
+    }
+
+
     // DAOs
     private val portfolioDao = db.portfolioDao()
     private val contentDao = db.contentDao()

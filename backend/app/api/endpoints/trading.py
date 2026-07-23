@@ -337,6 +337,81 @@ async def get_trade_journal_by_id_endpoint(trade_id: int, db: AsyncSession = Dep
         journal = await engine.journal_closed_trade(trade_id)
     return journal
 
+@router.get("/cooldowns")
+async def get_active_cooldowns_endpoint():
+    """Retrieves all currently active symbol evaluation cooldowns."""
+    from app.ai.reasoning import AiReasoningEngine
+    engine = AiReasoningEngine.get_instance()
+    return {
+        "active_cooldowns": engine.get_active_cooldowns(),
+        "total_active": len(engine.get_active_cooldowns())
+    }
+
+@router.get("/replay/status")
+async def get_replay_status_endpoint():
+    """Retrieves telemetry, positions, and equity curve for Historical Market Replay Sandbox."""
+    from app.trading.historical_replay import HistoricalReplayEngine
+    return HistoricalReplayEngine.get_instance().get_status()
+
+@router.post("/replay/start")
+async def start_replay_endpoint(
+    symbol: str = "BTCUSDT",
+    initial_balance: float = 100000.0,
+    speed_multiplier: float = 5.0,
+    num_candles: int = 120,
+    start_price: float = 65000.0
+):
+    """Starts a new Historical Market Replay Sandbox session."""
+    from app.trading.historical_replay import HistoricalReplayEngine
+    return await HistoricalReplayEngine.get_instance().start_replay(
+        symbol=symbol,
+        initial_balance=initial_balance,
+        speed_multiplier=speed_multiplier,
+        num_candles=num_candles,
+        start_price=start_price
+    )
+
+@router.post("/replay/pause")
+async def pause_replay_endpoint():
+    """Pauses active replay session."""
+    from app.trading.historical_replay import HistoricalReplayEngine
+    return await HistoricalReplayEngine.get_instance().pause_replay()
+
+@router.post("/replay/resume")
+async def resume_replay_endpoint():
+    """Resumes paused replay session."""
+    from app.trading.historical_replay import HistoricalReplayEngine
+    return await HistoricalReplayEngine.get_instance().resume_replay()
+
+@router.post("/replay/step")
+async def step_replay_endpoint():
+    """Advances replay session by 1 candle step."""
+    from app.trading.historical_replay import HistoricalReplayEngine
+    return await HistoricalReplayEngine.get_instance().step_replay()
+
+@router.post("/replay/stop")
+async def stop_replay_endpoint():
+    """Stops and finalizes current replay session."""
+    from app.trading.historical_replay import HistoricalReplayEngine
+    return await HistoricalReplayEngine.get_instance().stop_replay()
+
+@router.get("/execution-analytics")
+async def get_execution_analytics_endpoint():
+    """Retrieves Performance Analytics & Execution Efficiency metrics (latency, slippage, fill rate, quality index)."""
+    from app.trading.execution_analytics import ExecutionAnalyticsEngine
+    engine = ExecutionAnalyticsEngine.get_instance()
+    return engine.get_execution_metrics()
+
+@router.get("/strategy-performance")
+async def get_strategy_performance_endpoint():
+    """Retrieves strategy yield breakdown across market regimes and Walk-Forward refinement suggestions."""
+    from app.ai.walk_forward import WalkForwardValidator
+    validator = WalkForwardValidator.get_instance()
+    report = validator.get_latest_report()
+    if not report:
+        report = await validator.run_walk_forward_validation()
+    return report
+
 @router.get("/champion-challenger")
 async def get_champion_challenger_endpoint():
     """Retrieves strategy champion/challenger standings, leaderboard, and promotion history."""
@@ -629,6 +704,122 @@ async def validate_trading_pipeline(db: AsyncSession = Depends(get_db)):
         "trade_id": trade.id,
         "steps": steps
     }
+
+@router.get("/stale-exits/config")
+async def get_stale_exits_config():
+    """Retrieves current Time-Based Stale Trade Exit parameters."""
+    from app.trading.position_manager import PositionManager
+    pm = PositionManager.get_instance()
+    return {
+        "default_stale_hours": pm.default_stale_hours,
+        "default_stale_pct": pm.default_stale_pct
+    }
+
+@router.post("/stale-exits/config")
+async def update_stale_exits_config(stale_hours: float = 4.0, stale_pct: float = 0.6):
+    """Updates Time-Based Stale Trade Exit thresholds (stale hours duration & price stagnation % threshold)."""
+    from app.trading.position_manager import PositionManager
+    pm = PositionManager.get_instance()
+    pm.default_stale_hours = max(0.5, min(stale_hours, 72.0))
+    pm.default_stale_pct = max(0.1, min(stale_pct, 5.0))
+    return {
+        "status": "UPDATED",
+        "default_stale_hours": pm.default_stale_hours,
+        "default_stale_pct": pm.default_stale_pct
+    }
+
+@router.get("/reentry/watchers")
+async def get_reentry_watchers():
+    """Retrieves list of active Smart Re-Entry candidate watchers."""
+    from app.trading.reentry_engine import SmartReentryEngine
+    return {
+        "active_watchers": SmartReentryEngine.get_instance().get_active_watchers()
+    }
+
+@router.get("/learning/coach-insights")
+async def get_coach_insights_endpoint():
+    """Retrieves Lumina's Trade Analytics & Learning Engine ('Lumina Coach') insights and actionable recommendations."""
+    from app.ai.learning_engine import TradeAnalyticsLearningEngine
+    return TradeAnalyticsLearningEngine.get_instance().generate_coach_insights()
+
+@router.post("/learning/apply-recommendation")
+async def apply_recommendation_endpoint(rec_id: str):
+    """Applies a specific coaching recommendation directly into active trading parameters."""
+    from app.ai.learning_engine import TradeAnalyticsLearningEngine
+    return await TradeAnalyticsLearningEngine.get_instance().apply_recommendation(rec_id)
+
+@router.post("/learning/apply-all-recommendations")
+async def apply_all_recommendations_endpoint():
+    """Applies all active coaching recommendations at once to complete the closed learning loop."""
+    from app.ai.learning_engine import TradeAnalyticsLearningEngine
+    return await TradeAnalyticsLearningEngine.get_instance().apply_all_recommendations()
+
+@router.get("/macro-guard/status")
+async def get_macro_guard_status():
+    """Retrieves Systemic Macro Guard status, asset correlation matrix, and recent pre-emptive trim events."""
+    from app.trading.macro_guard import SystemicMacroGuardEngine
+    return await SystemicMacroGuardEngine.get_instance().evaluate_systemic_risk()
+
+@router.post("/macro-guard/config")
+async def update_macro_guard_config(elevated_threshold: float = 0.65, critical_threshold: float = 0.80):
+    """Updates Systemic Risk Index thresholds."""
+    from app.trading.macro_guard import SystemicMacroGuardEngine
+    mg = SystemicMacroGuardEngine.get_instance()
+    mg.risk_threshold_elevated = max(0.30, min(elevated_threshold, 0.90))
+    mg.risk_threshold_critical = max(mg.risk_threshold_elevated + 0.05, min(critical_threshold, 0.98))
+    return {
+        "status": "UPDATED",
+        "elevated_threshold": mg.risk_threshold_elevated,
+        "critical_threshold": mg.risk_threshold_critical
+    }
+
+@router.get("/monte-carlo/simulation")
+async def get_monte_carlo_simulation():
+    """Runs Monte Carlo risk-of-ruin simulations and Kelly position sizing optimization."""
+    from app.trading.monte_carlo import MonteCarloKellySimulator
+    return MonteCarloKellySimulator.get_instance().run_simulation()
+
+@router.post("/monte-carlo/apply-kelly")
+async def apply_kelly_fraction_endpoint(fraction: float = 0.5):
+    """Applies Fractional Kelly multiplier to PortfolioGuard max risk constraints."""
+    from app.trading.monte_carlo import MonteCarloKellySimulator
+    return MonteCarloKellySimulator.get_instance().apply_kelly_fraction(fraction)
+
+@router.get("/execution/reconcile")
+async def reconcile_exchange_positions():
+    """Pillar 1: Reconciles local database positions with live exchange state and checks order layer."""
+    from app.trading.live_execution import LiveExchangeExecutionEngine
+    return await LiveExchangeExecutionEngine.get_instance().reconcile_positions_with_exchange()
+
+@router.get("/institutional-risk/status")
+async def get_institutional_risk_status():
+    """Pillar 2: Evaluates institutional daily/weekly loss limits and circuit breakers."""
+    from app.trading.institutional_risk import InstitutionalRiskEngine
+    return await InstitutionalRiskEngine.get_instance().evaluate_risk_breakers()
+
+@router.post("/institutional-risk/reset-halt")
+async def reset_institutional_risk_halt():
+    """Pillar 2: Resumes trading following risk breaker halt review."""
+    from app.trading.institutional_risk import InstitutionalRiskEngine
+    return InstitutionalRiskEngine.get_instance().reset_trading_halt()
+
+@router.get("/production-monitoring/health")
+async def get_production_monitoring_health():
+    """Pillar 3: Collects VPS resources, execution latency, and feed health telemetry."""
+    from app.trading.production_monitoring import ProductionMonitoringEngine
+    return await ProductionMonitoringEngine.get_instance().collect_health_metrics()
+
+@router.get("/paper-validation/report")
+async def get_paper_validation_report():
+    """Pillar 4 & 5: Retrieves continuous paper trading validation report and rollout phases."""
+    from app.trading.paper_validation import LongTermPaperValidationEngine
+    return LongTermPaperValidationEngine.get_instance().get_validation_report()
+
+@router.post("/paper-validation/promote-phase")
+async def promote_rollout_phase(target_phase: str = "PHASE_2_MICRO_LIVE"):
+    """Pillar 5: Promotes active rollout phase."""
+    from app.trading.paper_validation import LongTermPaperValidationEngine
+    return LongTermPaperValidationEngine.get_instance().promote_to_next_phase(target_phase)
 
 @router.get("/{trade_id}", response_model=TradeResponse)
 async def read_trade(trade_id: int, db: AsyncSession = Depends(get_db)):

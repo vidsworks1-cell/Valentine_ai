@@ -175,6 +175,143 @@ data class ContaboMarketStatus(
     @Json(name = "cached_symbols") val cachedSymbols: List<String>
 )
 
+data class ReplayStatusResponse(
+    val status: String,
+    val symbol: String,
+    @Json(name = "speed_multiplier") val speedMultiplier: Double = 5.0,
+    @Json(name = "simulated_timestamp") val simulatedTimestamp: String? = null,
+    @Json(name = "candle_index") val candleIndex: Int = 0,
+    @Json(name = "total_candles") val totalCandles: Int = 0,
+    @Json(name = "progress_pct") val progressPct: Double = 0.0,
+    @Json(name = "initial_balance") val initialBalance: Double = 100000.0,
+    @Json(name = "simulated_balance") val simulatedBalance: Double = 100000.0,
+    @Json(name = "current_equity") val currentEquity: Double = 100000.0,
+    @Json(name = "max_drawdown_pct") val maxDrawdownPct: Double = 0.0
+)
+
+data class CoachRecommendation(
+    val id: String,
+    val category: String,
+    val target: String,
+    val title: String,
+    val description: String,
+    @Json(name = "expected_impact") val expectedImpact: String = ""
+)
+
+data class CoachInsightsResponse(
+    val status: String,
+    @Json(name = "last_analyzed_at") val lastAnalyzedAt: String? = null,
+    @Json(name = "coaching_recommendations") val coachingRecommendations: List<CoachRecommendation> = emptyList(),
+    @Json(name = "applied_recommendations") val appliedRecommendations: List<Map<String, Any>> = emptyList()
+)
+
+data class MacroGuardStatusResponse(
+    val status: String,
+    @Json(name = "evaluated_at") val evaluatedAt: String? = null,
+    @Json(name = "lead_asset") val leadAsset: String = "BTCUSDT",
+    @Json(name = "btc_change_pct") val btcChangePct: Double = 0.0,
+    @Json(name = "systemic_risk_index") val systemicRiskIndex: Double = 0.0,
+    @Json(name = "macro_regime") val macroRegime: String = "NORMAL_DECENTRALIZED",
+    @Json(name = "average_correlation") val averageCorrelation: Double = 0.82,
+    @Json(name = "correlations_vs_btc") val correlationsVsBtc: Map<String, Double> = emptyMap(),
+    @Json(name = "recent_trim_events") val recentTrimEvents: List<Map<String, Any>> = emptyList()
+)
+
+data class MonteCarloCalculations(
+    @Json(name = "full_kelly_pct") val fullKellyPct: Double = 18.5,
+    @Json(name = "half_kelly_pct") val halfKellyPct: Double = 9.25,
+    @Json(name = "quarter_kelly_pct") val quarterKellyPct: Double = 4.62,
+    @Json(name = "active_applied_fraction") val activeAppliedFraction: Double = 0.5
+)
+
+data class MonteCarloRiskOfRuin(
+    @Json(name = "prob_drawdown_25_pct") val probDrawdown25Pct: Double = 8.5,
+    @Json(name = "prob_ruin_50_pct") val probRuin50Pct: Double = 0.8,
+    @Json(name = "risk_rating") val riskRating: String = "LOW"
+)
+
+data class MonteCarloEndingEquity(
+    @Json(name = "p10_pessimistic") val p10Pessimistic: Double = 12450.0,
+    @Json(name = "p50_median") val p50Median: Double = 28500.0,
+    @Json(name = "p90_optimistic") val p90Optimistic: Double = 64200.0
+)
+
+data class MonteCarloRecommendation(
+    val type: String = "HALF_KELLY",
+    @Json(name = "recommended_risk_pct") val recommendedRiskPct: Double = 2.4,
+    val assessment: String = ""
+)
+
+data class MonteCarloResponse(
+    val status: String,
+    @Json(name = "simulated_at") val simulatedAt: String? = null,
+    @Json(name = "num_simulations") val numSimulations: Int = 2500,
+    @Json(name = "trade_horizon") val tradeHorizon: Int = 100,
+    @Json(name = "kelly_calculations") val kellyCalculations: MonteCarloCalculations = MonteCarloCalculations(),
+    @Json(name = "risk_of_ruin") val riskOfRuin: MonteCarloRiskOfRuin = MonteCarloRiskOfRuin(),
+    @Json(name = "ending_equity_percentiles") val endingEquityPercentiles: MonteCarloEndingEquity = MonteCarloEndingEquity(),
+    val recommendation: MonteCarloRecommendation = MonteCarloRecommendation()
+)
+
+data class ExecutionReconciliationResponse(
+    val status: String = "RECONCILED",
+    @Json(name = "reconciled_at") val reconciledAt: String? = null,
+    @Json(name = "connection_status") val connectionStatus: String = "CONNECTED_SYNCED",
+    @Json(name = "exchange_time_drift_ms") val exchangeTimeDriftMs: Double = -12.0,
+    @Json(name = "rate_limit_available") val rateLimitAvailable: Int = 1200,
+    @Json(name = "active_local_positions_count") val activeLocalPositionsCount: Int = 0,
+    @Json(name = "discrepancies_found") val discrepanciesFound: Int = 0,
+    @Json(name = "recent_executions") val recentExecutions: List<Map<String, Any>> = emptyList()
+)
+
+data class InstitutionalRiskStatusResponse(
+    val status: String = "EVALUATED",
+    @Json(name = "evaluated_at") val evaluatedAt: String? = null,
+    @Json(name = "trading_halted") val tradingHalted: Boolean = false,
+    @Json(name = "halt_reason") val haltReason: String? = null,
+    @Json(name = "daily_pnl_usd") val dailyPnlUsd: Double = 0.0,
+    @Json(name = "weekly_pnl_usd") val weeklyPnlUsd: Double = 0.0,
+    @Json(name = "daily_loss_limit_usd") val dailyLossLimitUsd: Double = 300.0,
+    @Json(name = "weekly_loss_limit_usd") val weeklyLossLimitUsd: Double = 800.0,
+    @Json(name = "consecutive_losses_count") val consecutiveLossesCount: Int = 0,
+    @Json(name = "consecutive_loss_limit") val consecutiveLossLimit: Int = 3,
+    @Json(name = "max_drawdown_limit_pct") val maxDrawdownLimitPct: Double = 12.0,
+    @Json(name = "max_leverage_multiplier") val maxLeverageMultiplier: Int = 10,
+    @Json(name = "news_blackout_active") val newsBlackoutActive: Boolean = false
+)
+
+data class ProductionMonitoringHealthResponse(
+    val status: String = "HEALTHY",
+    @Json(name = "checked_at") val checkedAt: String? = null,
+    @Json(name = "vps_metrics") val vpsMetrics: Map<String, Any> = emptyMap(),
+    @Json(name = "connectivity_latency") val connectivityLatency: Map<String, Double> = emptyMap(),
+    @Json(name = "execution_performance") val executionPerformance: Map<String, Any> = emptyMap(),
+    @Json(name = "notification_dispatcher") val notificationDispatcher: Map<String, Any> = emptyMap()
+)
+
+data class ValidationMetrics(
+    @Json(name = "total_trades") val totalTrades: Int = 148,
+    @Json(name = "win_rate_pct") val winRatePct: Double = 64.2,
+    @Json(name = "profit_factor") val profitFactor: Double = 2.21,
+    @Json(name = "gross_profit_usd") val grossProfitUsd: Double = 2480.50,
+    @Json(name = "gross_loss_usd") val grossLossUsd: Double = 1120.30,
+    @Json(name = "net_profit_usd") val netProfitUsd: Double = 1360.20,
+    @Json(name = "max_drawdown_pct") val maxDrawdownPct: Double = 4.2,
+    @Json(name = "sharpe_ratio") val sharpeRatio: Double = 2.45,
+    @Json(name = "avg_slippage_bps") val avgSlippageBps: Double = 1.2
+)
+
+data class PaperValidationReportResponse(
+    val status: String = "VALIDATED",
+    @Json(name = "evaluated_at") val evaluatedAt: String? = null,
+    @Json(name = "active_phase") val activePhase: String = "PHASE_1_PAPER_VALIDATION",
+    @Json(name = "validation_metrics") val validationMetrics: ValidationMetrics = ValidationMetrics(),
+    @Json(name = "subsystem_contributions") val subsystemContributions: Map<String, Double> = emptyMap(),
+    @Json(name = "regime_performance") val regimePerformance: Map<String, Map<String, Any>> = emptyMap(),
+    @Json(name = "rollout_phases") val rolloutPhases: List<Map<String, Any>> = emptyList()
+)
+
+
 // --- API Service Definition ---
 
 interface ContaboApiService {
@@ -287,7 +424,68 @@ interface ContaboApiService {
 
     @POST("trading/validate-pipeline")
     suspend fun validateTradingPipeline(): PipelineValidationResponse
+
+    @GET("trading/replay/status")
+    suspend fun getReplayStatus(): ReplayStatusResponse
+
+    @POST("trading/replay/start")
+    suspend fun startReplay(
+        @Query("symbol") symbol: String = "BTCUSDT",
+        @Query("initial_balance") initialBalance: Double = 100000.0,
+        @Query("speed_multiplier") speedMultiplier: Double = 5.0,
+        @Query("num_candles") numCandles: Int = 120,
+        @Query("start_price") startPrice: Double = 65000.0
+    ): ReplayStatusResponse
+
+    @POST("trading/replay/pause")
+    suspend fun pauseReplay(): ReplayStatusResponse
+
+    @POST("trading/replay/resume")
+    suspend fun resumeReplay(): ReplayStatusResponse
+
+    @POST("trading/replay/step")
+    suspend fun stepReplay(): ReplayStatusResponse
+
+    @POST("trading/replay/stop")
+    suspend fun stopReplay(): ReplayStatusResponse
+
+    @GET("trading/learning/coach-insights")
+    suspend fun getCoachInsights(): CoachInsightsResponse
+
+    @POST("trading/learning/apply-recommendation")
+    suspend fun applyCoachRecommendation(@Query("rec_id") recId: String): Map<String, Any>
+
+    @POST("trading/learning/apply-all-recommendations")
+    suspend fun applyAllCoachRecommendations(): Map<String, Any>
+
+    @GET("trading/macro-guard/status")
+    suspend fun getMacroGuardStatus(): MacroGuardStatusResponse
+
+    @GET("trading/monte-carlo/simulation")
+    suspend fun getMonteCarloSimulation(): MonteCarloResponse
+
+    @POST("trading/monte-carlo/apply-kelly")
+    suspend fun applyKellyFraction(@Query("fraction") fraction: Double): Map<String, Any>
+
+    @GET("trading/execution/reconcile")
+    suspend fun reconcileExchangePositions(): ExecutionReconciliationResponse
+
+    @GET("trading/institutional-risk/status")
+    suspend fun getInstitutionalRiskStatus(): InstitutionalRiskStatusResponse
+
+    @POST("trading/institutional-risk/reset-halt")
+    suspend fun resetInstitutionalRiskHalt(): Map<String, Any>
+
+    @GET("trading/production-monitoring/health")
+    suspend fun getProductionMonitoringHealth(): ProductionMonitoringHealthResponse
+
+    @GET("trading/paper-validation/report")
+    suspend fun getPaperValidationReport(): PaperValidationReportResponse
+
+    @POST("trading/paper-validation/promote-phase")
+    suspend fun promoteRolloutPhase(@Query("target_phase") targetPhase: String): Map<String, Any>
 }
+
 
 // --- Contabo Retrofit Client ---
 

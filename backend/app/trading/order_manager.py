@@ -114,6 +114,10 @@ class OrderManager:
             if block_entry:
                 logger.warning(block_reason)
                 try:
+                    from app.ai.reasoning import AiReasoningEngine
+                    from app.trading.execution_analytics import ExecutionAnalyticsEngine
+                    AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="POSITION_OPEN", reason=block_reason, price=opportunity.get("entry_price", 0.0))
+                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), block_reason, opportunity.get("entry_price", 0.0))
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
@@ -137,6 +141,10 @@ class OrderManager:
                 )
                 logger.warning(mtf_reason)
                 try:
+                    from app.ai.reasoning import AiReasoningEngine
+                    from app.trading.execution_analytics import ExecutionAnalyticsEngine
+                    AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="MTF_DISAGREEMENT", reason=mtf_reason, price=opportunity.get("entry_price", 0.0))
+                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), mtf_reason, opportunity.get("entry_price", 0.0))
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
@@ -179,6 +187,12 @@ class OrderManager:
                     balance=balance
                 )
                 if not passed_pg:
+                    try:
+                        from app.ai.reasoning import AiReasoningEngine
+                        pg_cat = "CORRELATION_CLUSTER" if "CORRELATION" in pg_reason.upper() else "PORTFOLIO_RISK_HEAT"
+                        AiReasoningEngine.get_instance().set_cooldown(symbol, side, category=pg_cat, reason=pg_reason, price=price)
+                    except Exception as ce:
+                        logger.error(f"Failed to set cooldown on portfolio guard rejection: {ce}")
                     return
 
                 # Dynamic position sizing based on ATR Risk Engine calculation

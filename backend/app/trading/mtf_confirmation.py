@@ -67,3 +67,12 @@ class MTFConfirmationGuard:
 
         passed = alignment_pct >= 66.0
         return passed, alignment_pct, details
+
+    async def check_thesis_invalidation(self, symbol: str, side: str, price: float) -> Tuple[bool, str]:
+        """
+        Checks if market conditions have shifted so strongly against an active position that the entry thesis is invalidated.
+        """
+        passed, alignment_pct, details = await self.evaluate_mtf_alignment(symbol, side, price)
+        if details["agree_count"] == 0:
+            return True, f"Full MTF trend reversal against {side} position (100% agreement on {details['tf_1h_bias']})"
+        return False, ""

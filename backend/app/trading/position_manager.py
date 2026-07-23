@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from app.workers.price_cache import PriceCache
@@ -20,6 +21,8 @@ class PositionManager:
         self._positions: Dict[int, Dict[str, Any]] = {}
         self.running = False
         self._task: asyncio.Task | None = None
+        self.default_stale_hours: float = 4.0  # Default 4 hours stale duration
+        self.default_stale_pct: float = 0.6    # Stagnant price movement threshold (0.6%)
 
     @classmethod
     def get_instance(cls) -> 'PositionManager':
@@ -64,8 +67,15 @@ class PositionManager:
                 {"level": round(tp if tp > 0 else entry - total_dist, 2), "percentage": 0.40, "hit": False, "label": "Final TP (40%)"}
             ]
             
+        if "opened_at" not in position_details:
+            position_details["opened_at"] = time.time()
+        if "stale_threshold_sec" not in position_details:
+            position_details["stale_threshold_sec"] = int(self.default_stale_hours * 3600)
+        if "stale_price_range_pct" not in position_details:
+            position_details["stale_price_range_pct"] = self.default_stale_pct
+
         self._positions[trade_id] = position_details
-        logger.info(f"PositionManager started tracking trade {trade_id} ({position_details['symbol']}) with TP stages: {position_details['tp_stages']}")
+        logger.info(f"PositionManager started tracking trade {trade_id} ({position_details['symbol']}) with TP stages: {position_details['tp_stages']} | Stale limit: {round(position_details['stale_threshold_sec']/3600, 1)}h")
 
     def get_active_positions(self) -> List[Dict[str, Any]]:
         return list(self._positions.values())
@@ -151,9 +161,40 @@ class PositionManager:
                     if side == "BUY":
                         if current_price <= pos["trailing_stop"] and pos["trailing_stop"] > 0:
                             await self._close_position(trade_id, current_price, "STOP_LOSS")
+                            continue
                     elif side == "SELL":
                         if current_price >= pos["trailing_stop"] and pos["trailing_stop"] > 0:
                             await self._close_position(trade_id, current_price, "STOP_LOSS")
+                            continue
+
+                    # 4. Intelligent Early Exit Engine (Thesis Invalidation Check)
+                    from app.trading.mtf_confirmation import MTFConfirmationGuard
+                    invalidated, inv_reason = await MTFConfirmationGuard.get_instance().check_thesis_invalidation(symbol, side, current_price)
+                    if invalidated:
+                        logger.warning(f"⚠️ [INTELLIGENT EARLY EXIT] Trade {trade_id} {symbol} ({side}): Thesis invalidated. Reason: {inv_reason}")
+                        await self._close_position(trade_id, current_price, "THESIS_INVALIDATION")
+                        continue
+
+                    # 5. Time-Based Stale Trade Exit Engine (Capital Recycling)
+                    opened_at = pos.get("opened_at", time.time())
+                    time_open_sec = time.time() - opened_at
+                    stale_limit_sec = pos.get("stale_threshold_sec", int(self.default_stale_hours * 3600))
+                    stale_pct_limit = pos.get("stale_price_range_pct", self.default_stale_pct)
+                    price_change_pct = abs((current_price - entry) / entry) * 100.0 if entry > 0 else 0.0
+
+                    if time_open_sec >= stale_limit_sec and price_change_pct <= stale_pct_limit:
+                        open_hrs = round(time_open_sec / 3600.0, 1)
+                        logger.warning(
+                            f"⏳ [STALE TRADE EXIT] Trade {trade_id} {symbol} ({side}): "
+                            f"Stagnant for {open_hrs}h with price change of {price_change_pct:.2f}% (<= {stale_pct_limit}%). "
+                            f"Exiting position to recycle capital and eliminate opportunity cost."
+                        )
+                        await self._close_position(trade_id, current_price, "STALE_TRADE_EXIT")
+                        continue
+
+                    # 6. Pyramiding Scale-In Evaluation for Winning Trends
+                    from app.trading.pyramiding import PyramidingEngine
+                    await PyramidingEngine.get_instance().evaluate_scale_in(pos, current_price)
                 
                 await asyncio.sleep(1.0) # Check every second
             except asyncio.CancelledError:
@@ -360,12 +401,23 @@ class PositionManager:
                 except Exception as ae:
                     logger.error(f"Failed to log close position success audit event: {ae}")
 
-                # 4. Trigger Self-Adaptation Engine performance re-evaluation, Trade Journaling, and Champion/Challenger evaluation
+                # 4. Trigger Self-Adaptation Engine performance re-evaluation, Trade Journaling, Smart Re-Entry watcher, and Champion/Challenger evaluation
                 try:
                     from app.ai.self_adaptation import SelfAdaptationEngine
                     from app.trading.trade_journal import TradeJournalEngine
                     from app.trading.champion_challenger import ChampionChallengerEngine
+                    from app.trading.reentry_engine import SmartReentryEngine
                     
+                    SmartReentryEngine.get_instance().register_closed_trade({
+                        "trade_id": trade_id,
+                        "symbol": symbol,
+                        "side": side,
+                        "entry_price": entry,
+                        "exit_price": exit_price,
+                        "outcome_type": outcome_type,
+                        "strategy": pos.get("strategy", "Standard Strategy")
+                    })
+
                     asyncio.create_task(SelfAdaptationEngine.get_instance().analyze_performance())
                     asyncio.create_task(TradeJournalEngine.get_instance().journal_closed_trade(trade_id))
                     asyncio.create_task(ChampionChallengerEngine.get_instance().evaluate_strategies())

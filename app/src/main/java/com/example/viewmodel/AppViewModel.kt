@@ -152,6 +152,31 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _contaboMarketStatus = MutableStateFlow<com.example.data.api.ContaboMarketStatus?>(null)
     val contaboMarketStatus = _contaboMarketStatus.asStateFlow()
 
+    private val _contaboReplayStatus = MutableStateFlow<com.example.data.api.ReplayStatusResponse?>(null)
+    val contaboReplayStatus = _contaboReplayStatus.asStateFlow()
+
+    private val _contaboCoachInsights = MutableStateFlow<com.example.data.api.CoachInsightsResponse?>(null)
+    val contaboCoachInsights = _contaboCoachInsights.asStateFlow()
+
+    private val _contaboMacroGuardStatus = MutableStateFlow<com.example.data.api.MacroGuardStatusResponse?>(null)
+    val contaboMacroGuardStatus = _contaboMacroGuardStatus.asStateFlow()
+
+    private val _contaboMonteCarloSimulation = MutableStateFlow<com.example.data.api.MonteCarloResponse?>(null)
+    val contaboMonteCarloSimulation = _contaboMonteCarloSimulation.asStateFlow()
+
+    private val _executionReconciliation = MutableStateFlow<com.example.data.api.ExecutionReconciliationResponse?>(null)
+    val executionReconciliation = _executionReconciliation.asStateFlow()
+
+    private val _institutionalRiskStatus = MutableStateFlow<com.example.data.api.InstitutionalRiskStatusResponse?>(null)
+    val institutionalRiskStatus = _institutionalRiskStatus.asStateFlow()
+
+    private val _productionMonitoringHealth = MutableStateFlow<com.example.data.api.ProductionMonitoringHealthResponse?>(null)
+    val productionMonitoringHealth = _productionMonitoringHealth.asStateFlow()
+
+    private val _paperValidationReport = MutableStateFlow<com.example.data.api.PaperValidationReportResponse?>(null)
+    val paperValidationReport = _paperValidationReport.asStateFlow()
+
+
     private val _contaboActivePositions = MutableStateFlow<List<com.example.data.api.ContaboActivePosition>>(emptyList())
     val contaboActivePositions = _contaboActivePositions.asStateFlow()
 
@@ -269,9 +294,156 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 android.util.Log.e("ContaboIntegration", "Failed to fetch Trading Summary: ${e.message}", e)
                 onAppEventOccurred("CONN_ERROR_TRADING_SUMMARY", "Connection failed for GET /trading/summary: ${e.localizedMessage ?: "Timeout or Unknown Error"}")
             }
+            try {
+                _contaboReplayStatus.value = repository.getContaboReplayStatus()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch Replay Status: ${e.message}")
+            }
+            try {
+                _contaboCoachInsights.value = repository.getContaboCoachInsights()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch Coach Insights: ${e.message}")
+            }
+            try {
+                _contaboMacroGuardStatus.value = repository.getContaboMacroGuardStatus()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch Macro Guard Status: ${e.message}")
+            }
+            try {
+                _contaboMonteCarloSimulation.value = repository.getContaboMonteCarloSimulation()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch Monte Carlo Simulation: ${e.message}")
+            }
+            try {
+                _executionReconciliation.value = repository.reconcileExchangePositions()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to reconcile execution: ${e.message}")
+            }
+            try {
+                _institutionalRiskStatus.value = repository.getInstitutionalRiskStatus()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch institutional risk: ${e.message}")
+            }
+            try {
+                _productionMonitoringHealth.value = repository.getProductionMonitoringHealth()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch monitoring health: ${e.message}")
+            }
+            try {
+                _paperValidationReport.value = repository.getPaperValidationReport()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch validation report: ${e.message}")
+            }
+
 
             fetchLayeredVpsStatus()
             fetchBinanceData()
+        }
+    }
+
+    fun applyKellyFraction(fraction: Double) {
+        viewModelScope.launch {
+            try {
+                repository.applyContaboKellyFraction(fraction)
+                _contaboMonteCarloSimulation.value = repository.getContaboMonteCarloSimulation()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to apply Kelly fraction: ${e.message}")
+            }
+        }
+    }
+
+    fun resetInstitutionalRiskHalt() {
+        viewModelScope.launch {
+            try {
+                repository.resetInstitutionalRiskHalt()
+                _institutionalRiskStatus.value = repository.getInstitutionalRiskStatus()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to reset risk halt: ${e.message}")
+            }
+        }
+    }
+
+    fun promoteRolloutPhase(targetPhase: String) {
+        viewModelScope.launch {
+            try {
+                repository.promoteRolloutPhase(targetPhase)
+                _paperValidationReport.value = repository.getPaperValidationReport()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to promote rollout phase: ${e.message}")
+            }
+        }
+    }
+
+
+    fun applyCoachRecommendation(recId: String) {
+        viewModelScope.launch {
+            try {
+                repository.applyContaboCoachRecommendation(recId)
+                _contaboCoachInsights.value = repository.getContaboCoachInsights()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to apply coach recommendation: ${e.message}")
+            }
+        }
+    }
+
+    fun applyAllCoachRecommendations() {
+        viewModelScope.launch {
+            try {
+                repository.applyAllContaboCoachRecommendations()
+                _contaboCoachInsights.value = repository.getContaboCoachInsights()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to apply all coach recommendations: ${e.message}")
+            }
+        }
+    }
+
+    fun startContaboReplay(symbol: String = "BTCUSDT", speedMultiplier: Double = 5.0) {
+        viewModelScope.launch {
+            try {
+                _contaboReplayStatus.value = repository.startContaboReplay(symbol = symbol, speedMultiplier = speedMultiplier)
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to start Replay: ${e.message}")
+            }
+        }
+    }
+
+    fun pauseContaboReplay() {
+        viewModelScope.launch {
+            try {
+                _contaboReplayStatus.value = repository.pauseContaboReplay()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to pause Replay: ${e.message}")
+            }
+        }
+    }
+
+    fun resumeContaboReplay() {
+        viewModelScope.launch {
+            try {
+                _contaboReplayStatus.value = repository.resumeContaboReplay()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to resume Replay: ${e.message}")
+            }
+        }
+    }
+
+    fun stepContaboReplay() {
+        viewModelScope.launch {
+            try {
+                _contaboReplayStatus.value = repository.stepContaboReplay()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to step Replay: ${e.message}")
+            }
+        }
+    }
+
+    fun stopContaboReplay() {
+        viewModelScope.launch {
+            try {
+                _contaboReplayStatus.value = repository.stopContaboReplay()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to stop Replay: ${e.message}")
+            }
         }
     }
 
