@@ -1,5 +1,6 @@
 import hmac
 import hashlib
+import os
 import time
 import urllib.parse
 from typing import Dict, Any, List, Optional, Union
@@ -22,8 +23,15 @@ class BinanceConnector:
     _instance: Optional['BinanceConnector'] = None
 
     def __init__(self):
-        self.api_key = getattr(settings, "BINANCE_API_KEY", "") or ""
-        self.api_secret = getattr(settings, "BINANCE_API_SECRET", "") or ""
+        pass
+
+    @property
+    def api_key(self) -> str:
+        return os.environ.get("BINANCE_API_KEY") or getattr(settings, "BINANCE_API_KEY", "") or ""
+
+    @property
+    def api_secret(self) -> str:
+        return os.environ.get("BINANCE_API_SECRET") or getattr(settings, "BINANCE_API_SECRET", "") or ""
 
     @classmethod
     def get_instance(cls) -> 'BinanceConnector':
@@ -238,7 +246,9 @@ class BinanceConnector:
         return await self._request("DELETE", "/api/v3/order", mode, params=params, signed=True)
 
     async def _mock_request(self, method: str, path: str, mode: str, params: Dict[str, Any]) -> Any:
-        """High-fidelity simulation fallback when in PAPER mode or API keys are missing."""
+        """High-fidelity simulation fallback when in PAPER mode."""
+        if mode in ["LIVE", "TESTNET"]:
+            raise ValueError(f"CRITICAL ERROR: _mock_request was invoked while in {mode} mode! Mock execution is strictly forbidden in LIVE/TESTNET modes.")
         logger.info(f"Using high-fidelity mockup for {method} {path} in {mode} mode.")
         
         if path == "/api/v3/account":
