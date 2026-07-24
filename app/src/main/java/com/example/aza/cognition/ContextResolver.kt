@@ -61,8 +61,9 @@ object ContextResolver {
         val apiSecret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }.ifBlank { binanceState?.apiSecret ?: "" }
         val mode = try { com.example.aza.security.SecureCredentialStore.getBinanceTradingMode() } catch(e: Exception) { "" }.ifBlank { binanceState?.operatingMode ?: "MOCK" }
         
-        val isConnected = apiKey.isNotEmpty() && apiSecret.isNotEmpty() && (binanceState?.isEnabled != false)
-        val maskedKey = if (apiKey.length > 8) apiKey.take(4) + "..." + apiKey.takeLast(4) else "None"
+        var isConnected = apiKey.isNotEmpty() && apiSecret.isNotEmpty() && (binanceState?.isEnabled != false)
+        var maskedKey = if (apiKey.length > 8) apiKey.take(4) + "..." + apiKey.takeLast(4) else "None"
+        var resolvedMode = mode
         
         val budget = try { com.example.aza.security.SecureCredentialStore.getTradingBudget() } catch (e: Exception) { 0.0 }
         val budgetPeriod = try { com.example.aza.security.SecureCredentialStore.getTradingBudgetPeriod() } catch (e: Exception) { "daily" }
@@ -70,13 +71,32 @@ object ContextResolver {
         val atrMultiplier = try { com.example.aza.security.SecureCredentialStore.getAtrMultiplier() } catch (e: Exception) { 2.0 }
         val positionSlicePercent = try { com.example.aza.security.SecureCredentialStore.getPositionSlicePercent() } catch (e: Exception) { 10.0 }
 
-        val liveBalancesText = if (isConnected) {
+        // Fetch live balances from backend repository (VPS service)
+        val (backendSuccess, liveBalancesText) = try {
+            val balances = repository.getBinanceBalances()
+            val text = if (balances.isEmpty()) {
+                "No non-zero balances found on Binance Spot account."
+            } else {
+                balances.joinToString(", ") { "${it.asset}: ${it.free} (Locked: ${it.locked})" }
+            }
+            Pair(true, text)
+        } catch (e: Exception) {
+            Pair(false, "")
+        }
+
+        val finalBalancesText: String
+        if (backendSuccess) {
+            isConnected = true
+            if (maskedKey == "None") maskedKey = "Server-Configured (VPS)"
+            resolvedMode = "LIVE"
+            finalBalancesText = liveBalancesText
+        } else if (isConnected) {
             val result = try {
                 com.example.aza.connector.BinanceConnector.fetchAccountBalances()
             } catch (e: Exception) {
                 Result.failure(e)
             }
-            if (result.isSuccess) {
+            finalBalancesText = if (result.isSuccess) {
                 val list = result.getOrThrow()
                 if (list.isEmpty()) {
                     "No assets with non-zero balances found on Binance."
@@ -87,7 +107,7 @@ object ContextResolver {
                 "Failed to fetch live balances: ${result.exceptionOrNull()?.message}"
             }
         } else {
-            "N/A (Integration inactive)"
+            finalBalancesText = "N/A (Integration inactive)"
         }
 
         return UnifiedContext(
@@ -101,13 +121,13 @@ object ContextResolver {
             preferences = memory.preferences,
             isBinanceConnected = isConnected,
             binanceApiKeyMasked = maskedKey,
-            binanceMode = mode,
+            binanceMode = resolvedMode,
             tradingBudget = budget,
             tradingBudgetPeriod = budgetPeriod,
             tradingRiskLevel = riskLevel,
             atrMultiplier = atrMultiplier,
             positionSlicePercent = positionSlicePercent,
-            binanceLiveBalances = liveBalancesText
+            binanceLiveBalances = finalBalancesText
         )
     }
 }
