@@ -205,6 +205,14 @@ async def get_binance_balances():
     mode = scheduler.global_trading_mode
     
     balances = await connector.get_wallet_balances(mode)
+    if isinstance(balances, dict) and ("error" in balances or ("code" in balances and isinstance(balances["code"], int) and balances["code"] < 0)):
+        status_code = balances.get("status_code", 400)
+        if not isinstance(status_code, int) or status_code < 400 or status_code > 599:
+            status_code = 400
+        raise HTTPException(
+            status_code=status_code,
+            detail=balances
+        )
     return balances
 
 @router.get("/binance/orders")
@@ -218,6 +226,14 @@ async def get_binance_orders(symbol: str = None):
     mode = scheduler.global_trading_mode
     
     orders = await connector.get_open_orders(mode, symbol)
+    if isinstance(orders, dict) and ("error" in orders or ("code" in orders and isinstance(orders["code"], int) and orders["code"] < 0)):
+        status_code = orders.get("status_code", 400)
+        if not isinstance(status_code, int) or status_code < 400 or status_code > 599:
+            status_code = 400
+        raise HTTPException(
+            status_code=status_code,
+            detail=orders
+        )
     return orders
 
 @router.delete("/binance/order/{symbol}/{order_id}")

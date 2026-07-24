@@ -2,7 +2,7 @@ import hmac
 import hashlib
 import time
 import urllib.parse
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 import httpx
 import logging
 from app.core.config import settings
@@ -40,64 +40,140 @@ class BinanceConnector:
     def has_keys(self) -> bool:
         return bool(self.api_key and self.api_secret)
 
-    def _sign(self, params: Dict[str, Any]) -> str:
-        query_string = urllib.parse.urlencode(sorted(params.items()))
-        signature = hmac.new(
+    def _sign_query_string(self, query_string: str) -> str:
+        return hmac.new(
             self.api_secret.encode('utf-8'),
             query_string.encode('utf-8'),
             hashlib.sha256
         ).hexdigest()
-        return signature
 
     async def _request(self, method: str, path: str, mode: str, params: Dict[str, Any] = None, signed: bool = False) -> Any:
         if params is None:
             params = {}
             
-        if not self.has_keys() or mode in ["OFF", "PAPER"]:
-            return await self._mock_request(method, path, mode, params)
-            
+        exec_type = "MOCK" if mode in ["OFF", "PAPER"] else "LIVE"
         base_url = self.get_base_url(mode)
-        url = f"{base_url}{path}"
         
+        logger.info(
+            f"[BinanceConnector] Request Initiated | Mode: {mode} | ExecType: {exec_type} | "
+            f"Method: {method} | Path: {path} | BaseURL: {base_url} | HasKeys: {self.has_keys()}"
+        )
+
+        if mode in ["OFF", "PAPER"]:
+            logger.info(f"[BinanceConnector] Using high-fidelity mock request in {mode} mode for {path}.")
+            return await self._mock_request(method, path, mode, params)
+
+        # LIVE or TESTNET mode - strictly NEVER call _mock_request()
+        if not self.has_keys():
+            logger.error(f"[BinanceConnector] Cannot execute request in {mode} mode: API key or secret is missing.")
+            return {
+                "error": "MISSING_KEYS",
+                "status_code": 401,
+                "code": -2008,
+                "msg": "Binance API key or secret is not configured in environment settings."
+            }
+
         headers = {
+            "X-MBX-APIKEY": self.api_key,
             "Content-Type": "application/x-www-form-urlencoded"
         }
-        
-        headers["X-MBX-APIKEY"] = self.api_key
-            
+
+        req_params = dict(params)
         if signed:
-            params["timestamp"] = int(time.time() * 1000)
-            signature = self._sign(params)
-            params["signature"] = signature
+            if "recvWindow" not in req_params:
+                req_params["recvWindow"] = 5000
+            req_params["timestamp"] = int(time.time() * 1000)
+            
+            # Construct deterministic query string and sign IT directly
+            query_string = urllib.parse.urlencode(req_params)
+            signature = self._sign_query_string(query_string)
+            query_string = f"{query_string}&signature={signature}"
+            url = f"{base_url}{path}?{query_string}"
+        else:
+            if req_params:
+                query_string = urllib.parse.urlencode(req_params)
+                url = f"{base_url}{path}?{query_string}"
+            else:
+                url = f"{base_url}{path}"
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 if method.upper() == "GET":
-                    response = await client.get(url, params=params, headers=headers)
+                    response = await client.get(url, headers=headers)
                 elif method.upper() == "POST":
-                    response = await client.post(url, data=params, headers=headers)
+                    response = await client.post(url, headers=headers)
                 elif method.upper() == "DELETE":
-                    response = await client.delete(url, params=params, headers=headers)
+                    response = await client.delete(url, headers=headers)
                 else:
-                    raise ValueError(f"Unsupported method: {method}")
-                
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+
+                logger.info(
+                    f"[BinanceConnector] Response Received | Mode: {mode} | ExecType: {exec_type} | "
+                    f"Path: {path} | HTTP Status: {response.status_code}"
+                )
+
+                try:
+                    data = response.json()
+                except Exception as json_err:
+                    logger.error(
+                        f"[BinanceConnector] Non-JSON response | Mode: {mode} | Status: {response.status_code} | "
+                        f"Body: {response.text[:200]}"
+                    )
+                    return {
+                        "error": "HTTP_ERROR",
+                        "status_code": response.status_code,
+                        "code": response.status_code,
+                        "msg": response.text
+                    }
+
                 if response.status_code != 200:
-                    logger.error(f"Binance API error {response.status_code}: {response.text}")
-                    return {"error": response.status_code, "msg": response.text}
-                
-                return response.json()
+                    binance_code = data.get("code", response.status_code) if isinstance(data, dict) else response.status_code
+                    binance_msg = data.get("msg", response.text) if isinstance(data, dict) else response.text
+                    logger.error(
+                        f"[BinanceConnector] Binance API Error | Mode: {mode} | ExecType: {exec_type} | "
+                        f"BaseURL: {base_url} | Path: {path} | HTTP Status: {response.status_code} | "
+                        f"Binance Code: {binance_code} | Binance Msg: {binance_msg}"
+                    )
+                    return {
+                        "error": "BINANCE_API_ERROR",
+                        "status_code": response.status_code,
+                        "code": binance_code,
+                        "msg": binance_msg
+                    }
+
+                if isinstance(data, dict) and "code" in data and isinstance(data["code"], int) and data["code"] < 0:
+                    logger.error(
+                        f"[BinanceConnector] Error object in 200 OK | Mode: {mode} | ExecType: {exec_type} | "
+                        f"Path: {path} | Code: {data['code']} | Msg: {data.get('msg')}"
+                    )
+                    return {
+                        "error": "BINANCE_API_ERROR",
+                        "status_code": 200,
+                        "code": data["code"],
+                        "msg": data.get("msg", "Unknown Binance error")
+                    }
+
+                return data
             except Exception as e:
-                logger.error(f"Binance request exception: {e}")
-                return {"error": "EXCEPTION", "msg": str(e)}
+                logger.error(
+                    f"[BinanceConnector] Exception during request | Mode: {mode} | ExecType: {exec_type} | "
+                    f"Path: {path} | Error: {e}"
+                )
+                return {
+                    "error": "EXCEPTION",
+                    "status_code": 500,
+                    "code": 500,
+                    "msg": str(e)
+                }
 
     async def get_account_info(self, mode: str) -> Dict[str, Any]:
         """Fetches account details from Binance."""
         return await self._request("GET", "/api/v3/account", mode, signed=True)
 
-    async def get_wallet_balances(self, mode: str) -> List[Dict[str, Any]]:
-        """Fetches non-zero asset balances."""
+    async def get_wallet_balances(self, mode: str) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+        """Fetches non-zero asset balances or returns error dictionary."""
         res = await self.get_account_info(mode)
-        if "balances" in res:
+        if isinstance(res, dict) and "balances" in res:
             balances = []
             for b in res["balances"]:
                 free = float(b.get("free", 0.0))
@@ -109,17 +185,33 @@ class BinanceConnector:
                         "locked": locked
                     })
             return balances
-        return []
 
-    async def get_open_orders(self, mode: str, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Gets all open orders."""
+        # Do NOT silently swallow errors - return the error object if account info call failed
+        if isinstance(res, dict):
+            return res
+        return {
+            "error": "UNKNOWN_ERROR",
+            "status_code": 500,
+            "code": -1,
+            "msg": f"Unexpected response structure from Binance: {res}"
+        }
+
+    async def get_open_orders(self, mode: str, symbol: Optional[str] = None) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+        """Gets all open orders or returns error dictionary."""
         params = {}
         if symbol:
             params["symbol"] = symbol.upper()
         res = await self._request("GET", "/api/v3/openOrders", mode, params=params, signed=True)
         if isinstance(res, list):
             return res
-        return []
+        if isinstance(res, dict):
+            return res
+        return {
+            "error": "UNKNOWN_ERROR",
+            "status_code": 500,
+            "code": -1,
+            "msg": f"Unexpected response structure from Binance: {res}"
+        }
 
     async def create_order(self, mode: str, symbol: str, side: str, order_type: str, quantity: float, price: Optional[float] = None) -> Dict[str, Any]:
         """Creates an order (LIMIT or MARKET)."""
