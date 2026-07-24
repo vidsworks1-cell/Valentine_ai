@@ -165,7 +165,7 @@ async def create_trade(trade_in: TradeCreate, db: AsyncSession = Depends(get_db)
     return await TradingService.create_trade(db, trade_in)
 
 @router.get("/binance/status")
-async def get_binance_status():
+async def get_binance_status(mode: Optional[str] = None):
     """Fetches Binance connectivity status, keys configuration and rate limits."""
     from app.services.binance_connector import BinanceConnector
     from app.scheduler.manager import LayeredSchedulerManager
@@ -173,39 +173,73 @@ async def get_binance_status():
     connector = BinanceConnector.get_instance()
     scheduler = await LayeredSchedulerManager.get_instance()
     
-    has_keys = connector.has_keys()
-    mode = scheduler.global_trading_mode
+    target_mode = (mode or scheduler.global_trading_mode or "PAPER").upper()
+    if target_mode == "OFF":
+        target_mode = "TESTNET" if connector.has_keys("TESTNET") else ("LIVE" if connector.has_keys("LIVE") else "PAPER")
+
+    has_keys = connector.has_keys(target_mode)
+    exec_url = connector.get_base_url(target_mode)
     
-    # Simple check to see if we can connect and fetch account info
     latency_ms = 0
     import time
     start_time = time.time()
+    
+    http_status = 200
+    binance_code = None
+    binance_msg = None
+    is_connected = False
+
     try:
-        acc_info = await connector.get_account_info(mode)
+        acc_info = await connector.get_account_info(target_mode)
         latency_ms = int((time.time() - start_time) * 1000)
-        is_connected = "error" not in acc_info
+        
+        if isinstance(acc_info, dict) and ("balances" in acc_info or "canTrade" in acc_info):
+            is_connected = True
+            http_status = 200
+            binance_code = None
+            binance_msg = None
+        elif isinstance(acc_info, dict):
+            is_connected = False
+            http_status = acc_info.get("status_code", 400)
+            binance_code = acc_info.get("code")
+            binance_msg = acc_info.get("msg") or acc_info.get("error")
+        else:
+            is_connected = False
+            http_status = 500
+            binance_code = -1
+            binance_msg = f"Unexpected response structure from Binance: {acc_info}"
     except Exception as e:
         is_connected = False
+        http_status = 500
+        binance_code = 500
+        binance_msg = str(e)
         
     return {
         "is_authenticated": has_keys,
         "is_connected": is_connected,
+        "mode": target_mode,
+        "execution_mode": target_mode,
+        "execution_url": exec_url,
+        "http_status": http_status,
+        "binance_code": binance_code,
+        "binance_msg": binance_msg,
         "latency_ms": latency_ms,
-        "mode": mode,
         "rate_limit_status": "NORMAL" if is_connected else "UNKNOWN"
     }
 
 @router.get("/binance/balances")
-async def get_binance_balances():
+async def get_binance_balances(mode: Optional[str] = None):
     """Queries current Binance Spot asset balances."""
     from app.services.binance_connector import BinanceConnector
     from app.scheduler.manager import LayeredSchedulerManager
     
     connector = BinanceConnector.get_instance()
     scheduler = await LayeredSchedulerManager.get_instance()
-    mode = scheduler.global_trading_mode
+    target_mode = (mode or scheduler.global_trading_mode or "PAPER").upper()
+    if target_mode == "OFF":
+        target_mode = "TESTNET" if connector.has_keys("TESTNET") else ("LIVE" if connector.has_keys("LIVE") else "PAPER")
     
-    balances = await connector.get_wallet_balances(mode)
+    balances = await connector.get_wallet_balances(target_mode)
     if isinstance(balances, dict) and ("error" in balances or ("code" in balances and isinstance(balances["code"], int) and balances["code"] < 0)):
         status_code = balances.get("status_code", 400)
         if not isinstance(status_code, int) or status_code < 400 or status_code > 599:
@@ -217,16 +251,18 @@ async def get_binance_balances():
     return balances
 
 @router.get("/binance/orders")
-async def get_binance_orders(symbol: str = None):
+async def get_binance_orders(symbol: Optional[str] = None, mode: Optional[str] = None):
     """Retrieves open Binance Spot orders."""
     from app.services.binance_connector import BinanceConnector
     from app.scheduler.manager import LayeredSchedulerManager
     
     connector = BinanceConnector.get_instance()
     scheduler = await LayeredSchedulerManager.get_instance()
-    mode = scheduler.global_trading_mode
+    target_mode = (mode or scheduler.global_trading_mode or "PAPER").upper()
+    if target_mode == "OFF":
+        target_mode = "TESTNET" if connector.has_keys("TESTNET") else ("LIVE" if connector.has_keys("LIVE") else "PAPER")
     
-    orders = await connector.get_open_orders(mode, symbol)
+    orders = await connector.get_open_orders(target_mode, symbol)
     if isinstance(orders, dict) and ("error" in orders or ("code" in orders and isinstance(orders["code"], int) and orders["code"] < 0)):
         status_code = orders.get("status_code", 400)
         if not isinstance(status_code, int) or status_code < 400 or status_code > 599:
@@ -238,16 +274,31 @@ async def get_binance_orders(symbol: str = None):
     return orders
 
 @router.delete("/binance/order/{symbol}/{order_id}")
-async def cancel_binance_order(symbol: str, order_id: str):
+@router.delete("/binance/order/{order_id}")
+async def cancel_binance_order(
+    order_id: str,
+    symbol: str = "BTCUSDT",
+    mode: Optional[str] = None
+):
     """Cancels an active Binance Spot order."""
     from app.services.binance_connector import BinanceConnector
     from app.scheduler.manager import LayeredSchedulerManager
     
     connector = BinanceConnector.get_instance()
     scheduler = await LayeredSchedulerManager.get_instance()
-    mode = scheduler.global_trading_mode
+    target_mode = (mode or scheduler.global_trading_mode or "PAPER").upper()
+    if target_mode == "OFF":
+        target_mode = "TESTNET" if connector.has_keys("TESTNET") else ("LIVE" if connector.has_keys("LIVE") else "PAPER")
     
-    res = await connector.cancel_order(mode, symbol, order_id)
+    res = await connector.cancel_order(target_mode, symbol, order_id)
+    if isinstance(res, dict) and ("error" in res or ("code" in res and isinstance(res["code"], int) and res["code"] < 0)):
+        status_code = res.get("status_code", 400)
+        if not isinstance(status_code, int) or status_code < 400 or status_code > 599:
+            status_code = 400
+        raise HTTPException(
+            status_code=status_code,
+            detail=res
+        )
     return res
 
 @router.post("/execute-live", response_model=ManualOrderResponse, status_code=status.HTTP_201_CREATED)
@@ -275,7 +326,16 @@ async def execute_manual_live_order(
     symbol = order_in.symbol.strip().upper()
     side = order_in.side.strip().upper()
     order_type = order_in.order_type.strip().upper()
-    quantity = order_in.quantity
+    
+    # Resolve quantity vs usdt_amount (quote asset)
+    usdt_amount = order_in.usdt_amount or order_in.quote_order_qty or order_in.quote_qty
+    raw_quantity = order_in.quantity
+
+    if (raw_quantity is None or raw_quantity <= 0.0) and (usdt_amount is None or usdt_amount <= 0.0):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order sizing error: Either 'quantity' (base asset units, e.g. 0.0001 BTC) or 'usdt_amount' / 'quote_order_qty' (quote asset USD/USDT, e.g. 5.0 USDT) must be provided and > 0."
+        )
 
     if side not in ["BUY", "SELL"]:
         raise HTTPException(
@@ -295,6 +355,15 @@ async def execute_manual_live_order(
             detail="Limit orders require a valid positive 'price'."
         )
 
+    if order_type == "LIMIT" and usdt_amount and not raw_quantity:
+        if order_in.price and order_in.price > 0:
+            raw_quantity = round(usdt_amount / order_in.price, 8)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="LIMIT orders require base asset 'quantity' (e.g. BTC) or a valid 'price' to convert 'usdt_amount'."
+            )
+
     # Resolve execution mode
     scheduler = await LayeredSchedulerManager.get_instance()
     connector = BinanceConnector.get_instance()
@@ -309,20 +378,38 @@ async def execute_manual_live_order(
     else:
         mode = scheduler.global_trading_mode
         if mode == "OFF":
-            mode = "LIVE" if connector.has_keys() else "PAPER"
+            if connector.has_keys("TESTNET"):
+                mode = "TESTNET"
+            elif connector.has_keys("LIVE"):
+                mode = "LIVE"
+            else:
+                mode = "PAPER"
 
     # Verify keys for LIVE and TESTNET modes
-    if mode in ["LIVE", "TESTNET"] and not connector.has_keys():
+    if mode in ["LIVE", "TESTNET"] and not connector.has_keys(mode):
+        key_hint = "BINANCE_TESTNET_API_KEY and BINANCE_TESTNET_API_SECRET" if mode == "TESTNET" else "BINANCE_API_KEY and BINANCE_API_SECRET"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Binance API keys not configured or unauthenticated for mode '{mode}'. Please set BINANCE_API_KEY and BINANCE_API_SECRET."
+            detail=f"Binance API keys not configured or unauthenticated for mode '{mode}'. Please set {key_hint}."
         )
 
-    # Fetch current market price from PriceCache for fallback / SL / TP calculation
+    # Fetch current market price from PriceCache for fallback / SL / TP / base qty calculation
     cache = await PriceCache.get_instance()
     curr_market_price = cache.get_price(symbol)
     if curr_market_price <= 0.0:
         curr_market_price = order_in.price if (order_in.price and order_in.price > 0.0) else (65000.0 if "BTC" in symbol else 3500.0)
+
+    quote_order_qty: Optional[float] = None
+    target_quantity: Optional[float] = None
+
+    if raw_quantity and raw_quantity > 0.0:
+        target_quantity = raw_quantity
+    elif usdt_amount and usdt_amount > 0.0:
+        if order_type == "MARKET":
+            quote_order_qty = usdt_amount
+            target_quantity = round(usdt_amount / curr_market_price, 8)
+        else:
+            target_quantity = round(usdt_amount / (order_in.price or curr_market_price), 8)
 
     # Execute order via BinanceConnector
     try:
@@ -331,8 +418,9 @@ async def execute_manual_live_order(
             symbol=symbol,
             side=side,
             order_type=order_type,
-            quantity=quantity,
-            price=order_in.price
+            quantity=target_quantity if not quote_order_qty else None,
+            price=order_in.price,
+            quote_order_qty=quote_order_qty
         )
     except Exception as exc:
         err_msg = f"Exception encountered during Binance order submission: {str(exc)}"
@@ -369,9 +457,10 @@ async def execute_manual_live_order(
             detail=binance_res
         )
 
-    # Extract fill details & price
+    # Extract fill details, price, and actual executed quantity
     binance_order_id = str(binance_res.get("orderId", binance_res.get("clientOrderId", "")))
     executed_price = 0.0
+    filled_base_qty = 0.0
 
     if "fills" in binance_res and isinstance(binance_res["fills"], list) and len(binance_res["fills"]) > 0:
         total_qty = 0.0
@@ -382,7 +471,16 @@ async def execute_manual_live_order(
             total_qty += q
             total_cost += q * p
         if total_qty > 0.0:
+            filled_base_qty = total_qty
             executed_price = round(total_cost / total_qty, 6)
+
+    if filled_base_qty <= 0.0 and "executedQty" in binance_res:
+        try:
+            filled_base_qty = float(binance_res["executedQty"])
+        except (ValueError, TypeError):
+            filled_base_qty = 0.0
+
+    final_quantity = filled_base_qty if filled_base_qty > 0.0 else (target_quantity or 0.0001)
 
     if executed_price <= 0.0:
         if "price" in binance_res and float(binance_res.get("price", 0.0)) > 0.0:
@@ -406,7 +504,7 @@ async def execute_manual_live_order(
         symbol=symbol,
         side=side,
         entry_price=executed_price,
-        position_size=quantity,
+        position_size=final_quantity,
         stop_loss=stop_loss,
         take_profit=take_profit,
         strategy_used=order_in.strategy_used,
@@ -419,7 +517,7 @@ async def execute_manual_live_order(
             "raw_binance_response": binance_res
         }),
         atr=atr_val,
-        risk_amount=round(abs(executed_price - stop_loss) * quantity, 2),
+        risk_amount=round(abs(executed_price - stop_loss) * final_quantity, 2),
         risk_pct=2.0
     )
 
@@ -431,7 +529,7 @@ async def execute_manual_live_order(
         "symbol": symbol,
         "side": side,
         "entry_price": executed_price,
-        "position_size": quantity,
+        "position_size": final_quantity,
         "stop_loss": stop_loss,
         "take_profit": take_profit,
         "trailing_stop": stop_loss,
@@ -446,7 +544,7 @@ async def execute_manual_live_order(
         await AuditService.create_audit_log(db, AuditLogCreate(
             level="INFO",
             category="TRADING",
-            message=f"Manual live order executed on Binance: {side} {quantity} {symbol} @ ${executed_price} [{mode}]",
+            message=f"Manual live order executed on Binance: {side} {final_quantity} {symbol} @ ${executed_price} [{mode}]",
             details=f"Binance Order ID: {binance_order_id}, DB Trade ID: {trade.id}",
             trade_id=trade.id
         ))
@@ -458,12 +556,12 @@ async def execute_manual_live_order(
         symbol=symbol,
         side=side,
         order_type=order_type,
-        quantity=quantity,
+        quantity=final_quantity,
         executed_price=executed_price,
         binance_order_id=binance_order_id,
         trade_id=trade.id,
         mode=mode,
-        message=f"Manual live order successfully executed on Binance ({mode} mode) and registered for position tracking.",
+        message=f"Manual live order successfully executed on Binance ({mode} mode) for {final_quantity} {symbol} and registered for position tracking.",
         raw_binance_response=binance_res if isinstance(binance_res, dict) else {"response": str(binance_res)}
     )
 

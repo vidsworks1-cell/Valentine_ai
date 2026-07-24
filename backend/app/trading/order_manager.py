@@ -242,7 +242,7 @@ class OrderManager:
                         quantity=position_size
                     )
                     
-                    if "error" in binance_res or "msg" in binance_res and binance_res.get("error"):
+                    if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
                         logger.error(f"❌ BINANCE ORDER PLACEMENT FAILED: {binance_res}")
                         try:
                             await AuditService.create_audit_log(db, AuditLogCreate(

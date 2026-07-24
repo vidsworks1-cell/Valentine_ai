@@ -3,7 +3,7 @@ import hashlib
 import os
 import time
 import urllib.parse
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Tuple
 import httpx
 import logging
 from app.core.config import settings
@@ -25,32 +25,83 @@ class BinanceConnector:
     def __init__(self):
         pass
 
-    @property
-    def api_key(self) -> str:
-        return os.environ.get("BINANCE_API_KEY") or getattr(settings, "BINANCE_API_KEY", "") or ""
-
-    @property
-    def api_secret(self) -> str:
-        return os.environ.get("BINANCE_API_SECRET") or getattr(settings, "BINANCE_API_SECRET", "") or ""
-
     @classmethod
     def get_instance(cls) -> 'BinanceConnector':
         if cls._instance is None:
             cls._instance = BinanceConnector()
         return cls._instance
 
-    def get_base_url(self, mode: str) -> str:
-        if mode == "LIVE":
-            return "https://api.binance.com"
+    def get_credentials(self, mode: str) -> Tuple[str, str]:
+        """Returns (api_key, api_secret) strictly based on execution mode."""
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "TESTNET":
+            key = (
+                os.environ.get("BINANCE_TESTNET_API_KEY") or
+                getattr(settings, "BINANCE_TESTNET_API_KEY", "") or
+                ""
+            ).strip()
+            secret = (
+                os.environ.get("BINANCE_TESTNET_SECRET_KEY") or
+                os.environ.get("BINANCE_TESTNET_API_SECRET") or
+                getattr(settings, "BINANCE_TESTNET_SECRET_KEY", "") or
+                getattr(settings, "BINANCE_TESTNET_API_SECRET", "") or
+                ""
+            ).strip()
+            return key, secret
+        elif mode_upper == "LIVE":
+            key = (
+                os.environ.get("BINANCE_API_KEY") or
+                getattr(settings, "BINANCE_API_KEY", "") or
+                ""
+            ).strip()
+            secret = (
+                os.environ.get("BINANCE_API_SECRET") or
+                getattr(settings, "BINANCE_API_SECRET", "") or
+                ""
+            ).strip()
+            return key, secret
         else:
+            return "", ""
+
+    @property
+    def api_key(self) -> str:
+        key, _ = self.get_credentials("LIVE")
+        return key
+
+    @property
+    def api_secret(self) -> str:
+        _, secret = self.get_credentials("LIVE")
+        return secret
+
+    def get_base_url(self, mode: str) -> str:
+        """Returns target endpoint URL based on mode."""
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "LIVE":
+            return "https://api.binance.com"
+        elif mode_upper == "TESTNET":
             return "https://testnet.binance.vision"
+        else:
+            return ""
 
-    def has_keys(self) -> bool:
-        return bool(self.api_key and self.api_secret)
+    def has_keys(self, mode: Optional[str] = None) -> bool:
+        """Checks if API key and secret are present for the given mode."""
+        if mode is None or not str(mode).strip():
+            k_live, s_live = self.get_credentials("LIVE")
+            k_test, s_test = self.get_credentials("TESTNET")
+            return bool((k_live and s_live) or (k_test and s_test))
 
-    def _sign_query_string(self, query_string: str) -> str:
+        mode_upper = mode.strip().upper()
+        if mode_upper == "PAPER":
+            return True
+        if mode_upper == "OFF":
+            return False
+
+        key, secret = self.get_credentials(mode_upper)
+        return bool(key and secret)
+
+    def _sign_query_string(self, query_string: str, secret: str) -> str:
         return hmac.new(
-            self.api_secret.encode('utf-8'),
+            secret.encode('utf-8'),
             query_string.encode('utf-8'),
             hashlib.sha256
         ).hexdigest()
@@ -58,43 +109,83 @@ class BinanceConnector:
     async def _request(self, method: str, path: str, mode: str, params: Dict[str, Any] = None, signed: bool = False) -> Any:
         if params is None:
             params = {}
-            
-        exec_type = "MOCK" if mode in ["OFF", "PAPER"] else "LIVE"
-        base_url = self.get_base_url(mode)
-        
+
+        mode_upper = (mode or "PAPER").upper()
+
+        if mode_upper == "OFF":
+            logger.info("[BinanceConnector] Request rejected: Trading mode is OFF.")
+            return {
+                "error": "TRADING_DISABLED",
+                "status_code": 400,
+                "code": -1000,
+                "msg": "Trading mode is OFF."
+            }
+
+        if mode_upper == "PAPER":
+            logger.info(
+                f"[BinanceConnector] Structured Log | Environment: PAPER | Mode: {mode_upper} | "
+                f"Method: {method} | Path: {path} | Endpoint: LOCAL_MOCK | Action: Executing local paper simulation"
+            )
+            return await self._mock_request(method, path, mode_upper, params)
+
+        # Environment is either TESTNET or LIVE
+        if mode_upper == "TESTNET":
+            exec_env = "TESTNET"
+            base_url = "https://testnet.binance.vision"
+            api_key, api_secret = self.get_credentials("TESTNET")
+
+            # SAFETY GUARDRAIL 1: Hard check that base_url is strictly https://testnet.binance.vision
+            if "api.binance.com" in base_url or base_url != "https://testnet.binance.vision":
+                logger.critical("[BinanceConnector] SECURITY VIOLATION: LIVE endpoint targeted in TESTNET mode!")
+                raise RuntimeError("CRITICAL SECURITY VIOLATION: Production endpoint detected while TESTNET mode is active!")
+
+            # SAFETY GUARDRAIL 2: Check that live keys are NOT being used for TESTNET
+            prod_key, prod_secret = self.get_credentials("LIVE")
+            if (prod_key and api_key and prod_key == api_key) or (prod_secret and api_secret and prod_secret == api_secret):
+                logger.error("[BinanceConnector] SECURITY VIOLATION: Production API keys supplied for TESTNET mode!")
+                return {
+                    "error": "INVALID_TESTNET_KEYS",
+                    "status_code": 400,
+                    "code": -2008,
+                    "msg": "LIVE API credentials cannot be used for Binance Spot Testnet. Please supply dedicated BINANCE_TESTNET_API_KEY and BINANCE_TESTNET_SECRET_KEY."
+                }
+
+        elif mode_upper == "LIVE":
+            exec_env = "LIVE"
+            base_url = "https://api.binance.com"
+            api_key, api_secret = self.get_credentials("LIVE")
+        else:
+            raise ValueError(f"Invalid trading mode: {mode}")
+
         logger.info(
-            f"[BinanceConnector] Request Initiated | Mode: {mode} | ExecType: {exec_type} | "
-            f"Method: {method} | Path: {path} | BaseURL: {base_url} | HasKeys: {self.has_keys()}"
+            f"[BinanceConnector] Structured Log | Environment: {exec_env} | Mode: {mode_upper} | "
+            f"Method: {method} | Path: {path} | BaseURL: {base_url} | Key: {api_key[:6] if api_key else 'NONE'}... | Signed: {signed}"
         )
 
-        if mode in ["OFF", "PAPER"]:
-            logger.info(f"[BinanceConnector] Using high-fidelity mock request in {mode} mode for {path}.")
-            return await self._mock_request(method, path, mode, params)
-
-        # LIVE or TESTNET mode - strictly NEVER call _mock_request()
-        if not self.has_keys():
-            logger.error(f"[BinanceConnector] Cannot execute request in {mode} mode: API key or secret is missing.")
+        if not (api_key and api_secret):
+            key_names = "BINANCE_TESTNET_API_KEY / BINANCE_TESTNET_SECRET_KEY" if mode_upper == "TESTNET" else "BINANCE_API_KEY / BINANCE_API_SECRET"
+            logger.error(f"[BinanceConnector] Cannot execute request in {mode_upper} ({exec_env}) environment: API key or secret is missing ({key_names}).")
             return {
                 "error": "MISSING_KEYS",
                 "status_code": 401,
                 "code": -2008,
-                "msg": "Binance API key or secret is not configured in environment settings."
+                "msg": f"Binance {exec_env} API key or secret is not configured in environment settings ({key_names})."
             }
 
         headers = {
-            "X-MBX-APIKEY": self.api_key,
-            "Content-Type": "application/x-www-form-urlencoded"
+            "X-MBX-APIKEY": api_key
         }
+        if method.upper() in ["POST", "PUT"]:
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
 
         req_params = dict(params)
         if signed:
             if "recvWindow" not in req_params:
-                req_params["recvWindow"] = 5000
+                req_params["recvWindow"] = 60000
             req_params["timestamp"] = int(time.time() * 1000)
-            
-            # Construct deterministic query string and sign IT directly
+
             query_string = urllib.parse.urlencode(req_params)
-            signature = self._sign_query_string(query_string)
+            signature = self._sign_query_string(query_string, api_secret)
             query_string = f"{query_string}&signature={signature}"
             url = f"{base_url}{path}?{query_string}"
         else:
@@ -115,17 +206,12 @@ class BinanceConnector:
                 else:
                     raise ValueError(f"Unsupported HTTP method: {method}")
 
-                logger.info(
-                    f"[BinanceConnector] Response Received | Mode: {mode} | ExecType: {exec_type} | "
-                    f"Path: {path} | HTTP Status: {response.status_code}"
-                )
-
                 try:
                     data = response.json()
                 except Exception as json_err:
                     logger.error(
-                        f"[BinanceConnector] Non-JSON response | Mode: {mode} | Status: {response.status_code} | "
-                        f"Body: {response.text[:200]}"
+                        f"[BinanceConnector] Non-JSON response | Environment: {exec_env} | Mode: {mode_upper} | "
+                        f"BaseURL: {base_url} | Path: {path} | Status: {response.status_code} | Body: {response.text[:200]}"
                     )
                     return {
                         "error": "HTTP_ERROR",
@@ -134,38 +220,46 @@ class BinanceConnector:
                         "msg": response.text
                     }
 
+                logger.info(
+                    f"[BinanceConnector] Response Received | Environment: {exec_env} | Mode: {mode_upper} | "
+                    f"BaseURL: {base_url} | Path: {path} | HTTP Status: {response.status_code} | "
+                    f"Full Binance JSON Response: {data}"
+                )
+
                 if response.status_code != 200:
                     binance_code = data.get("code", response.status_code) if isinstance(data, dict) else response.status_code
                     binance_msg = data.get("msg", response.text) if isinstance(data, dict) else response.text
                     logger.error(
-                        f"[BinanceConnector] Binance API Error | Mode: {mode} | ExecType: {exec_type} | "
+                        f"[BinanceConnector] Binance API Error | Environment: {exec_env} | Mode: {mode_upper} | "
                         f"BaseURL: {base_url} | Path: {path} | HTTP Status: {response.status_code} | "
-                        f"Binance Code: {binance_code} | Binance Msg: {binance_msg}"
+                        f"Binance Code: {binance_code} | Binance Msg: {binance_msg} | Full Response: {data}"
                     )
                     return {
                         "error": "BINANCE_API_ERROR",
                         "status_code": response.status_code,
                         "code": binance_code,
-                        "msg": binance_msg
+                        "msg": binance_msg,
+                        "raw_response": data if isinstance(data, dict) else {"raw": response.text}
                     }
 
                 if isinstance(data, dict) and "code" in data and isinstance(data["code"], int) and data["code"] < 0:
                     logger.error(
-                        f"[BinanceConnector] Error object in 200 OK | Mode: {mode} | ExecType: {exec_type} | "
-                        f"Path: {path} | Code: {data['code']} | Msg: {data.get('msg')}"
+                        f"[BinanceConnector] Error object in 200 OK | Environment: {exec_env} | Mode: {mode_upper} | "
+                        f"BaseURL: {base_url} | Path: {path} | Code: {data['code']} | Msg: {data.get('msg')}"
                     )
                     return {
                         "error": "BINANCE_API_ERROR",
                         "status_code": 200,
                         "code": data["code"],
-                        "msg": data.get("msg", "Unknown Binance error")
+                        "msg": data.get("msg", "Unknown Binance error"),
+                        "raw_response": data
                     }
 
                 return data
             except Exception as e:
                 logger.error(
-                    f"[BinanceConnector] Exception during request | Mode: {mode} | ExecType: {exec_type} | "
-                    f"Path: {path} | Error: {e}"
+                    f"[BinanceConnector] Exception during request | Environment: {exec_env} | Mode: {mode_upper} | "
+                    f"BaseURL: {base_url} | Path: {path} | Error: {e}"
                 )
                 return {
                     "error": "EXCEPTION",
@@ -194,7 +288,6 @@ class BinanceConnector:
                     })
             return balances
 
-        # Do NOT silently swallow errors - return the error object if account info call failed
         if isinstance(res, dict):
             return res
         return {
@@ -221,20 +314,35 @@ class BinanceConnector:
             "msg": f"Unexpected response structure from Binance: {res}"
         }
 
-    async def create_order(self, mode: str, symbol: str, side: str, order_type: str, quantity: float, price: Optional[float] = None) -> Dict[str, Any]:
-        """Creates an order (LIMIT or MARKET)."""
+    async def create_order(
+        self,
+        mode: str,
+        symbol: str,
+        side: str,
+        order_type: str,
+        quantity: Optional[float] = None,
+        price: Optional[float] = None,
+        quote_order_qty: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Creates an order (LIMIT or MARKET). Supports both base asset quantity and quoteOrderQty (USDT amount)."""
         params = {
             "symbol": symbol.upper(),
             "side": side.upper(),
             "type": order_type.upper(),
-            "quantity": str(quantity)
         }
+        if quantity is not None and quantity > 0.0:
+            params["quantity"] = f"{quantity:.8f}".rstrip("0").rstrip(".")
+        elif quote_order_qty is not None and quote_order_qty > 0.0:
+            params["quoteOrderQty"] = f"{quote_order_qty:.8f}".rstrip("0").rstrip(".")
+        else:
+            raise ValueError("Either quantity or quote_order_qty must be provided and > 0")
+
         if order_type.upper() == "LIMIT":
             if price is None:
                 raise ValueError("Price is required for LIMIT orders")
             params["price"] = str(price)
-            params["timeInForce"] = "GTC" # Good Till Cancelled
-            
+            params["timeInForce"] = "GTC"
+
         return await self._request("POST", "/api/v3/order", mode, params=params, signed=True)
 
     async def cancel_order(self, mode: str, symbol: str, order_id: Any) -> Dict[str, Any]:
@@ -247,10 +355,11 @@ class BinanceConnector:
 
     async def _mock_request(self, method: str, path: str, mode: str, params: Dict[str, Any]) -> Any:
         """High-fidelity simulation fallback when in PAPER mode."""
-        if mode in ["LIVE", "TESTNET"]:
-            raise ValueError(f"CRITICAL ERROR: _mock_request was invoked while in {mode} mode! Mock execution is strictly forbidden in LIVE/TESTNET modes.")
-        logger.info(f"Using high-fidelity mockup for {method} {path} in {mode} mode.")
-        
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper in ["LIVE", "TESTNET"]:
+            raise ValueError(f"CRITICAL SECURITY ERROR: _mock_request was invoked while in {mode_upper} mode! Mock execution is strictly forbidden in LIVE/TESTNET modes.")
+        logger.info(f"[BinanceConnector] Structured Log | Environment: PAPER | Mode: {mode_upper} | Using high-fidelity mockup for {method} {path}")
+
         if path == "/api/v3/account":
             return {
                 "makerCommission": 15,
@@ -270,7 +379,7 @@ class BinanceConnector:
                     {"asset": "SOL", "free": "12.00000000", "locked": "0.00000000"}
                 ]
             }
-            
+
         elif path == "/api/v3/openOrders":
             return [
                 {
@@ -295,7 +404,7 @@ class BinanceConnector:
                     "origQuoteOrderQty": "0.00000000"
                 }
             ]
-            
+
         elif path == "/api/v3/order":
             if method.upper() == "DELETE":
                 return {
@@ -334,5 +443,5 @@ class BinanceConnector:
                     "workingTime": int(time.time() * 1000),
                     "fills": []
                 }
-                
+
         return {"error": "MOCK_UNSUPPORTED", "msg": f"Mock endpoint not defined for {path}"}

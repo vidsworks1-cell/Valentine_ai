@@ -39,13 +39,16 @@ class BinanceWebSocketWorker:
         cache = await PriceCache.get_instance()
         symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
         
-        is_testnet = getattr(settings, "BINANCE_TESTNET", False)
+        from app.scheduler.manager import LayeredSchedulerManager
+        scheduler = await LayeredSchedulerManager.get_instance()
+        trading_mode = scheduler.global_trading_mode
+        is_testnet = (trading_mode == "TESTNET") or getattr(settings, "BINANCE_TESTNET", False)
         if is_testnet:
             base_url = "wss://testnet.binance.vision/ws"
         else:
             base_url = "wss://stream.binance.com:9443/ws"
             
-        logger.info(f"Connecting to Binance Spot WebSocket at: {base_url} (Testnet Mode={is_testnet})")
+        logger.info(f"Connecting to Binance Spot WebSocket at: {base_url} (Mode={trading_mode}, Testnet={is_testnet})")
         
         while self.running:
             try:

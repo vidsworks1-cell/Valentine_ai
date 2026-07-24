@@ -258,3 +258,79 @@ class TestTradingSystem(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(status_data["status"], "SUCCESS")
             self.assertEqual(status_data["recordsSynced"], 2)
 
+    async def test_binance_testnet_connector(self):
+        """Test BinanceConnector base URL, credential separation, and key checking."""
+        import os
+        from app.services.binance_connector import BinanceConnector
+
+        connector = BinanceConnector.get_instance()
+
+        # 1. Base URL verification
+        self.assertEqual(connector.get_base_url("TESTNET"), "https://testnet.binance.vision")
+        self.assertEqual(connector.get_base_url("LIVE"), "https://api.binance.com")
+
+        # 2. Credential separation
+        os.environ["BINANCE_TESTNET_API_KEY"] = "testnet_key_123"
+        os.environ["BINANCE_TESTNET_SECRET_KEY"] = "testnet_secret_456"
+        os.environ["BINANCE_API_KEY"] = "live_key_789"
+        os.environ["BINANCE_API_SECRET"] = "live_secret_000"
+
+        try:
+            self.assertEqual(connector.get_credentials("TESTNET"), ("testnet_key_123", "testnet_secret_456"))
+            self.assertEqual(connector.get_credentials("LIVE"), ("live_key_789", "live_secret_000"))
+            self.assertTrue(connector.has_keys("TESTNET"))
+            self.assertTrue(connector.has_keys("LIVE"))
+
+            # Testnet keys must never match live keys
+            key_t, secret_t = connector.get_credentials("TESTNET")
+            key_l, secret_l = connector.get_credentials("LIVE")
+            self.assertNotEqual(key_t, key_l)
+            self.assertNotEqual(secret_t, secret_l)
+        finally:
+            os.environ.pop("BINANCE_TESTNET_API_KEY", None)
+            os.environ.pop("BINANCE_TESTNET_SECRET_KEY", None)
+            os.environ.pop("BINANCE_API_KEY", None)
+            os.environ.pop("BINANCE_API_SECRET", None)
+
+    async def test_binance_testnet_missing_keys_structured_error(self):
+        """Test that endpoints return structured errors when TESTNET keys are missing."""
+        import os
+        os.environ.pop("BINANCE_TESTNET_API_KEY", None)
+        os.environ.pop("BINANCE_TESTNET_SECRET_KEY", None)
+        os.environ.pop("BINANCE_TESTNET_API_SECRET", None)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # 1. Status endpoint
+            status_res = await client.get("/api/v1/trading/binance/status?mode=TESTNET")
+            self.assertEqual(status_res.status_code, 200)
+            res_data = status_res.json()
+            self.assertFalse(res_data["is_authenticated"])
+            self.assertEqual(res_data["mode"], "TESTNET")
+            self.assertEqual(res_data["execution_mode"], "TESTNET")
+            self.assertEqual(res_data["execution_url"], "https://testnet.binance.vision")
+            self.assertEqual(res_data["http_status"], 401)
+            self.assertEqual(res_data["binance_code"], -2008)
+
+            # 2. Balances endpoint missing keys
+            bal_res = await client.get("/api/v1/trading/binance/balances?mode=TESTNET")
+            self.assertEqual(bal_res.status_code, 401)
+            self.assertEqual(bal_res.json()["detail"]["error"], "MISSING_KEYS")
+
+            # 3. Orders endpoint missing keys
+            orders_res = await client.get("/api/v1/trading/binance/orders?mode=TESTNET")
+            self.assertEqual(orders_res.status_code, 401)
+            self.assertEqual(orders_res.json()["detail"]["error"], "MISSING_KEYS")
+
+            # 4. Execute order endpoint missing keys
+            order_payload = {
+                "symbol": "BTCUSDT",
+                "side": "BUY",
+                "order_type": "MARKET",
+                "usdt_amount": 10.0,
+                "mode": "TESTNET"
+            }
+            exec_res = await client.post("/api/v1/trading/execute-live", json=order_payload)
+            self.assertEqual(exec_res.status_code, 401)
+            self.assertEqual(exec_res.json()["detail"]["error"], "MISSING_KEYS")
+
+
