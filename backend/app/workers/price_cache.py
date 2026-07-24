@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 class PriceCache:
     """Layer 2 fast in-memory price cache."""
@@ -27,37 +27,56 @@ class PriceCache:
                 cls._instance = PriceCache()
             return cls._instance
 
-    def update_price(self, symbol: str, price: float):
+    @classmethod
+    def get_instance_sync(cls) -> 'PriceCache':
+        if cls._instance is None:
+            cls._instance = PriceCache()
+        return cls._instance
+
+    @classmethod
+    def update_price(cls, symbol: str, price: float):
         """Updates the cached price for a given symbol and increments update tally."""
+        inst = cls.get_instance_sync()
         sym = symbol.upper()
         now = time.time()
-        self._prices[sym] = price
-        self._updates_count[sym] = self._updates_count.get(sym, 0) + 1
-        self._symbol_last_update_time[sym] = now
-        self._symbol_synchronized[sym] = True
-        self._last_update_time = now
+        inst._prices[sym] = price
+        inst._updates_count[sym] = inst._updates_count.get(sym, 0) + 1
+        inst._symbol_last_update_time[sym] = now
+        inst._symbol_synchronized[sym] = True
+        inst._last_update_time = now
 
-    def get_price(self, symbol: str) -> float:
+    @classmethod
+    def get_price(cls, symbol: str) -> float:
         """Retrieves the latest price from the cache with fallback to standard reference."""
-        return self._prices.get(symbol.upper(), 92500.0 if "BTC" in symbol else 3450.0)
+        inst = cls.get_instance_sync()
+        return inst._prices.get(symbol.upper(), 92500.0 if "BTC" in symbol.upper() else 3450.0)
 
-    def get_all_prices(self) -> Dict[str, float]:
+    @classmethod
+    def get_all_prices(cls) -> Dict[str, float]:
         """Returns the complete map of tracked symbol prices."""
-        return self._prices.copy()
+        inst = cls.get_instance_sync()
+        return inst._prices.copy()
 
-    def get_update_tally(self, symbol: str) -> int:
+    @classmethod
+    def get_update_tally(cls, symbol: str) -> int:
         """Returns the number of WebSocket ticker updates received since startup."""
-        return self._updates_count.get(symbol.upper(), 0)
+        inst = cls.get_instance_sync()
+        return inst._updates_count.get(symbol.upper(), 0)
 
-    def get_symbol_last_update_time(self, symbol: str) -> float:
+    @classmethod
+    def get_symbol_last_update_time(cls, symbol: str) -> float:
         """Returns timestamp of the last ticker update for symbol."""
-        return self._symbol_last_update_time.get(symbol.upper(), 0.0)
+        inst = cls.get_instance_sync()
+        return inst._symbol_last_update_time.get(symbol.upper(), 0.0)
 
-    def is_symbol_synchronized(self, symbol: str) -> bool:
+    @classmethod
+    def is_symbol_synchronized(cls, symbol: str) -> bool:
         """Checks if symbol has been synchronized with live WebSocket updates."""
-        return self._symbol_synchronized.get(symbol.upper(), False)
+        inst = cls.get_instance_sync()
+        return inst._symbol_synchronized.get(symbol.upper(), False)
 
-    def validate_market_data(self, symbol: str, max_age_seconds: float = 5.0) -> Tuple[bool, str]:
+    @classmethod
+    def validate_market_data(cls, symbol: str, max_age_seconds: float = 5.0) -> Tuple[bool, str]:
         """
         Hard Safety Gate for Market Data.
         Verifies:
@@ -66,21 +85,22 @@ class PriceCache:
         3. symbol is marked as synchronized
         4. connection status is CONNECTED
         """
+        inst = cls.get_instance_sync()
         sym = symbol.upper()
-        tally = self.get_update_tally(sym)
+        tally = inst.get_update_tally(sym)
         if tally == 0:
             return False, f"[MARKET DATA GUARD]\nRejected {sym} trade.\nReason: No verified live WebSocket price available."
 
-        if not self.is_symbol_synchronized(sym):
+        if not inst.is_symbol_synchronized(sym):
             return False, f"[MARKET DATA GUARD]\nRejected {sym} trade.\nReason: Symbol {sym} is not synchronized with live feed."
 
-        last_update = self.get_symbol_last_update_time(sym)
+        last_update = inst.get_symbol_last_update_time(sym)
         age = time.time() - last_update
         if age > max_age_seconds:
             return False, f"[MARKET DATA GUARD]\nRejected {sym} trade.\nReason: Price timestamp is stale ({age:.1f}s old, max allowed {max_age_seconds:.1f}s)."
 
-        if self._connection_status != "CONNECTED":
-            return False, f"[MARKET DATA GUARD]\nRejected {sym} trade.\nReason: WebSocket connection status is {self._connection_status}."
+        if inst._connection_status != "CONNECTED":
+            return False, f"[MARKET DATA GUARD]\nRejected {sym} trade.\nReason: WebSocket connection status is {inst._connection_status}."
 
         return True, "PASSED"
 

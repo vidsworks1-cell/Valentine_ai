@@ -4,7 +4,6 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
 from app.api.schemas import AuditLogCreate
-from app.services.audit_service import AuditService
 from app.database.session import AsyncSessionLocal
 
 logger = logging.getLogger("lumina.trading.institutional_risk")
@@ -85,6 +84,7 @@ class InstitutionalRiskEngine:
 
             # Audit log
             try:
+                from app.services.audit_service import AuditService
                 async with AsyncSessionLocal() as db:
                     await AuditService.create_audit_log(db, AuditLogCreate(
                         level="CRITICAL",

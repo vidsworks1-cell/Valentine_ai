@@ -5,10 +5,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from app.workers.price_cache import PriceCache
 from app.database.session import AsyncSessionLocal
-from app.services.trading_service import TradingService
-from app.services.paper_trading_service import PaperTradingService
 from app.api.schemas import TradeUpdate, AuditLogCreate
-from app.services.audit_service import AuditService
 
 logger = logging.getLogger("lumina.trading.position_manager")
 
@@ -236,6 +233,7 @@ class PositionManager:
             if "error" in binance_res or "msg" in binance_res and binance_res.get("error"):
                 logger.error(f"❌ BINANCE PARTIAL CLOSE ORDER FAILED: {binance_res}")
                 try:
+                    from app.services.audit_service import AuditService
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="ERROR",
@@ -268,6 +266,10 @@ class PositionManager:
         
         logger.info(f"[STAGE: MANAGEMENT] Partial take-profit stage hit for Trade {trade_id} {symbol} ({side}). Stage: {stage_label}, Price: {exit_price}, Realized P&L: {pnl} ({outcome}).")
         
+        from app.services.trading_service import TradingService
+        from app.services.paper_trading_service import PaperTradingService
+        from app.services.audit_service import AuditService
+
         async with AsyncSessionLocal() as db:
             try:
                 # 1. Update Trade Record in DB
@@ -337,6 +339,7 @@ class PositionManager:
             if "error" in binance_res or "msg" in binance_res and binance_res.get("error"):
                 logger.error(f"❌ BINANCE CLOSE ORDER FAILED: {binance_res}")
                 try:
+                    from app.services.audit_service import AuditService
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="ERROR",
@@ -372,6 +375,10 @@ class PositionManager:
         
         logger.info(f"[STAGE: CLOSE] Closing Trade {trade_id} {symbol} ({side}) at exit price {exit_price} due to {outcome_type}. Realized P&L: {pnl} ({outcome}).")
         
+        from app.services.trading_service import TradingService
+        from app.services.paper_trading_service import PaperTradingService
+        from app.services.audit_service import AuditService
+
         async with AsyncSessionLocal() as db:
             try:
                 # 1. Update Trade Record in DB
@@ -435,6 +442,7 @@ class PositionManager:
         scheduler.emergency_stop_active = True
         
         try:
+            from app.services.audit_service import AuditService
             async with AsyncSessionLocal() as db:
                 await AuditService.create_audit_log(db, AuditLogCreate(
                     level="CRITICAL",

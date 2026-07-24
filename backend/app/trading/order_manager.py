@@ -4,11 +4,8 @@ import json
 from typing import Dict, Any, List, Optional
 from app.risk.evaluator import RiskEvaluator
 from app.database.session import AsyncSessionLocal
-from app.services.trading_service import TradingService
-from app.services.paper_trading_service import PaperTradingService
 from app.services.binance_connector import BinanceConnector
 from app.api.schemas import TradeCreate, AuditLogCreate
-from app.services.audit_service import AuditService
 
 logger = logging.getLogger("lumina.trading.order_manager")
 
@@ -41,6 +38,7 @@ class OrderManager:
             if not allowed:
                 logger.warning(f"⚠️ ORDER PIPELINE REJECTED: {reason}")
                 try:
+                    from app.services.audit_service import AuditService
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
@@ -59,6 +57,7 @@ class OrderManager:
             if not passed_md:
                 logger.warning(md_reason)
                 try:
+                    from app.services.audit_service import AuditService
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
@@ -118,6 +117,7 @@ class OrderManager:
                     from app.trading.execution_analytics import ExecutionAnalyticsEngine
                     AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="POSITION_OPEN", reason=block_reason, price=opportunity.get("entry_price", 0.0))
                     ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), block_reason, opportunity.get("entry_price", 0.0))
+                    from app.services.audit_service import AuditService
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
@@ -143,6 +143,7 @@ class OrderManager:
                 try:
                     from app.ai.reasoning import AiReasoningEngine
                     from app.trading.execution_analytics import ExecutionAnalyticsEngine
+                    from app.services.audit_service import AuditService
                     AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="MTF_DISAGREEMENT", reason=mtf_reason, price=opportunity.get("entry_price", 0.0))
                     ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), mtf_reason, opportunity.get("entry_price", 0.0))
                     async with AsyncSessionLocal() as db:
@@ -155,6 +156,10 @@ class OrderManager:
                 except Exception as ae:
                     logger.error(f"Failed to log MTF guard audit event: {ae}")
                 return
+
+        from app.services.trading_service import TradingService
+        from app.services.paper_trading_service import PaperTradingService
+        from app.services.audit_service import AuditService
 
         async with AsyncSessionLocal() as db:
             try:
