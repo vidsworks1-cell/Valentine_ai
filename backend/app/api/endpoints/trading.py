@@ -94,9 +94,28 @@ async def get_layered_status(db: AsyncSession = Depends(get_db)):
         }
     }
 
+@router.get("/global-mode")
+@router.get("/mode")
+async def get_global_trading_mode():
+    """Fetches system-wide global trading mode. Returns OFF, PAPER, TESTNET, or LIVE."""
+    manager = await LayeredSchedulerManager.get_instance()
+    return {
+        "status": "SUCCESS",
+        "global_trading_mode": manager.global_trading_mode
+    }
+
+@router.post("/global-mode/{mode}")
+async def update_global_trading_mode_path(mode: str):
+    """Sets system-wide global trading mode via path parameter. Allowed values: OFF, PAPER, TESTNET, LIVE."""
+    return await _set_global_trading_mode(mode)
+
+@router.post("/global-mode")
 @router.post("/mode")
 async def update_global_trading_mode(mode: str):
-    """Sets system-wide global trading mode. Allowed values: OFF, PAPER, TESTNET, LIVE."""
+    """Sets system-wide global trading mode via query parameter. Allowed values: OFF, PAPER, TESTNET, LIVE."""
+    return await _set_global_trading_mode(mode)
+
+async def _set_global_trading_mode(mode: str):
     mode_upper = mode.upper()
     if mode_upper not in ["OFF", "PAPER", "TESTNET", "LIVE"]:
         raise HTTPException(status_code=400, detail="Invalid global trading mode. Allowed: OFF, PAPER, TESTNET, LIVE")

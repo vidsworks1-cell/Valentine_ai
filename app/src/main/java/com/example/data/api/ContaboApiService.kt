@@ -339,9 +339,12 @@ interface ContaboApiService {
         @Path("order_id") orderId: String
     ): Map<String, Any>
 
-    @POST("trading/mode")
+    @GET("trading/global-mode")
+    suspend fun getGlobalTradingMode(): Map<String, Any>
+
+    @POST("trading/global-mode/{mode}")
     suspend fun updateGlobalTradingMode(
-        @Query("mode") mode: String
+        @Path("mode") mode: String
     ): Map<String, Any>
 
     @POST("trading/emergency/reset")

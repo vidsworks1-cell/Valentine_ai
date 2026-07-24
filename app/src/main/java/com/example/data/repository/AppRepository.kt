@@ -30,6 +30,10 @@ class AppRepository(private val db: AppDatabase) {
         contaboService.getLayeredStatus()
     }
 
+    suspend fun getContaboTradingMode(): Map<String, Any> = withContext(Dispatchers.IO) {
+        contaboService.getGlobalTradingMode()
+    }
+
     suspend fun updateContaboTradingMode(mode: String): Map<String, Any> = withContext(Dispatchers.IO) {
         contaboService.updateGlobalTradingMode(mode)
     }
