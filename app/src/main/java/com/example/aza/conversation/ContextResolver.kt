@@ -41,9 +41,10 @@ data class UnifiedContext(
         } else {
             "[Lumina Trading Budget] No budget currently allocated | Risk Profile: $tradingRiskLevel | ATR Stop Weight: ${atrMultiplier}x | Position Slice: ${positionSlicePercent}%"
         }
+        val localWalletLabel = if (isBinanceConnected) "[Local App Paper/Simulated Wallet]" else "[Local App Paper Wallet]"
         return """
             --- UNIFIED SYSTEM CONTEXT ---
-            [Portfolio & Balance] Cash Balance: $${String.format("%.2f", portfolioCash)} USD. Holdings: ${if (holdings.isEmpty()) "None" else holdings.joinToString(", ") { "${it.symbol} (${it.amountOwned} units)" }}
+            $localWalletLabel Cash Balance: $${String.format("%.2f", portfolioCash)} USD. Holdings: ${if (holdings.isEmpty()) "None" else holdings.joinToString(", ") { "${it.symbol} (${it.amountOwned} units)" }}
             $binanceLine
             $budgetLine
             [Executive Brain State] Planning Accuracy: $planningAccuracy%, Agent Utilization: $brainRecommendations, System Uptime: $systemUptime%

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 class TradeBase(BaseModel):
@@ -38,6 +38,30 @@ class TradeResponse(TradeBase):
 
     class Config:
         from_attributes = True
+
+class ManualOrderRequest(BaseModel):
+    symbol: str = Field(..., max_length=20, examples=["BTCUSDT"])
+    side: str = Field(..., examples=["BUY", "SELL"])
+    order_type: str = Field("MARKET", examples=["MARKET", "LIMIT"])
+    quantity: float = Field(..., gt=0.0, description="Order quantity in base asset units (e.g. 0.001)")
+    price: Optional[float] = Field(None, ge=0.0, description="Limit order price. Required if order_type is LIMIT")
+    stop_loss: Optional[float] = Field(None, ge=0.0, description="Optional stop loss price")
+    take_profit: Optional[float] = Field(None, ge=0.0, description="Optional take profit price")
+    strategy_used: str = Field("MANUAL_LIVE_EXECUTION", description="Strategy identifier")
+    mode: Optional[str] = Field(None, description="Execution mode override: LIVE, TESTNET, or PAPER")
+
+class ManualOrderResponse(BaseModel):
+    status: str = Field("EXECUTED", description="Execution status")
+    symbol: str
+    side: str
+    order_type: str
+    quantity: float
+    executed_price: float
+    binance_order_id: Optional[str] = None
+    trade_id: Optional[int] = None
+    mode: str
+    message: str
+    raw_binance_response: Dict[str, Any]
 
 # Pydantic schemas for AuditLog
 class AuditLogBase(BaseModel):

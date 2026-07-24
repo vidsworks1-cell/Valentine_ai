@@ -1,8 +1,9 @@
-from typing import List
+import json
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
-from app.api.schemas import TradeCreate, TradeResponse, TradeUpdate
+from app.api.schemas import TradeCreate, TradeResponse, TradeUpdate, AuditLogCreate, ManualOrderRequest, ManualOrderResponse
 from app.services.trading_service import TradingService
 from app.workers.price_cache import PriceCache
 from app.scheduler.manager import LayeredSchedulerManager
@@ -248,6 +249,223 @@ async def cancel_binance_order(symbol: str, order_id: str):
     
     res = await connector.cancel_order(mode, symbol, order_id)
     return res
+
+@router.post("/execute-live", response_model=ManualOrderResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/binance/order/execute", response_model=ManualOrderResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/binance/order", response_model=ManualOrderResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/manual-execute", response_model=ManualOrderResponse, status_code=status.HTTP_201_CREATED)
+async def execute_manual_live_order(
+    order_in: ManualOrderRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Production-grade Manual Live Order Execution API.
+    1. Validates order parameters (symbol, side, order_type, quantity, price).
+    2. Resolves execution mode (LIVE, TESTNET, or PAPER) and checks API key presence.
+    3. Executes the order directly on Binance via BinanceConnector.create_order().
+    4. Handles error responses from Binance with rich diagnostic feedback.
+    5. Calculates fill price and records the executed trade in the SQLite database.
+    6. Registers active position in PositionManager for real-time safety & trailing stop loss tracking.
+    7. Emits system audit logs for operational transparency.
+    """
+    from app.services.binance_connector import BinanceConnector
+    from app.services.audit_service import AuditService
+    from app.trading.position_manager import PositionManager
+
+    symbol = order_in.symbol.strip().upper()
+    side = order_in.side.strip().upper()
+    order_type = order_in.order_type.strip().upper()
+    quantity = order_in.quantity
+
+    if side not in ["BUY", "SELL"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid order side. Must be 'BUY' or 'SELL'."
+        )
+
+    if order_type not in ["MARKET", "LIMIT"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid order type. Must be 'MARKET' or 'LIMIT'."
+        )
+
+    if order_type == "LIMIT" and (order_in.price is None or order_in.price <= 0.0):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Limit orders require a valid positive 'price'."
+        )
+
+    # Resolve execution mode
+    scheduler = await LayeredSchedulerManager.get_instance()
+    connector = BinanceConnector.get_instance()
+
+    if order_in.mode and order_in.mode.strip():
+        mode = order_in.mode.strip().upper()
+        if mode not in ["LIVE", "TESTNET", "PAPER"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid execution mode. Must be 'LIVE', 'TESTNET', or 'PAPER'."
+            )
+    else:
+        mode = scheduler.global_trading_mode
+        if mode == "OFF":
+            mode = "LIVE" if connector.has_keys() else "PAPER"
+
+    # Verify keys for LIVE and TESTNET modes
+    if mode in ["LIVE", "TESTNET"] and not connector.has_keys():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Binance API keys not configured or unauthenticated for mode '{mode}'. Please set BINANCE_API_KEY and BINANCE_API_SECRET."
+        )
+
+    # Fetch current market price from PriceCache for fallback / SL / TP calculation
+    cache = await PriceCache.get_instance()
+    curr_market_price = cache.get_price(symbol)
+    if curr_market_price <= 0.0:
+        curr_market_price = order_in.price if (order_in.price and order_in.price > 0.0) else (65000.0 if "BTC" in symbol else 3500.0)
+
+    # Execute order via BinanceConnector
+    try:
+        binance_res = await connector.create_order(
+            mode=mode,
+            symbol=symbol,
+            side=side,
+            order_type=order_type,
+            quantity=quantity,
+            price=order_in.price
+        )
+    except Exception as exc:
+        err_msg = f"Exception encountered during Binance order submission: {str(exc)}"
+        try:
+            await AuditService.create_audit_log(db, AuditLogCreate(
+                level="ERROR",
+                category="TRADING",
+                message=f"Manual live execution exception for {symbol}",
+                details=err_msg
+            ))
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=err_msg
+        )
+
+    # Evaluate error status from BinanceConnector response
+    if isinstance(binance_res, dict) and ("error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0)):
+        status_code = binance_res.get("status_code", 400)
+        if not isinstance(status_code, int) or status_code < 400 or status_code > 599:
+            status_code = 400
+        try:
+            await AuditService.create_audit_log(db, AuditLogCreate(
+                level="ERROR",
+                category="TRADING",
+                message=f"Binance rejected manual order for {symbol}",
+                details=json.dumps(binance_res)
+            ))
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status_code,
+            detail=binance_res
+        )
+
+    # Extract fill details & price
+    binance_order_id = str(binance_res.get("orderId", binance_res.get("clientOrderId", "")))
+    executed_price = 0.0
+
+    if "fills" in binance_res and isinstance(binance_res["fills"], list) and len(binance_res["fills"]) > 0:
+        total_qty = 0.0
+        total_cost = 0.0
+        for fill in binance_res["fills"]:
+            q = float(fill.get("qty", 0.0))
+            p = float(fill.get("price", 0.0))
+            total_qty += q
+            total_cost += q * p
+        if total_qty > 0.0:
+            executed_price = round(total_cost / total_qty, 6)
+
+    if executed_price <= 0.0:
+        if "price" in binance_res and float(binance_res.get("price", 0.0)) > 0.0:
+            executed_price = float(binance_res["price"])
+        elif order_in.price and order_in.price > 0.0:
+            executed_price = order_in.price
+        else:
+            executed_price = curr_market_price
+
+    # Stop Loss & Take Profit defaults if not explicitly provided
+    stop_loss = order_in.stop_loss if (order_in.stop_loss and order_in.stop_loss > 0.0) else (
+        round(executed_price * 0.98, 2) if side == "BUY" else round(executed_price * 1.02, 2)
+    )
+    take_profit = order_in.take_profit if (order_in.take_profit and order_in.take_profit > 0.0) else (
+        round(executed_price * 1.04, 2) if side == "BUY" else round(executed_price * 0.96, 2)
+    )
+    atr_val = abs(executed_price - stop_loss) / 2.0 if stop_loss > 0 else executed_price * 0.01
+
+    # Record executed trade in database
+    trade_create = TradeCreate(
+        symbol=symbol,
+        side=side,
+        entry_price=executed_price,
+        position_size=quantity,
+        stop_loss=stop_loss,
+        take_profit=take_profit,
+        strategy_used=order_in.strategy_used,
+        market_regime="MANUAL_LIVE",
+        confidence_score=1.0,
+        entry_reason=f"Manual Live Order Execution ({order_type} in {mode} mode)",
+        indicators=json.dumps({
+            "binance_order_id": binance_order_id,
+            "execution_mode": mode,
+            "raw_binance_response": binance_res
+        }),
+        atr=atr_val,
+        risk_amount=round(abs(executed_price - stop_loss) * quantity, 2),
+        risk_pct=2.0
+    )
+
+    trade = await TradingService.create_trade(db, trade_create)
+
+    # Register active position with PositionManager for trailing SL & TP safety tracking
+    await PositionManager.get_instance().track_position(trade.id, {
+        "id": trade.id,
+        "symbol": symbol,
+        "side": side,
+        "entry_price": executed_price,
+        "position_size": quantity,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "trailing_stop": stop_loss,
+        "highest_price": executed_price,
+        "lowest_price": executed_price,
+        "atr": atr_val,
+        "binance_order_id": binance_order_id
+    })
+
+    # Log audit event
+    try:
+        await AuditService.create_audit_log(db, AuditLogCreate(
+            level="INFO",
+            category="TRADING",
+            message=f"Manual live order executed on Binance: {side} {quantity} {symbol} @ ${executed_price} [{mode}]",
+            details=f"Binance Order ID: {binance_order_id}, DB Trade ID: {trade.id}",
+            trade_id=trade.id
+        ))
+    except Exception:
+        pass
+
+    return ManualOrderResponse(
+        status="EXECUTED",
+        symbol=symbol,
+        side=side,
+        order_type=order_type,
+        quantity=quantity,
+        executed_price=executed_price,
+        binance_order_id=binance_order_id,
+        trade_id=trade.id,
+        mode=mode,
+        message=f"Manual live order successfully executed on Binance ({mode} mode) and registered for position tracking.",
+        raw_binance_response=binance_res if isinstance(binance_res, dict) else {"response": str(binance_res)}
+    )
 
 @router.get("/active-positions")
 async def get_active_positions_endpoint():
