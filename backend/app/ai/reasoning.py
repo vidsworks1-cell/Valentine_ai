@@ -215,8 +215,8 @@ class AiReasoningEngine:
                             sl_multiplier = 2.0
                             tp_multiplier = 4.0
 
-                        stop_loss = round(price - (sl_multiplier * atr) if side == "BUY" else price + (sl_multiplier * atr), 2)
-                        take_profit = round(price + (tp_multiplier * atr) if side == "BUY" else price - (tp_multiplier * atr), 2)
+                        stop_loss = round(price - (sl_multiplier * atr) if proposed_side == "BUY" else price + (sl_multiplier * atr), 2)
+                        take_profit = round(price + (tp_multiplier * atr) if proposed_side == "BUY" else price - (tp_multiplier * atr), 2)
                         
                         # 3. Confluence & Confidence Calibration Engine with ML Feature Weight Self-Pruning & Bayesian Belief
                         from app.ai.feature_pruning import FeatureWeightPruningEngine
@@ -304,7 +304,7 @@ class AiReasoningEngine:
                         from app.ai.self_adaptation import SelfAdaptationEngine
                         candidate_setup = {
                             "symbol": symbol,
-                            "side": side,
+                            "side": proposed_side,
                             "entry_price": price,
                             "stop_loss": stop_loss,
                             "take_profit": take_profit,
@@ -318,8 +318,8 @@ class AiReasoningEngine:
                         
                         if not is_allowed:
                             reason_str = "; ".join(adaptation_reasons) if adaptation_reasons else "Adaptation block"
-                            logger.warning(f"🚫 [SELF-ADAPTATION REJECTED] {symbol} {side} via {strategy} blocked. Reasons: {reason_str}")
-                            self.set_cooldown(symbol, side, category="SELF_ADAPTATION_BLOCK", reason=f"Self-Adaptation Block: {reason_str}", price=price)
+                            logger.warning(f"🚫 [SELF-ADAPTATION REJECTED] {symbol} {proposed_side} via {strategy} blocked. Reasons: {reason_str}")
+                            self.set_cooldown(symbol, proposed_side, category="SELF_ADAPTATION_BLOCK", reason=f"Self-Adaptation Block: {reason_str}", price=price)
                             continue
 
                         adapted_confidence = round(max(0.0, min(1.0, raw_confidence + adaptive_modifier)), 2)
@@ -329,7 +329,7 @@ class AiReasoningEngine:
                         
                         self.last_detected_setup = {
                             "symbol": symbol,
-                            "side": side,
+                            "side": proposed_side,
                             "entry_price": price,
                             "stop_loss": stop_loss,
                             "take_profit": take_profit,
@@ -347,16 +347,16 @@ class AiReasoningEngine:
                         }
                         
                         if passed_filter:
-                            logger.info(f"🚨 OPPORTUNITY DETECTED & PASSED FILTER: {symbol} {side} via {strategy} at {price} (Raw Conf: {raw_confidence}, Mod: {adaptive_modifier:+.2f} -> Adapted Conf: {adapted_confidence} >= Threshold: {dynamic_threshold})")
+                            logger.info(f"🚨 OPPORTUNITY DETECTED & PASSED FILTER: {symbol} {proposed_side} via {strategy} at {price} (Raw Conf: {raw_confidence}, Mod: {adaptive_modifier:+.2f} -> Adapted Conf: {adapted_confidence} >= Threshold: {dynamic_threshold})")
                             if adaptation_reasons:
                                 logger.info(f"🧠 [SELF-ADAPTATION INSIGHTS] {adaptation_log_str}")
                             # Trigger automated order placement if autonomy rules permit
                             await self._propose_trade_to_manager(self.last_detected_setup)
                         else:
                             rejection_msg = f"Confidence filter failed ({adapted_confidence} < {dynamic_threshold})"
-                            logger.info(f"⚠️ OPPORTUNITY REJECTED BY CONFIDENCE FILTER: {symbol} {side} via {strategy} at {price} (Adapted Conf: {adapted_confidence} < Threshold: {dynamic_threshold})")
+                            logger.info(f"⚠️ OPPORTUNITY REJECTED BY CONFIDENCE FILTER: {symbol} {proposed_side} via {strategy} at {price} (Adapted Conf: {adapted_confidence} < Threshold: {dynamic_threshold})")
                             # Place on adaptive confidence filter cooldown (45s)
-                            self.set_cooldown(symbol, side, category="CONFIDENCE_FILTER", reason=rejection_msg, price=price)
+                            self.set_cooldown(symbol, proposed_side, category="CONFIDENCE_FILTER", reason=rejection_msg, price=price)
 
                 await asyncio.sleep(3.0) # Check every 3 seconds
             except asyncio.CancelledError:
