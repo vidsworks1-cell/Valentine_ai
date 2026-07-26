@@ -195,6 +195,23 @@ class BinanceConnector:
             else:
                 url = f"{base_url}{path}"
 
+        # Check Chaos Engine fault injections
+        from app.trading.chaos_engine import ChaosEngine
+        chaos = ChaosEngine.get_instance()
+        if chaos.enabled:
+            if chaos.should_inject_api_timeout():
+                raise httpx.TimeoutException("Chaos Injected Binance API Timeout")
+            if chaos.should_inject_http_500():
+                return {
+                    "error": "CHAOS_HTTP_500",
+                    "status_code": 500,
+                    "code": 500,
+                    "msg": "Chaos injected HTTP 500 Internal Error"
+                }
+            fill_delay = chaos.get_fill_delay()
+            if fill_delay > 0:
+                await asyncio.sleep(fill_delay)
+
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 if method.upper() == "GET":

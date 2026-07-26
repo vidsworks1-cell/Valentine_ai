@@ -157,6 +157,83 @@ class OrderManager:
                     logger.error(f"Failed to log MTF guard audit event: {ae}")
                 return
 
+            # 0d. Multi-Timeframe Volume & Liquidity Confluence Filter Check (5m, 15m, 1h RVOL, Order Flow Delta & Order Book Depth)
+            passed_vol, vol_confluence_score, vol_details = await MTFConfirmationGuard.get_instance().evaluate_volume_liquidity_confluence(symbol, side, opportunity.get("entry_price", 0.0))
+            if not passed_vol:
+                vol_rejection_reasons = "; ".join(vol_details.get("rejection_reasons", ["Confluence score below 70.0%"]))
+                vol_reason = (
+                    f"[MTF VOLUME & LIQUIDITY GUARD]\n"
+                    f"Rejected {side} trade for {symbol}.\n"
+                    f"Reason: Insufficient Volume/Liquidity Confluence ({vol_confluence_score:.1f}% < 70.0%).\n"
+                    f"RVOL (5m: {vol_details['rvol_5m']}, 15m: {vol_details['rvol_15m']}, 1h: {vol_details['rvol_1h']}) | Directional Volume Delta: {vol_details['favorable_volume_delta']}%\n"
+                    f"Flags: {vol_rejection_reasons}"
+                )
+                logger.warning(vol_reason)
+                try:
+                    from app.ai.reasoning import AiReasoningEngine
+                    from app.trading.execution_analytics import ExecutionAnalyticsEngine
+                    from app.services.audit_service import AuditService
+                    AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="VOLUME_LIQUIDITY_INSUFFICIENT", reason=vol_reason, price=opportunity.get("entry_price", 0.0))
+                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), vol_reason, opportunity.get("entry_price", 0.0))
+                    async with AsyncSessionLocal() as db:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="WARNING",
+                            category="RISK",
+                            message=f"[MTF VOLUME & LIQUIDITY GUARD] Rejected {side} trade for {symbol}",
+                            details=vol_reason
+                        ))
+                except Exception as ae:
+                    logger.error(f"Failed to log volume & liquidity guard audit event: {ae}")
+                return
+
+            # 0e. Macro & Institutional Risk Confluence Overlay Check
+            from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
+            macro_overlay = await MacroRiskOverlayEngine.get_instance().evaluate_macro_risk(symbol, side)
+            if not macro_overlay.get("trade_permitted", True):
+                macro_reason = (
+                    f"[MACRO RISK OVERLAY LOCKDOWN]\n"
+                    f"Rejected {side} trade for {symbol}.\n"
+                    f"Reason: Macro Risk Score {macro_overlay['macro_risk_score']:.1f}/100 ({macro_overlay['risk_level']}).\n"
+                    f"Summary: {macro_overlay['risk_summary']}"
+                )
+                logger.warning(macro_reason)
+                try:
+                    from app.ai.reasoning import AiReasoningEngine
+                    from app.trading.execution_analytics import ExecutionAnalyticsEngine
+                    from app.services.audit_service import AuditService
+                    AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="MACRO_RISK_LOCKDOWN", reason=macro_reason, price=opportunity.get("entry_price", 0.0))
+                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), macro_reason, opportunity.get("entry_price", 0.0))
+                    async with AsyncSessionLocal() as db:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="WARNING",
+                            category="RISK",
+                            message=f"[MACRO RISK OVERLAY] Rejected {side} trade for {symbol}",
+                            details=macro_reason
+                        ))
+                except Exception as ae:
+                    logger.error(f"Failed to log macro risk overlay audit event: {ae}")
+                return
+
+            # Apply macro adaptive position size scaler if permitted (e.g., 0.70x or 0.35x)
+            macro_scaler = macro_overlay.get("position_size_scaler", 1.0)
+            if macro_scaler < 1.0 and macro_scaler > 0.0:
+                old_size = opportunity.get("position_size", 1.0)
+                opportunity["position_size"] = round(old_size * macro_scaler, 4)
+                logger.info(f"⚖️ [MACRO RISK SCALER] Position size for {symbol} scaled from {old_size} to {opportunity['position_size']} ({macro_scaler * 100:.0f}% allocation due to {macro_overlay['risk_level']}).")
+
+            # 0f. Cross-Asset Correlation & Concentration Risk Check
+            from app.trading.cross_asset_correlation import CrossAssetCorrelationEngine
+            from app.trading.position_manager import PositionManager
+            active_pos = PositionManager.get_instance().get_active_positions()
+            active_syms = [p.get("symbol") for p in active_pos if p.get("symbol")]
+            corr_info = CrossAssetCorrelationEngine.get_instance().evaluate_trade_correlation_risk(symbol, active_syms)
+
+            corr_scaler = corr_info.get("position_scaler", 1.0)
+            if corr_scaler < 1.0:
+                old_size = opportunity.get("position_size", 1.0)
+                opportunity["position_size"] = round(old_size * corr_scaler, 4)
+                logger.info(f"🔗 [CROSS-ASSET CORRELATION SCALER] Position size for {symbol} scaled to {opportunity['position_size']} ({corr_scaler * 100:.0f}% due to {corr_info['risk_flag']} vs {corr_info['most_correlated_active_symbol']}).")
+
         from app.services.trading_service import TradingService
         from app.services.paper_trading_service import PaperTradingService
         from app.services.audit_service import AuditService
@@ -321,6 +398,7 @@ class OrderManager:
                     "trailing_stop": trade.stop_loss,
                     "highest_price": trade.entry_price,
                     "lowest_price": trade.entry_price,
+                    "market_regime": trade.market_regime,
                     "atr": trade.atr,
                     "binance_order_id": binance_order_id
                 })

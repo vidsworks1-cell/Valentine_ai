@@ -178,25 +178,127 @@ class AiReasoningEngine:
                             self.set_cooldown(symbol, proposed_side, category="MARKET_DATA_STALE", reason=md_reason, price=price)
                             continue
 
-                        side = proposed_side
-                        strategy = "Breakout Momentum" if side == "BUY" else "Mean Reversion"
-                        
-                        # Generate dynamic stop loss and take profit using real live price metrics
+                        # Calculate relative volatility & ATR
                         atr = round(price * volatility_factor, 2)
-                        stop_loss = round(price - (1.5 * atr) if side == "BUY" else price + (1.5 * atr), 2)
-                        take_profit = round(price + (2.5 * atr) if side == "BUY" else price - (2.5 * atr), 2)
-                        
-                        raw_confidence = round(0.80 + (random.random() * 0.15), 2)
-                        market_regime = "VOLATILE" if volatility_factor > 0.014 else ("TRENDING" if (int(price * 10) % 3 == 0) else "RANGING")
-                        
-                        # Dynamically scale entry confidence threshold based on relative volatility
                         relative_volatility = atr / price if price > 0 else 0.01
-                        base_threshold = 0.82
-                        if relative_volatility > 0.012:
-                            dynamic_threshold = base_threshold + (relative_volatility - 0.012) * 5.0
+
+                        # Evaluate Dynamic Volatility Compression (Squeeze)
+                        from app.trading.volatility_squeeze import VolatilitySqueezeDetector
+                        squeeze_info = VolatilitySqueezeDetector.get_instance().detect_squeeze(symbol, price)
+                        squeeze_state = squeeze_info["squeeze_state"]
+
+                        # 1. Regime Classification based on relative volatility & trend metric & Squeeze state
+                        if squeeze_state == "SQUEEZE_FIRING":
+                            market_regime = "VOLATILE"
+                            strategy = "Volatility Expansion Breakout"
+                        elif squeeze_state == "SQUEEZE_ACTIVE":
+                            market_regime = "RANGING"
+                            strategy = "Mean Reversion"
+                        elif relative_volatility > 0.014:
+                            market_regime = "VOLATILE"
+                            strategy = "Volatility Expansion"
+                        elif tally % 3 == 0:
+                            market_regime = "TRENDING"
+                            strategy = "Breakout Momentum"
                         else:
-                            dynamic_threshold = base_threshold - (0.012 - relative_volatility) * 2.0
-                        dynamic_threshold = round(max(0.80, min(0.90, dynamic_threshold)), 2)
+                            market_regime = "RANGING"
+                            strategy = "Mean Reversion"
+
+                        # 2. Dynamic Stop Loss & Take Profit Placement based on Regime (Optimized R:R)
+                        if market_regime == "TRENDING":
+                            sl_multiplier = 1.8  # Wider stop buffer against noise whipsaws
+                            tp_multiplier = 3.6  # Extended TP target (3.6 / 1.8 = 2.0 Nominal R:R)
+                        elif market_regime == "RANGING":
+                            sl_multiplier = 1.4  # Tighter stop for range boundaries
+                            tp_multiplier = 2.8  # 2.8 / 1.4 = 2.0 Nominal R:R
+                        else:  # VOLATILE / SQUEEZE_FIRING
+                            sl_multiplier = 2.0
+                            tp_multiplier = 4.0
+
+                        stop_loss = round(price - (sl_multiplier * atr) if side == "BUY" else price + (sl_multiplier * atr), 2)
+                        take_profit = round(price + (tp_multiplier * atr) if side == "BUY" else price - (tp_multiplier * atr), 2)
+                        
+                        # 3. Confluence & Confidence Calibration Engine with ML Feature Weight Self-Pruning & Bayesian Belief
+                        from app.ai.feature_pruning import FeatureWeightPruningEngine
+                        from app.ai.sentiment_engine import MarketSentimentEngine
+                        from app.ai.self_supervised_learning import SelfSupervisedLearningEngine
+                        from app.trading.onchain_liquidation_pulse import OnChainLiquidationPulseEngine
+                        from app.ai.bayesian_belief import BayesianBeliefCalibrationEngine
+
+                        pruning_engine = FeatureWeightPruningEngine.get_instance()
+                        feature_weights = pruning_engine.get_pruned_weights()
+
+                        sentiment_data = await MarketSentimentEngine.get_instance().analyze_sentiment(symbol)
+                        self_supervised_data = await SelfSupervisedLearningEngine.get_instance().extract_and_project_market_state(symbol)
+                        liq_data = await OnChainLiquidationPulseEngine.get_instance().get_liquidation_heatmap(symbol)
+                        netflow_data = await OnChainLiquidationPulseEngine.get_instance().get_exchange_netflow_pulse(symbol)
+
+                        squeeze_weight = feature_weights.get("volatility_squeeze_score", 0.20)
+                        regime_weight = feature_weights.get("regime_synergy_factor", 0.15)
+                        rvol_weight = feature_weights.get("rvol_volume_confluence", 0.25)
+
+                        base_confidence = 0.82
+                        regime_confluence_bonus = 0.05 if (market_regime == "TRENDING" and strategy == "Breakout Momentum") or (market_regime == "RANGING" and strategy == "Mean Reversion") else -0.03
+                        volatility_quality_bonus = 0.03 if (0.008 <= relative_volatility <= 0.013) else -0.02
+                        squeeze_bonus = 0.06 if squeeze_state == "SQUEEZE_FIRING" else (-0.03 if squeeze_state == "SQUEEZE_ACTIVE" else 0.0)
+                        
+                        # Sentiment alignment bonus (+0.03 if sentiment aligns with trade side)
+                        sentiment_score = sentiment_data.get("composite_sentiment_score", 0.0)
+                        sentiment_aligned = (proposed_side == "BUY" and sentiment_score > 10.0) or (proposed_side == "SELL" and sentiment_score < -10.0)
+                        sentiment_bonus = 0.03 if sentiment_aligned else (-0.02 if abs(sentiment_score) > 40.0 else 0.0)
+
+                        # Liquidation Magnet & Netflow Confluence
+                        magnet_dir = liq_data.get("magnet_direction", "")
+                        liq_aligned = (proposed_side == "BUY" and magnet_dir == "UPWARD_SWEEP_TARGET") or (proposed_side == "SELL" and magnet_dir == "DOWNWARD_SWEEP_TARGET")
+                        liq_bonus = 0.03 if liq_aligned else 0.0
+
+                        netflow_bias = netflow_data.get("market_bias", "NEUTRAL")
+                        netflow_aligned = (proposed_side == "BUY" and netflow_bias == "BULLISH") or (proposed_side == "SELL" and netflow_bias == "BEARISH")
+                        netflow_bonus = 0.02 if netflow_aligned else 0.0
+
+                        # Structural anomaly penalty (-0.04 if structural anomaly detected)
+                        is_anomaly = self_supervised_data.get("is_structural_anomaly", False)
+                        anomaly_penalty = -0.04 if is_anomaly else 0.0
+
+                        # 4. Bayesian Belief Calibration
+                        bayesian_signals = {
+                            "mtf_aligned": regime_confluence_bonus > 0,
+                            "rvol_surge": volatility_quality_bonus > 0,
+                            "squeeze_firing": squeeze_state == "SQUEEZE_FIRING",
+                            "macro_risk_low": True,
+                            "sentiment_aligned": sentiment_aligned,
+                            "liquidity_magnet_aligned": liq_aligned,
+                            "is_structural_anomaly": is_anomaly
+                        }
+                        bayesian_calibration = BayesianBeliefCalibrationEngine.get_instance().calibrate_belief(strategy, bayesian_signals)
+
+                        # Weighted confidence calculation prioritizing non-pruned high-impact signals & Bayesian posterior probability
+                        pruned_signal_adjustment = (
+                            (squeeze_bonus * squeeze_weight * 2.5) +
+                            (regime_confluence_bonus * regime_weight * 2.0) +
+                            (volatility_quality_bonus * rvol_weight * 2.0) +
+                            sentiment_bonus +
+                            liq_bonus +
+                            netflow_bonus +
+                            anomaly_penalty
+                        )
+
+                        bayesian_confidence = bayesian_calibration.get("calibrated_confidence", base_confidence)
+                        raw_confidence = round(max(0.70, min(0.96, (0.5 * bayesian_confidence) + (0.5 * (base_confidence + pruned_signal_adjustment)) + (random.random() * 0.02))), 2)
+
+                        # Dynamic confidence thresholding configured by Active Trading Persona Preset
+                        from app.trading.trading_persona import TradingPersonaPresetEngine
+                        active_persona = TradingPersonaPresetEngine.get_instance().get_active_persona()
+                        persona_min_conf = active_persona.get("min_bayesian_confidence", 0.81)
+
+                        if market_regime == "RANGING":
+                            dynamic_threshold = max(persona_min_conf + 0.03, 0.84)
+                        elif market_regime == "TRENDING":
+                            dynamic_threshold = persona_min_conf
+                        else:
+                            dynamic_threshold = max(persona_min_conf + 0.02, 0.83)
+                        
+                        dynamic_threshold = round(dynamic_threshold, 2)
 
                         # Evaluate performance self-adaptation
                         from app.ai.self_adaptation import SelfAdaptationEngine

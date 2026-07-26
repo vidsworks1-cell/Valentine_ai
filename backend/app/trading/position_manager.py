@@ -96,25 +96,99 @@ class PositionManager:
                     sl = pos["stop_loss"]
                     
                     current_price = cache.get_price(symbol)
+                    if current_price <= 0.0:
+                        logger.debug(f"Skipping position monitoring for Trade {trade_id} ({symbol}): invalid or missing price ({current_price})")
+                        continue
                     
-                    # 1. Trailing Stop Management
+                    # 1. Regime-Adaptive Dynamic Trailing & Breakeven Protection Engine
+                    regime = pos.get("market_regime", "TRENDING").upper()
+                    atr = pos.get("atr", entry * 0.01) if pos.get("atr", 0.0) > 0.0 else entry * 0.01
+                    
+                    # Update peak tracking
                     if side == "BUY":
-                        if current_price > pos["highest_price"]:
-                            old_sl = pos["trailing_stop"]
+                        if current_price > pos.get("highest_price", entry):
                             pos["highest_price"] = current_price
-                            new_sl = round(current_price * 0.985, 2)
-                            if new_sl > old_sl and new_sl < current_price:
-                                pos["trailing_stop"] = new_sl
-                                logger.info(f"[STAGE: MANAGEMENT] Trailing stop updated for Trade {trade_id} {symbol} ({side}). SL raised from {old_sl} to {new_sl}.")
-                                
-                    elif side == "SELL":
-                        if current_price < pos["lowest_price"]:
-                            old_sl = pos["trailing_stop"]
+                        favorable_move = current_price - entry
+                        peak_move = pos["highest_price"] - entry
+                    else:
+                        if pos.get("lowest_price", entry) == 0.0 or current_price < pos.get("lowest_price", entry):
                             pos["lowest_price"] = current_price
-                            new_sl = round(current_price * 1.015, 2)
-                            if new_sl < old_sl and new_sl > current_price:
-                                pos["trailing_stop"] = new_sl
-                                logger.info(f"[STAGE: MANAGEMENT] Trailing stop updated for Trade {trade_id} {symbol} ({side}). SL lowered from {old_sl} to {new_sl}.")
+                        favorable_move = entry - current_price
+                        peak_move = entry - pos["lowest_price"]
+
+                    move_in_atr = favorable_move / atr if atr > 0 else 0.0
+                    peak_in_atr = peak_move / atr if atr > 0 else 0.0
+
+                    # Assign regime-specific triggers & trailing multipliers
+                    if regime == "RANGING":
+                        be_trigger_atr = 0.6
+                        trail_activation_atr = 0.8
+                        trail_mult = 1.2
+                    elif regime == "VOLATILE":
+                        be_trigger_atr = 1.2
+                        trail_activation_atr = 1.5
+                        # Tighten trailing distance if parabolic expansion beyond 2.5x ATR
+                        trail_mult = 1.5 if peak_in_atr >= 2.5 else 2.2
+                    else:  # TRENDING or default
+                        be_trigger_atr = 1.0
+                        trail_activation_atr = 1.2
+                        trail_mult = 1.8
+
+                    pos["regime_trailing_details"] = {
+                        "regime": regime,
+                        "be_trigger_atr": be_trigger_atr,
+                        "trail_activation_atr": trail_activation_atr,
+                        "trail_dist_atr": trail_mult,
+                        "current_move_atr": round(move_in_atr, 2),
+                        "peak_move_atr": round(peak_in_atr, 2)
+                    }
+
+                    # A. Breakeven Protection Guard (Locks in Entry + 0.1% Fee Buffer)
+                    if (move_in_atr >= be_trigger_atr or peak_in_atr >= be_trigger_atr):
+                        be_level = round(entry * 1.001 if side == "BUY" else entry * 0.999, 2)
+                        
+                        if side == "BUY" and pos["trailing_stop"] < be_level:
+                            pos["trailing_stop"] = be_level
+                            if not pos.get("breakeven_activated", False):
+                                pos["breakeven_activated"] = True
+                                pos["breakeven_price"] = be_level
+                                logger.info(
+                                    f"🛡️ [REGIME BREAKEVEN PROTECTION] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                    f"Breakeven locked at {be_level} (Entry: {entry}). Current Move: {move_in_atr:.2f} ATR."
+                                )
+                        elif side == "SELL" and (pos["trailing_stop"] > be_level or pos["trailing_stop"] == 0.0):
+                            pos["trailing_stop"] = be_level
+                            if not pos.get("breakeven_activated", False):
+                                pos["breakeven_activated"] = True
+                                pos["breakeven_price"] = be_level
+                                logger.info(
+                                    f"🛡️ [REGIME BREAKEVEN PROTECTION] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                    f"Breakeven locked at {be_level} (Entry: {entry}). Current Move: {move_in_atr:.2f} ATR."
+                                )
+
+                    # B. Regime-Adaptive Dynamic Trailing Stop Adjustment
+                    if peak_in_atr >= trail_activation_atr:
+                        trail_dist = round(trail_mult * atr, 2)
+                        if side == "BUY":
+                            target_sl = round(pos["highest_price"] - trail_dist, 2)
+                            if target_sl > pos["trailing_stop"] and target_sl < current_price:
+                                old_sl = pos["trailing_stop"]
+                                pos["trailing_stop"] = target_sl
+                                pos["trailing_active"] = True
+                                logger.info(
+                                    f"📈 [REGIME DYNAMIC TRAILING] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                    f"SL raised from {old_sl} to {target_sl} (Highest: {pos['highest_price']}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
+                                )
+                        elif side == "SELL":
+                            target_sl = round(pos["lowest_price"] + trail_dist, 2)
+                            if (target_sl < pos["trailing_stop"] or pos["trailing_stop"] == 0.0) and target_sl > current_price:
+                                old_sl = pos["trailing_stop"]
+                                pos["trailing_stop"] = target_sl
+                                pos["trailing_active"] = True
+                                logger.info(
+                                    f"📉 [REGIME DYNAMIC TRAILING] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                    f"SL lowered from {old_sl} to {target_sl} (Lowest: {pos['lowest_price']}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
+                                )
                     
                     # 2. Check Multi-Stage Partial Take Profits
                     stages = pos.get("tp_stages", [])
@@ -230,8 +304,13 @@ class PositionManager:
                 quantity=close_size
             )
             
-            if "error" in binance_res or "msg" in binance_res and binance_res.get("error"):
+            if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
                 logger.error(f"❌ BINANCE PARTIAL CLOSE ORDER FAILED: {binance_res}")
+                # Reset stage hit flag so partial close can retry
+                for s in pos.get("tp_stages", []):
+                    if s.get("label") == stage_label:
+                        s["hit"] = False
+                        break
                 try:
                     from app.services.audit_service import AuditService
                     async with AsyncSessionLocal() as db:
@@ -465,3 +544,26 @@ class PositionManager:
                 count += 1
                 
         return count
+
+    async def sync_exchange_positions(self, mode: str = "TESTNET") -> Dict[str, Any]:
+        """Synchronizes exchange asset balances/open orders with internal position tracking state."""
+        from app.services.binance_connector import BinanceConnector
+        connector = BinanceConnector.get_instance()
+        
+        if mode in ["TESTNET", "LIVE"]:
+            balances = await connector.get_wallet_balances(mode)
+            if isinstance(balances, list):
+                tracked_symbols = {pos["symbol"] for pos in self._positions.values()}
+                non_zero_assets = [b for b in balances if float(b.get("free", 0.0)) > 0 or float(b.get("locked", 0.0)) > 0]
+                return {
+                    "status": "SUCCESS",
+                    "mode": mode,
+                    "exchange_non_zero_balances": len(non_zero_assets),
+                    "tracked_positions_count": len(self._positions),
+                    "tracked_symbols": list(tracked_symbols)
+                }
+        return {
+            "status": "SUCCESS",
+            "mode": mode,
+            "tracked_positions_count": len(self._positions)
+        }

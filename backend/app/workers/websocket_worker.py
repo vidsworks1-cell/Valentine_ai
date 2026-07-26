@@ -99,6 +99,16 @@ class BinanceWebSocketWorker:
                     async for message in websocket:
                         if not self.running:
                             break
+
+                        # Chaos Engine fault injections
+                        from app.trading.chaos_engine import ChaosEngine
+                        chaos = ChaosEngine.get_instance()
+                        if chaos.enabled:
+                            if chaos.should_inject_network_disconnect():
+                                raise Exception("Chaos injected network disconnect")
+                            if chaos.should_inject_ws_drop():
+                                continue
+
                         try:
                             data = json.loads(message)
                             if "result" in data and data.get("id") == 1:
@@ -110,6 +120,10 @@ class BinanceWebSocketWorker:
                                     symbol = ticker_data["s"]
                                     price = float(ticker_data["c"])
                                     cache.update_price(symbol, price)
+
+                                    # Duplicate event processing if chaos enabled
+                                    if chaos.enabled and chaos.should_inject_ws_duplicate():
+                                        cache.update_price(symbol, price)
                         except Exception as inner_e:
                             logger.error(f"Error parsing ticker message: {inner_e}")
                     

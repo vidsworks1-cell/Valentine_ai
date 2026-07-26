@@ -35,6 +35,11 @@ class AuditService:
         trade_id: int = None
     ):
         """Persist a new audit log record asynchronously."""
+        from app.trading.chaos_engine import ChaosEngine
+        chaos = ChaosEngine.get_instance()
+        if chaos.enabled and chaos.should_inject_db_failure():
+            raise RuntimeError("Chaos injected Database Failure in AuditService")
+
         db_log = AuditLog(
             message=message,
             category=category,

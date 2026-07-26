@@ -1166,6 +1166,317 @@ async def get_paper_validation_report():
     from app.trading.paper_validation import LongTermPaperValidationEngine
     return LongTermPaperValidationEngine.get_instance().get_validation_report()
 
+@router.get("/chaos/status")
+async def get_chaos_status():
+    """Gets Chaos Testing Mode telemetry and injection statistics."""
+    from app.trading.chaos_engine import ChaosEngine
+    return ChaosEngine.get_instance().get_telemetry()
+
+@router.post("/chaos/configure")
+async def configure_chaos_testing(
+    enabled: Optional[bool] = None,
+    api_timeout_rate: Optional[float] = None,
+    http_500_rate: Optional[float] = None,
+    ws_lost_msg_rate: Optional[float] = None,
+    ws_duplicate_msg_rate: Optional[float] = None,
+    delayed_fill_rate: Optional[float] = None,
+    delayed_fill_seconds: Optional[float] = None,
+    db_failure_rate: Optional[float] = None,
+    network_disconnect_rate: Optional[float] = None
+):
+    """Configures Chaos Testing Mode parameters and fault injection rates."""
+    from app.trading.chaos_engine import ChaosEngine
+    chaos = ChaosEngine.get_instance()
+    config_dict = {}
+    if enabled is not None: config_dict["enabled"] = enabled
+    if api_timeout_rate is not None: config_dict["api_timeout_rate"] = api_timeout_rate
+    if http_500_rate is not None: config_dict["http_500_rate"] = http_500_rate
+    if ws_lost_msg_rate is not None: config_dict["ws_lost_msg_rate"] = ws_lost_msg_rate
+    if ws_duplicate_msg_rate is not None: config_dict["ws_duplicate_msg_rate"] = ws_duplicate_msg_rate
+    if delayed_fill_rate is not None: config_dict["delayed_fill_rate"] = delayed_fill_rate
+    if delayed_fill_seconds is not None: config_dict["delayed_fill_seconds"] = delayed_fill_seconds
+    if db_failure_rate is not None: config_dict["db_failure_rate"] = db_failure_rate
+    if network_disconnect_rate is not None: config_dict["network_disconnect_rate"] = network_disconnect_rate
+    
+    chaos.configure(**config_dict)
+    return chaos.get_telemetry()
+
+@router.post("/chaos/reset-stats")
+async def reset_chaos_stats():
+    """Resets chaos testing fault injection counter statistics."""
+    from app.trading.chaos_engine import ChaosEngine
+    chaos = ChaosEngine.get_instance()
+    chaos.reset_stats()
+    return chaos.get_telemetry()
+
+@router.get("/mtf-volume-liquidity-status/{symbol}")
+async def get_mtf_volume_liquidity_status(symbol: str, side: str = "BUY"):
+    """
+    Evaluates and returns live multi-timeframe volume & liquidity confluence analysis for symbol.
+    """
+    from app.workers.price_cache import PriceCache
+    from app.trading.mtf_confirmation import MTFConfirmationGuard
+
+    cache = await PriceCache.get_instance()
+    price = cache.get_price(symbol)
+    guard = MTFConfirmationGuard.get_instance()
+
+    passed_mtf, mtf_align_pct, mtf_details = await guard.evaluate_mtf_alignment(symbol, side, price)
+    passed_vol, vol_score, vol_details = await guard.evaluate_volume_liquidity_confluence(symbol, side, price)
+
+    return {
+        "symbol": symbol.upper(),
+        "side": side.upper(),
+        "price": price,
+        "mtf_alignment": {
+            "passed": passed_mtf,
+            "alignment_pct": mtf_align_pct,
+            "details": mtf_details
+        },
+        "volume_liquidity_confluence": {
+            "passed": passed_vol,
+            "confluence_score": vol_score,
+            "details": vol_details
+        },
+        "overall_entry_permitted": passed_mtf and passed_vol
+    }
+
+@router.get("/volatility-squeeze/{symbol}")
+async def get_volatility_squeeze_status(symbol: str):
+    """
+    Evaluates and returns live Dynamic Volatility Compression (Squeeze) detection status,
+    including Bollinger Bands vs Keltner Channels ratios, ATR compression, and breakout signals.
+    """
+    from app.workers.price_cache import PriceCache
+    from app.trading.volatility_squeeze import VolatilitySqueezeDetector
+
+    cache = await PriceCache.get_instance()
+    price = cache.get_price(symbol)
+    squeeze_info = VolatilitySqueezeDetector.get_instance().detect_squeeze(symbol, price)
+    return squeeze_info
+
+@router.get("/positions/active-trailing-telemetry")
+async def get_active_positions_trailing_telemetry():
+    """
+    Returns telemetry for active positions tracked by PositionManager,
+    including regime-adaptive trailing distances and breakeven protection status.
+    """
+    from app.trading.position_manager import PositionManager
+    pm = PositionManager.get_instance()
+    positions = pm.get_active_positions()
+    return {
+        "active_positions_count": len(positions),
+        "positions": positions
+    }
+
+@router.get("/ai/feature-pruning-status")
+async def get_feature_pruning_status():
+    """
+    Returns Machine Learning Feature Weight Self-Pruning telemetry,
+    including feature importance scores, Information Gain, PSNR, and normalized weights.
+    """
+    from app.ai.feature_pruning import FeatureWeightPruningEngine
+    engine = FeatureWeightPruningEngine.get_instance()
+    return engine.get_pruning_report()
+
+@router.post("/ai/trigger-feature-pruning")
+async def trigger_feature_pruning():
+    """
+    Triggers feature evaluation and weight self-pruning rebalancing across closed trades.
+    """
+    from app.ai.feature_pruning import FeatureWeightPruningEngine
+    engine = FeatureWeightPruningEngine.get_instance()
+    return await engine.evaluate_and_prune_features()
+
+@router.get("/macro-risk-overlay/{symbol}")
+async def get_macro_risk_overlay_status(symbol: str, side: str = "BUY"):
+    """
+    Returns live Macro & Institutional Risk Confluence Overlay analysis for symbol,
+    including BTC dominance, DXY index, funding rate skew, and position size scaling parameters.
+    """
+    from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
+    engine = MacroRiskOverlayEngine.get_instance()
+    return await engine.evaluate_macro_risk(symbol, side)
+
+@router.post("/macro-risk-overlay/manual-lockdown")
+async def set_macro_risk_manual_lockdown(active: bool = True, reason: str = "Manual High-Impact Event Lockout"):
+    """
+    Manually activates or clears macro risk event lockdown circuit breaker.
+    """
+    from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
+    engine = MacroRiskOverlayEngine.get_instance()
+    engine.set_manual_event_lockdown(active, reason)
+    return {
+        "manual_lockdown_active": active,
+        "reason": reason
+    }
+
+@router.get("/ai/sentiment-analysis/{symbol}")
+async def get_market_sentiment_analysis(symbol: str):
+    """
+    Returns real-time Financial News NLP & Social Media Sentiment analysis for symbol.
+    """
+    from app.ai.sentiment_engine import MarketSentimentEngine
+    return await MarketSentimentEngine.get_instance().analyze_sentiment(symbol)
+
+@router.get("/ai/self-supervised-representation/{symbol}")
+async def get_self_supervised_representation(symbol: str):
+    """
+    Projects symbol market state into self-supervised contrastive latent space and identifies structural anomalies.
+    """
+    from app.ai.self_supervised_learning import SelfSupervisedLearningEngine
+    return await SelfSupervisedLearningEngine.get_instance().extract_and_project_market_state(symbol)
+
+@router.post("/ai/trigger-contrastive-epoch")
+async def trigger_contrastive_epoch():
+    """
+    Triggers an unsupervised contrastive learning epoch to refine market state embeddings.
+    """
+    from app.ai.self_supervised_learning import SelfSupervisedLearningEngine
+    return await SelfSupervisedLearningEngine.get_instance().train_contrastive_epoch()
+
+@router.get("/cross-asset-correlation/matrix")
+async def get_cross_asset_correlation_matrix():
+    """
+    Returns live Cross-Asset Pearson Correlation Matrix and Contagion Spillover Index.
+    """
+    from app.trading.cross_asset_correlation import CrossAssetCorrelationEngine
+    engine = CrossAssetCorrelationEngine.get_instance()
+    return engine.calculate_correlation_matrix()
+
+@router.get("/cross-asset-correlation/evaluate-trade/{symbol}")
+async def evaluate_trade_correlation_risk(symbol: str):
+    """
+    Evaluates correlation concentration risk for a proposed symbol against active portfolio positions.
+    """
+    from app.trading.cross_asset_correlation import CrossAssetCorrelationEngine
+    from app.trading.position_manager import PositionManager
+    active_pos = PositionManager.get_instance().get_active_positions()
+    active_syms = [p.get("symbol") for p in active_pos if p.get("symbol")]
+    return CrossAssetCorrelationEngine.get_instance().evaluate_trade_correlation_risk(symbol, active_syms)
+
+@router.get("/onchain/liquidation-heatmap/{symbol}")
+async def get_onchain_liquidation_heatmap(symbol: str):
+    """
+    Returns live On-Chain Liquidation Heatmap clusters and primary liquidity magnet target.
+    """
+    from app.trading.onchain_liquidation_pulse import OnChainLiquidationPulseEngine
+    return await OnChainLiquidationPulseEngine.get_instance().get_liquidation_heatmap(symbol)
+
+@router.get("/onchain/exchange-netflow-pulse/{asset}")
+async def get_exchange_netflow_pulse(asset: str):
+    """
+    Returns live Tier-1 Exchange Netflow Pulse and Whale Transfer Alerts.
+    """
+    from app.trading.onchain_liquidation_pulse import OnChainLiquidationPulseEngine
+    return await OnChainLiquidationPulseEngine.get_instance().get_exchange_netflow_pulse(asset)
+
+@router.post("/ai/calibrate-bayesian-belief")
+async def calibrate_bayesian_belief(
+    strategy: str = "Breakout Momentum",
+    mtf_aligned: bool = True,
+    rvol_surge: bool = True,
+    squeeze_firing: bool = True,
+    macro_risk_low: bool = True,
+    sentiment_aligned: bool = True,
+    liquidity_magnet_aligned: bool = True,
+    is_structural_anomaly: bool = False
+):
+    """
+    Calibrates prior strategy win probabilities P(Win) into posterior probabilities P(Win|Evidence) using Bayes' Theorem.
+    """
+    from app.ai.bayesian_belief import BayesianBeliefCalibrationEngine
+    signals = {
+        "mtf_aligned": mtf_aligned,
+        "rvol_surge": rvol_surge,
+        "squeeze_firing": squeeze_firing,
+        "macro_risk_low": macro_risk_low,
+        "sentiment_aligned": sentiment_aligned,
+        "liquidity_magnet_aligned": liquidity_magnet_aligned,
+        "is_structural_anomaly": is_structural_anomaly
+    }
+    return BayesianBeliefCalibrationEngine.get_instance().calibrate_belief(strategy, signals)
+
+@router.get("/ai/ppo-exit-policy/{symbol}")
+async def get_ppo_exit_policy_evaluation(
+    symbol: str,
+    side: str = "BUY",
+    entry_price: float = 90000.0,
+    current_price: Optional[float] = None,
+    holding_duration_bars: int = 12,
+    unrealized_pnl_pct: float = 2.4,
+    atr_volatility_ratio: float = 1.15
+):
+    """
+    Evaluates PPO Advantage Actor-Critic Reinforcement Learning exit and position management policy.
+    """
+    from app.ai.ppo_exit_policy import PPOExecutionExitPolicyAgent
+    agent = PPOExecutionExitPolicyAgent.get_instance()
+    return await agent.evaluate_position_exit_policy(
+        symbol=symbol,
+        side=side,
+        entry_price=entry_price,
+        current_price=current_price,
+        holding_duration_bars=holding_duration_bars,
+        unrealized_pnl_pct=unrealized_pnl_pct,
+        atr_volatility_ratio=atr_volatility_ratio
+    )
+
+@router.post("/ai/trigger-ppo-training")
+async def trigger_ppo_policy_training(num_episodes: int = 50):
+    """
+    Triggers an online PPO Advantage Actor-Critic trajectory optimization step.
+    """
+    from app.ai.ppo_exit_policy import PPOExecutionExitPolicyAgent
+    agent = PPOExecutionExitPolicyAgent.get_instance()
+    return await agent.train_ppo_step(num_episodes=num_episodes)
+
+@router.get("/trading-persona/all")
+async def get_all_trading_personas():
+    """
+    Returns available Trading Persona Presets (Conservative Macro Swing, Aggressive Scalper, Delta Neutral, Custom Quant) and current active persona.
+    """
+    from app.trading.trading_persona import TradingPersonaPresetEngine
+    return TradingPersonaPresetEngine.get_instance().get_all_presets()
+
+@router.post("/trading-persona/select")
+async def select_trading_persona(persona_key: str = "CONSERVATIVE_MACRO_SWING", custom_overrides: Optional[Dict[str, Any]] = None):
+    """
+    Selects active trading persona preset or configures custom quantitative preset parameters.
+    """
+    from app.trading.trading_persona import TradingPersonaPresetEngine
+    return TradingPersonaPresetEngine.get_instance().set_active_persona(persona_key, custom_overrides)
+
+@router.post("/walk-forward/run-optimization")
+async def run_walk_forward_optimization(
+    symbol: str = "BTCUSDT",
+    num_candles: int = 200,
+    confidence_grid: Optional[List[float]] = None,
+    sl_atr_grid: Optional[List[float]] = None,
+    tp_atr_grid: Optional[List[float]] = None
+):
+    """
+    Executes Walk-Forward Hyperparameter Auto-Tuner grid search over historical replay candles.
+    """
+    from app.trading.walk_forward_tuner import WalkForwardHyperparameterAutoTuner
+    tuner = WalkForwardHyperparameterAutoTuner.get_instance()
+    return await tuner.run_walk_forward_optimization(
+        symbol=symbol,
+        num_candles=num_candles,
+        confidence_grid=confidence_grid,
+        sl_atr_grid=sl_atr_grid,
+        tp_atr_grid=tp_atr_grid
+    )
+
+@router.post("/walk-forward/auto-apply-optimal")
+async def auto_apply_optimal_walk_forward_parameters():
+    """
+    Auto-applies optimal hyperparameters from latest walk-forward run to active CUSTOM_QUANT persona.
+    """
+    from app.trading.walk_forward_tuner import WalkForwardHyperparameterAutoTuner
+    tuner = WalkForwardHyperparameterAutoTuner.get_instance()
+    return tuner.auto_apply_optimal_parameters()
+
 @router.post("/paper-validation/promote-phase")
 async def promote_rollout_phase(target_phase: str = "PHASE_2_MICRO_LIVE"):
     """Pillar 5: Promotes active rollout phase."""
