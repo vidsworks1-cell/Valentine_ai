@@ -289,14 +289,14 @@ class AiReasoningEngine:
                         # Dynamic confidence thresholding configured by Active Trading Persona Preset
                         from app.trading.trading_persona import TradingPersonaPresetEngine
                         active_persona = TradingPersonaPresetEngine.get_instance().get_active_persona()
-                        persona_min_conf = active_persona.get("min_bayesian_confidence", 0.81)
+                        persona_min_conf = active_persona.get("min_bayesian_confidence", 0.78)
 
                         if market_regime == "RANGING":
-                            dynamic_threshold = max(persona_min_conf + 0.03, 0.84)
+                            dynamic_threshold = persona_min_conf + 0.02
                         elif market_regime == "TRENDING":
                             dynamic_threshold = persona_min_conf
                         else:
-                            dynamic_threshold = max(persona_min_conf + 0.02, 0.83)
+                            dynamic_threshold = persona_min_conf + 0.01
                         
                         dynamic_threshold = round(dynamic_threshold, 2)
 

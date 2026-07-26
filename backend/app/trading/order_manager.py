@@ -278,19 +278,39 @@ class OrderManager:
                     return
 
                 # Dynamic position sizing based on ATR Risk Engine calculation
-                position_size = RiskEvaluator.calculate_atr_position_size(balance, price, atr_val, risk_pct)
+                position_size = RiskEvaluator.calculate_atr_position_size(
+                    balance=balance,
+                    entry_price=price,
+                    atr=atr_val,
+                    max_risk_pct=risk_pct,
+                    stop_loss=stop_loss
+                )
+
+                # Apply macro and correlation position scalers if present
+                import math
+                composite_scaler = macro_scaler * corr_scaler
+                if composite_scaler < 1.0 and composite_scaler > 0.0:
+                    old_size = position_size
+                    position_size = math.floor((position_size * composite_scaler) * 10000) / 10000.0
+                    position_size = max(position_size, 0.0001)
+                    logger.info(f"⚖️ [SCALER APPLIED] Position size for {symbol} scaled from {old_size} to {position_size} (composite scaler: {composite_scaler*100:.1f}%)")
+
                 allowed_risk_amt = balance * risk_pct
 
                 order_dict = {
                     "entry_price": price,
                     "stop_loss": stop_loss,
+                    "atr": atr_val,
                     "position_size": position_size
                 }
 
-                logger.info(f"[STAGE: RISK] Evaluating boundaries for {opportunity['symbol']} entry at {price} against wallet balance {balance}. Max allowed risk: {allowed_risk_amt} ({risk_pct*100.0}%)")
+                logger.info(f"[STAGE: RISK] Evaluating boundaries for {opportunity['symbol']} entry at {price} against wallet balance ${balance:.2f}. Max allowed risk: ${allowed_risk_amt:.2f} ({risk_pct*100.0:.1f}%)")
 
                 # 3. Perform Layer 1 Risk Engine check
                 passed_risk = RiskEvaluator.validate_order(order_dict, balance, risk_pct)
+
+                # Sync position_size in case validate_order clamped it
+                position_size = order_dict["position_size"]
                 
                 if not passed_risk:
                     logger.warning(f"[STAGE: RISK] REJECTED. Failed risk checks for {opportunity['symbol']}. Position size {position_size} exceeds risk limits.")
