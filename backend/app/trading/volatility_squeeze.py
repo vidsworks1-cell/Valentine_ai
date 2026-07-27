@@ -79,7 +79,19 @@ class VolatilitySqueezeDetector:
             squeeze_state = "NO_SQUEEZE"
             squeeze_description = "Normal volatility expansion / trend continuation."
 
-        # Breakout Directional Bias
+        # Breakout Directional Bias & Squeeze Pre-Positioning
+        is_squeeze_prepositioning = (squeeze_state == "SQUEEZE_ACTIVE")
+        prepositioning_trigger_upper = bb_upper if is_squeeze_prepositioning else None
+        prepositioning_trigger_lower = bb_lower if is_squeeze_prepositioning else None
+        recommended_order_routing = "LIMIT" if is_squeeze_prepositioning else ("MARKET" if squeeze_state == "SQUEEZE_FIRING" else "LIMIT")
+
+        # Predictive Duration & Expansion Target Estimation
+        # Est. candles coiling remaining before explosion = f(squeeze_ratio, compression_score)
+        predicted_coiling_candles = max(1, min(18, int((squeeze_ratio / 0.95) * 6))) if squeeze_state == "SQUEEZE_ACTIVE" else 0
+        expected_expansion_move_pct = round(max(1.5, min(12.0, (1.2 - squeeze_ratio) * 15.0 + (atr_compression_ratio * 3.0))), 2)
+        upper_expansion_target = round(price * (1.0 + (expected_expansion_move_pct / 100.0)), 2)
+        lower_expansion_target = round(price * (1.0 - (expected_expansion_move_pct / 100.0)), 2)
+
         if squeeze_state == "SQUEEZE_FIRING":
             directional_bias = "BUY" if (price_int + tally) % 2 == 0 else "SELL"
         elif squeeze_state == "SQUEEZE_ACTIVE":
@@ -94,6 +106,18 @@ class VolatilitySqueezeDetector:
             "squeeze_description": squeeze_description,
             "squeeze_ratio": squeeze_ratio,
             "compression_score": compression_score,
+            "is_squeeze_prepositioning": is_squeeze_prepositioning,
+            "prepositioning_triggers": {
+                "upper_breakout_trigger": prepositioning_trigger_upper,
+                "lower_breakout_trigger": prepositioning_trigger_lower,
+                "recommended_routing": recommended_order_routing
+            },
+            "predictive_expansion": {
+                "predicted_coiling_candles": predicted_coiling_candles,
+                "expected_expansion_move_pct": expected_expansion_move_pct,
+                "upper_expansion_target": upper_expansion_target,
+                "lower_expansion_target": lower_expansion_target
+            },
             "atr": atr,
             "baseline_atr": baseline_atr,
             "atr_compression_ratio": atr_compression_ratio,

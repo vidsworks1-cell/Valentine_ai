@@ -255,11 +255,35 @@ class OrderManager:
                         wallet = await PaperTradingService.create_wallet(db, "lumina_default", 100000.0)
                     balance = wallet.balance
 
-                # 2. Assemble trade schema details
-                risk_pct = 0.02 # Default 2% max per trade risk
+                # 2. Assemble trade schema details & Dynamic Fractional Kelly Sizing
+                from app.ai.self_adaptation import SelfAdaptationEngine
+                adaptation_summary = SelfAdaptationEngine.get_instance().get_adaptation_summary()
+                empirical_win_rate = float(adaptation_summary.get("overall_win_rate_pct", 55.0)) / 100.0
+                avg_r_ratio = 2.0  # Empirical reward-to-risk ratio baseline
+                full_kelly = max(0.0, (empirical_win_rate * avg_r_ratio - (1.0 - empirical_win_rate)) / avg_r_ratio)
+                applied_fractional_kelly = 0.50  # Half Kelly
+                risk_pct = round(max(0.010, min(0.035, full_kelly * applied_fractional_kelly * 0.15)), 4)
+                
+                logger.info(f"🎲 [DYNAMIC KELLY SIZING] Applied {risk_pct*100.0:.2f}% risk per trade (Empirical Win Rate: {empirical_win_rate*100.0:.1f}%, R-Ratio: {avg_r_ratio}, Full Kelly: {full_kelly*100.0:.1f}%)")
+
                 price = opportunity["entry_price"]
                 stop_loss = opportunity["stop_loss"]
                 atr_val = opportunity.get("atr", price * 0.01)
+
+                # 2b. Adaptive Limit / Market Hybrid Routing
+                squeeze_info = opportunity.get("squeeze_info", {})
+                squeeze_state = squeeze_info.get("squeeze_state", "NO_SQUEEZE")
+                market_regime = opportunity.get("market_regime", "TRENDING").upper()
+                strategy_used = opportunity.get("strategy_used", "")
+
+                if squeeze_state == "SQUEEZE_ACTIVE" or market_regime == "RANGING":
+                    order_routing = "LIMIT"
+                elif squeeze_state == "SQUEEZE_FIRING" or market_regime == "VOLATILE" or "BREAKOUT" in strategy_used.upper():
+                    order_routing = "MARKET"
+                else:
+                    order_routing = "LIMIT"
+
+                logger.info(f"⚡ [HYBRID ROUTING] Symbol {symbol} mapped to {order_routing} order routing (Regime: {market_regime}, Squeeze: {squeeze_state})")
 
                 # 2b. Portfolio Exposure Guard Check
                 from app.trading.portfolio_guard import PortfolioGuard
@@ -294,6 +318,23 @@ class OrderManager:
                     position_size = math.floor((position_size * composite_scaler) * 10000) / 10000.0
                     position_size = max(position_size, 0.0001)
                     logger.info(f"⚖️ [SCALER APPLIED] Position size for {symbol} scaled from {old_size} to {position_size} (composite scaler: {composite_scaler*100:.1f}%)")
+
+                # Confidence Adaptive Position Sizing: scale position size based on trade confidence & setup quality
+                conf_score = float(opportunity.get("confidence_score", 0.78))
+                if conf_score >= 0.80:
+                    conf_scaler = 1.10  # Premium setup: 110% allocation
+                elif conf_score >= 0.73:
+                    conf_scaler = 1.00  # Standard setup: 100% allocation
+                elif conf_score >= 0.68:
+                    conf_scaler = 0.80  # Moderate setup: 80% allocation
+                else:
+                    conf_scaler = 0.65  # Conservative setup: 65% allocation
+
+                if conf_scaler != 1.0:
+                    old_size = position_size
+                    position_size = math.floor((position_size * conf_scaler) * 10000) / 10000.0
+                    position_size = max(position_size, 0.0001)
+                    logger.info(f"⚖️ [CONFIDENCE ADAPTIVE SIZING] Position size for {symbol} scaled from {old_size} to {position_size} ({conf_scaler:.2f}x allocation based on confidence score {conf_score:.2f})")
 
                 allowed_risk_amt = balance * risk_pct
 
@@ -330,12 +371,12 @@ class OrderManager:
                 # If we are in TESTNET or LIVE mode, we place the real order on Binance first!
                 binance_order_id = None
                 if trading_mode in ["TESTNET", "LIVE"]:
-                    logger.info(f"[STAGE: EXECUTION] Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}) in {trading_mode} mode...")
+                    logger.info(f"[STAGE: EXECUTION] Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}, type: {order_routing}) in {trading_mode} mode...")
                     binance_res = await BinanceConnector.get_instance().create_order(
                         mode=trading_mode,
                         symbol=opportunity["symbol"],
                         side=opportunity["side"],
-                        order_type="MARKET",
+                        order_type=order_routing,
                         quantity=position_size
                     )
                     
@@ -366,7 +407,24 @@ class OrderManager:
                         if total_qty > 0.0:
                             price = round(total_quote / total_qty, 6)
                 else:
-                    logger.info(f"[STAGE: EXECUTION] Executing paper {opportunity['side']} order for {opportunity['symbol']}. Entry Price: {price}, Quantity: {position_size}.")
+                    logger.info(f"[STAGE: EXECUTION] Executing paper {opportunity['side']} order for {opportunity['symbol']} (Routing: {order_routing}). Entry Price: {price}, Quantity: {position_size}.")
+
+                # Track Execution Quality & Slippage in Execution Analytics Engine
+                try:
+                    from app.trading.execution_analytics import ExecutionAnalyticsEngine
+                    now_ms = time.time() * 1000
+                    ExecutionAnalyticsEngine.get_instance().record_execution(
+                        symbol=opportunity["symbol"],
+                        side=opportunity["side"],
+                        strategy=opportunity.get("strategy_used", "General"),
+                        ordered_price=opportunity["entry_price"],
+                        fill_price=price,
+                        position_size=position_size,
+                        signal_timestamp_ms=now_ms - 120,
+                        fill_timestamp_ms=now_ms
+                    )
+                except Exception as ex_err:
+                    logger.error(f"Failed to record execution fill analytics: {ex_err}")
 
                 # 4. Success: Create a new Trade record
                 trade_create = TradeCreate(

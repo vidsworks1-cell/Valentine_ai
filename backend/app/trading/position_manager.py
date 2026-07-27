@@ -111,6 +111,28 @@ class PositionManager:
                     # 1. Regime-Adaptive Dynamic Trailing & Breakeven Protection Engine
                     regime = pos.get("market_regime", "TRENDING").upper()
                     atr = pos.get("atr", entry * 0.01) if pos.get("atr", 0.0) > 0.0 else entry * 0.01
+
+                    # Correlated Risk Management: Macro Shock Guard on BTC selloff
+                    btc_price = cache.get_price("BTCUSDT")
+                    if not hasattr(self, "_btc_price_history"):
+                        self._btc_price_history = []
+                    self._btc_price_history.append(btc_price)
+                    if len(self._btc_price_history) > 10:
+                        self._btc_price_history.pop(0)
+
+                    btc_shock_detected = False
+                    if len(self._btc_price_history) >= 3:
+                        btc_peak = max(self._btc_price_history)
+                        btc_drop_pct = (btc_peak - btc_price) / btc_peak * 100.0 if btc_peak > 0 else 0.0
+                        if btc_drop_pct >= 1.2:
+                            btc_shock_detected = True
+
+                    # If BTC shock detected and position is an altcoin BUY, lock breakeven immediately
+                    if btc_shock_detected and symbol != "BTCUSDT" and side == "BUY":
+                        be_level = round(entry * 1.0005, 2)
+                        if pos["trailing_stop"] < be_level:
+                            pos["trailing_stop"] = be_level
+                            logger.warning(f"🚨 [CORRELATED MACRO SHOCK GUARD] Rapid BTC selloff ({btc_drop_pct:.2f}% drop)! Tightened trailing stop on {symbol} to breakeven ({be_level}) to prevent systemic drawdown cascade.")
                     
                     # Update peak tracking
                     if side == "BUY":
@@ -567,6 +589,14 @@ class PositionManager:
                         "strategy": pos.get("strategy", "Standard Strategy")
                     })
 
+                    SelfAdaptationEngine.get_instance().record_post_trade_retro({
+                        "id": trade_id,
+                        "symbol": symbol,
+                        "profit_loss": pnl,
+                        "profit_loss_pct": (pnl / (entry * size)) * 100.0 if (entry * size) > 0 else 0.0,
+                        "strategy_used": pos.get("strategy", "Standard Strategy"),
+                        "exit_reason": outcome_type
+                    })
                     asyncio.create_task(SelfAdaptationEngine.get_instance().analyze_performance())
                     asyncio.create_task(TradeJournalEngine.get_instance().journal_closed_trade(trade_id))
                     asyncio.create_task(ChampionChallengerEngine.get_instance().evaluate_strategies())

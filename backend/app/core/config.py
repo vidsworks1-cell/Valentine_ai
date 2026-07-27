@@ -1,5 +1,25 @@
 from typing import List
-from pydantic_settings import BaseSettings, SettingsConfigDict
+try:
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+except ImportError:
+    try:
+        from pydantic import BaseSettings
+        def SettingsConfigDict(**kwargs): return kwargs
+    except ImportError:
+        class BaseSettings:
+            PROJECT_NAME: str = "Lumina Backend API"
+            VERSION: str = "1.0.0"
+            API_V1_STR: str = "/api/v1"
+            DATABASE_URL: str = "sqlite+aiosqlite:///./lumina_backend.db"
+            SECRET_KEY: str = "super-secret-lumina-key-change-in-production"
+            ALLOWED_HOSTS: List[str] = ["*"]
+            BINANCE_API_KEY: str = ""
+            BINANCE_API_SECRET: str = ""
+            BINANCE_TESTNET_API_KEY: str = ""
+            BINANCE_TESTNET_SECRET_KEY: str = ""
+            BINANCE_TESTNET_API_SECRET: str = ""
+            BINANCE_TESTNET: bool = False
+        def SettingsConfigDict(**kwargs): return kwargs
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Lumina Backend API"

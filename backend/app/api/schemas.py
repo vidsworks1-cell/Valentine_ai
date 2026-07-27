@@ -1,6 +1,18 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
+try:
+    from pydantic import BaseModel, Field
+except ImportError:
+    class BaseModel:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+        def model_dump(self, **kwargs):
+            return self.__dict__
+        def dict(self, **kwargs):
+            return self.__dict__
+    def Field(default=None, **kwargs):
+        return default
 
 class TradeBase(BaseModel):
     symbol: str = Field(..., max_length=20, examples=["BTCUSDT"])

@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 
 logger = logging.getLogger("lumina.trading.execution_analytics")
@@ -176,3 +176,28 @@ class ExecutionAnalyticsEngine:
             "symbol_breakdown": sym_breakdown,
             "recent_executions": self._execution_logs[-15:]
         }
+
+    def get_symbol_slippage_penalty(self, symbol: str) -> Tuple[float, str]:
+        """
+        Calculates execution quality penalty for a symbol based on adverse slippage feedback.
+        Returns (penalty_delta, reason).
+        """
+        symbol_upper = symbol.upper()
+        recent_symbol_execs = [e for e in self._execution_logs[-50:] if e.get("symbol") == symbol_upper]
+        if not recent_symbol_execs:
+            return 0.0, ""
+            
+        avg_slippage = sum(e["slippage_pct"] for e in recent_symbol_execs) / len(recent_symbol_execs)
+        adverse_count = sum(1 for e in recent_symbol_execs if e.get("is_adverse_slippage"))
+        adverse_rate = (adverse_count / len(recent_symbol_execs)) * 100.0
+
+        if avg_slippage >= 0.15 or adverse_rate >= 70.0:
+            penalty = -0.06
+            reason = f"[EXECUTION QUALITY] High adverse slippage detected on {symbol_upper} ({avg_slippage:.3f}%, {adverse_rate:.0f}% adverse rate). Applied -0.06 penalty."
+            return penalty, reason
+        elif avg_slippage >= 0.10:
+            penalty = -0.03
+            reason = f"[EXECUTION QUALITY] Moderate slippage detected on {symbol_upper} ({avg_slippage:.3f}%). Applied -0.03 penalty."
+            return penalty, reason
+
+        return 0.0, ""

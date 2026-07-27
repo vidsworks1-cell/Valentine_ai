@@ -122,6 +122,43 @@ class OnChainLiquidationPulseEngine:
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
+    async def evaluate_liquidity_sweep_opportunity(self, symbol: str, proposed_side: str, current_price: float) -> Dict[str, Any]:
+        """
+        Evaluates whether a proposed entry aligns with front-running high-density liquidation pools / stop-hunting wicks.
+        """
+        heatmap = await self.get_liquidation_heatmap(symbol)
+        side_upper = proposed_side.upper()
+        
+        magnet_dir = heatmap["magnet_direction"]
+        primary_target = heatmap["primary_liquidity_target"]
+        pull_score = heatmap["magnet_pull_score"]
+        
+        is_sweep_aligned = False
+        sweep_bonus = 0.0
+        reason = ""
+
+        if side_upper == "BUY" and magnet_dir == "DOWNWARD_SWEEP_TARGET":
+            # Long entry anticipating reversal after market makers sweep long liquidations below
+            dist_pct = abs(current_price - primary_target) / current_price * 100.0
+            if dist_pct <= 2.5:
+                is_sweep_aligned = True
+                sweep_bonus = 0.04
+                reason = f"🎯 [LIQUIDITY HEATMAP ALIGNED] BUY setup front-running ${heatmap['total_long_liquidation_usd_m']}M long liquidation sweep target at ${primary_target:.2f} ({dist_pct:.2f}% away)."
+        elif side_upper == "SELL" and magnet_dir == "UPWARD_SWEEP_TARGET":
+            # Short entry anticipating reversal after market makers sweep short liquidations above
+            dist_pct = abs(current_price - primary_target) / current_price * 100.0
+            if dist_pct <= 2.5:
+                is_sweep_aligned = True
+                sweep_bonus = 0.04
+                reason = f"🎯 [LIQUIDITY HEATMAP ALIGNED] SELL setup front-running ${heatmap['total_short_liquidation_usd_m']}M short liquidation sweep target at ${primary_target:.2f} ({dist_pct:.2f}% away)."
+
+        return {
+            "is_sweep_aligned": is_sweep_aligned,
+            "sweep_bonus": sweep_bonus,
+            "reason": reason,
+            "heatmap": heatmap
+        }
+
     async def get_exchange_netflow_pulse(self, asset: str = "BTC") -> Dict[str, Any]:
         """
         Calculates 1h & 24h netflows (BTC, ETH, Stablecoins) across major tier-1 exchanges.

@@ -278,14 +278,33 @@ class AiReasoningEngine:
                         sentiment_aligned = (proposed_side == "BUY" and sentiment_score > 10.0) or (proposed_side == "SELL" and sentiment_score < -10.0)
                         sentiment_bonus = 0.03 if sentiment_aligned else (-0.02 if abs(sentiment_score) > 40.0 else 0.0)
 
-                        # Liquidation Magnet & Netflow Confluence
+                        # Liquidation Magnet, Sweep Front-Running & Netflow Confluence
                         magnet_dir = liq_data.get("magnet_direction", "")
                         liq_aligned = (proposed_side == "BUY" and magnet_dir == "UPWARD_SWEEP_TARGET") or (proposed_side == "SELL" and magnet_dir == "DOWNWARD_SWEEP_TARGET")
                         liq_bonus = 0.03 if liq_aligned else 0.0
 
+                        sweep_eval = await OnChainLiquidationPulseEngine.get_instance().evaluate_liquidity_sweep_opportunity(symbol, proposed_side, price)
+                        sweep_bonus = sweep_eval.get("sweep_bonus", 0.0)
+
                         netflow_bias = netflow_data.get("market_bias", "NEUTRAL")
                         netflow_aligned = (proposed_side == "BUY" and netflow_bias == "BULLISH") or (proposed_side == "SELL" and netflow_bias == "BEARISH")
                         netflow_bonus = 0.02 if netflow_aligned else 0.0
+
+                        # Macro Risk Overlay & Order Flow / Funding Skew
+                        from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
+                        macro_info = await MacroRiskOverlayEngine.get_instance().evaluate_macro_risk(symbol, proposed_side)
+                        macro_metrics = macro_info.get("metrics", {})
+                        depth_imbalance = macro_metrics.get("depth_imbalance_ratio", 1.0)
+                        order_flow_skew = macro_metrics.get("order_flow_skew", "BALANCED_DEPTH")
+                        funding_skew_type = macro_metrics.get("funding_skew_type", "BALANCED_FUNDING")
+
+                        # Order flow depth alignment bonus (+0.03 if bids outweigh asks on BUY or asks outweigh bids on SELL)
+                        order_flow_aligned = (proposed_side == "BUY" and order_flow_skew == "BULLISH_BID_DEPTH_ACCUMULATION") or (proposed_side == "SELL" and order_flow_skew == "BEARISH_ASK_DEPTH_PRESSURE")
+                        order_flow_bonus = 0.03 if order_flow_aligned else 0.0
+
+                        # Funding rate skew bonus (+0.03 if short crowded discount on BUY setup or long crowded premium on SELL setup)
+                        funding_aligned = (proposed_side == "BUY" and funding_skew_type == "SHORT_CROWDED_DISCOUNT") or (proposed_side == "SELL" and funding_skew_type == "LONG_CROWDED_PREMIUM")
+                        funding_bonus = 0.03 if funding_aligned else 0.0
 
                         # Structural anomaly penalty (-0.04 if structural anomaly detected)
                         is_anomaly = self_supervised_data.get("is_structural_anomaly", False)
@@ -296,7 +315,9 @@ class AiReasoningEngine:
                             "mtf_aligned": regime_confluence_bonus > 0,
                             "rvol_surge": volatility_quality_bonus > 0,
                             "squeeze_firing": squeeze_state == "SQUEEZE_FIRING",
-                            "macro_risk_low": True,
+                            "macro_risk_low": macro_info.get("trade_permitted", True),
+                            "order_flow_aligned": order_flow_aligned,
+                            "funding_aligned": funding_aligned,
                             "sentiment_aligned": sentiment_aligned,
                             "liquidity_magnet_aligned": liq_aligned,
                             "is_structural_anomaly": is_anomaly
@@ -310,29 +331,30 @@ class AiReasoningEngine:
                             (volatility_quality_bonus * rvol_weight * 2.0) +
                             sentiment_bonus +
                             liq_bonus +
+                            sweep_bonus +
                             netflow_bonus +
+                            order_flow_bonus +
+                            funding_bonus +
                             anomaly_penalty
                         )
 
                         bayesian_confidence = bayesian_calibration.get("calibrated_confidence", base_confidence)
                         raw_confidence = round(max(0.70, min(0.96, (0.5 * bayesian_confidence) + (0.5 * (base_confidence + pruned_signal_adjustment)) + (random.random() * 0.02))), 2)
 
-                        # Dynamic confidence thresholding configured by Active Trading Persona Preset
+                        # Dynamic confidence thresholding configured by Active Trading Persona Preset & Self-Adaptation Engine
                         from app.trading.trading_persona import TradingPersonaPresetEngine
+                        from app.ai.self_adaptation import SelfAdaptationEngine
+                        
                         active_persona = TradingPersonaPresetEngine.get_instance().get_active_persona()
                         persona_min_conf = active_persona.get("min_bayesian_confidence", 0.78)
+                        adaptation_engine = SelfAdaptationEngine.get_instance()
 
-                        if market_regime == "RANGING":
-                            dynamic_threshold = persona_min_conf + 0.02
-                        elif market_regime == "TRENDING":
-                            dynamic_threshold = persona_min_conf
-                        else:
-                            dynamic_threshold = persona_min_conf + 0.01
-                        
-                        dynamic_threshold = round(dynamic_threshold, 2)
+                        dynamic_threshold = adaptation_engine.get_dynamic_confidence_threshold(
+                            base_persona_min_conf=persona_min_conf,
+                            market_regime=market_regime
+                        )
 
                         # Evaluate performance self-adaptation
-                        from app.ai.self_adaptation import SelfAdaptationEngine
                         candidate_setup = {
                             "symbol": symbol,
                             "side": proposed_side,
@@ -345,8 +367,16 @@ class AiReasoningEngine:
                             "price": price
                         }
                         
-                        is_allowed, adaptive_modifier, adaptation_reasons = await SelfAdaptationEngine.get_instance().evaluate_opportunity_adaptation(candidate_setup)
+                        is_allowed, adaptive_modifier, adaptation_reasons = await adaptation_engine.evaluate_opportunity_adaptation(candidate_setup)
                         
+                        # Integrate Pillar 3 Execution Quality / Slippage Feedback
+                        from app.trading.execution_analytics import ExecutionAnalyticsEngine
+                        slip_penalty, slip_reason = ExecutionAnalyticsEngine.get_instance().get_symbol_slippage_penalty(symbol)
+                        if slip_penalty != 0.0:
+                            adaptive_modifier += slip_penalty
+                            if slip_reason:
+                                adaptation_reasons.append(slip_reason)
+
                         if not is_allowed:
                             reason_str = "; ".join(adaptation_reasons) if adaptation_reasons else "Adaptation block"
                             logger.warning(f"🚫 [SELF-ADAPTATION REJECTED] {symbol} {proposed_side} via {strategy} blocked. Reasons: {reason_str}")
@@ -366,6 +396,7 @@ class AiReasoningEngine:
                             "take_profit": take_profit,
                             "strategy_used": strategy,
                             "market_regime": market_regime,
+                            "squeeze_info": squeeze_info,
                             "confidence_score": adapted_confidence,
                             "raw_confidence_score": raw_confidence,
                             "adaptive_modifier": adaptive_modifier,

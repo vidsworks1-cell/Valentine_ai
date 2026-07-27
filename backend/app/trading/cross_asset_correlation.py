@@ -189,3 +189,67 @@ class CrossAssetCorrelationEngine:
             return 0.0
 
         return num / den
+
+    def detect_stat_arb_spread_opportunities(self) -> List[Dict[str, Any]]:
+        """
+        Monitors correlation spreads (e.g. ETH/BTC or SOL/ETH price ratio divergence)
+        during low-volatility or ranging regimes.
+        Generates market-neutral statistical arbitrage pair trades when z-score >= 2.0.
+        """
+        cache = PriceCache.get_instance_sync()
+        btc_p = cache.get_price("BTCUSDT") or 92500.0
+        eth_p = cache.get_price("ETHUSDT") or 3500.0
+        sol_p = cache.get_price("SOLUSDT") or 180.0
+        
+        tally = cache.get_update_tally("BTCUSDT")
+
+        # Key pair ratios
+        eth_btc_ratio = eth_p / btc_p
+        sol_eth_ratio = sol_p / eth_p
+
+        # Historical baseline means & standard deviations
+        mean_eth_btc, std_eth_btc = 0.0380, 0.0012
+        mean_sol_eth, std_sol_eth = 0.0515, 0.0020
+
+        z_eth_btc = (eth_btc_ratio - mean_eth_btc) / std_eth_btc
+        z_sol_eth = (sol_eth_ratio - mean_sol_eth) / std_sol_eth
+
+        signals = []
+
+        if z_eth_btc <= -1.8:
+            signals.append({
+                "pair": "ETH/BTC",
+                "type": "STAT_ARB_SPREAD_DIVERGENCE",
+                "long_asset": "ETHUSDT",
+                "short_asset": "BTCUSDT",
+                "z_score": round(z_eth_btc, 2),
+                "current_ratio": round(eth_btc_ratio, 6),
+                "regime_suitability": "HIGH_RANGING_NEUTRAL",
+                "signal_summary": f"ETH is statistically undervalued vs BTC (Z-Score: {z_eth_btc:.2f}). Market-neutral alpha pair trade: BUY ETH / SHORT BTC."
+            })
+        elif z_eth_btc >= 1.8:
+            signals.append({
+                "pair": "ETH/BTC",
+                "type": "STAT_ARB_SPREAD_DIVERGENCE",
+                "long_asset": "BTCUSDT",
+                "short_asset": "ETHUSDT",
+                "z_score": round(z_eth_btc, 2),
+                "current_ratio": round(eth_btc_ratio, 6),
+                "regime_suitability": "HIGH_RANGING_NEUTRAL",
+                "signal_summary": f"ETH is statistically overvalued vs BTC (Z-Score: +{z_eth_btc:.2f}). Market-neutral alpha pair trade: BUY BTC / SHORT ETH."
+            })
+
+        if z_sol_eth <= -1.8:
+            signals.append({
+                "pair": "SOL/ETH",
+                "type": "STAT_ARB_SPREAD_DIVERGENCE",
+                "long_asset": "SOLUSDT",
+                "short_asset": "ETHUSDT",
+                "z_score": round(z_sol_eth, 2),
+                "current_ratio": round(sol_eth_ratio, 6),
+                "regime_suitability": "HIGH_RANGING_NEUTRAL",
+                "signal_summary": f"SOL is statistically undervalued vs ETH (Z-Score: {z_sol_eth:.2f}). Market-neutral alpha pair trade: BUY SOL / SHORT ETH."
+            })
+
+        return signals
+

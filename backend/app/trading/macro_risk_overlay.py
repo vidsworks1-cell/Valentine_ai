@@ -61,10 +61,29 @@ class MacroRiskOverlayEngine:
         event_proximity_minutes = (price_int + tally * 7) % 180
         macro_event_active = event_proximity_minutes < 15 or self._manual_event_lockdown
 
-        # 2. Institutional Perpetual Funding Rate Skew
+        # 2. Institutional Perpetual Funding Rate Skew & Order Flow Depth Imbalance
         # Positive funding = Long heavy; Negative funding = Short heavy
         funding_rate_8h = round(0.008 + ((price_int + tally) % 12) * 0.003, 4)  # e.g., 0.015% to 0.041%
         funding_annualized_pct = round(funding_rate_8h * 3 * 365, 1)
+
+        vol_data = cache.get_volume_and_depth(sym) or {}
+        bid_depth = vol_data.get("bid_depth_05pct", 250000.0)
+        ask_depth = vol_data.get("ask_depth_05pct", 240000.0)
+        depth_imbalance_ratio = round(bid_depth / max(1.0, ask_depth), 2)
+        
+        if depth_imbalance_ratio >= 1.30:
+            order_flow_skew = "BULLISH_BID_DEPTH_ACCUMULATION"
+        elif depth_imbalance_ratio <= 0.75:
+            order_flow_skew = "BEARISH_ASK_DEPTH_PRESSURE"
+        else:
+            order_flow_skew = "BALANCED_DEPTH"
+
+        if funding_rate_8h >= 0.030:
+            funding_skew_type = "LONG_CROWDED_PREMIUM"
+        elif funding_rate_8h <= -0.015:
+            funding_skew_type = "SHORT_CROWDED_DISCOUNT"
+        else:
+            funding_skew_type = "BALANCED_FUNDING"
 
         # 3. Open Interest & Liquidation Cascade Index (0 to 100)
         oi_cascade_risk = round(25.0 + ((price_int + tally * 3) % 55), 1)
@@ -148,6 +167,11 @@ class MacroRiskOverlayEngine:
                 "dxy_index": dxy_index,
                 "funding_rate_8h_pct": funding_rate_8h,
                 "funding_annualized_pct": funding_annualized_pct,
+                "funding_skew_type": funding_skew_type,
+                "depth_imbalance_ratio": depth_imbalance_ratio,
+                "order_flow_skew": order_flow_skew,
+                "bid_depth_05pct": bid_depth,
+                "ask_depth_05pct": ask_depth,
                 "oi_cascade_risk_score": oi_cascade_risk,
                 "event_proximity_minutes": event_proximity_minutes,
                 "macro_event_active": macro_event_active,
