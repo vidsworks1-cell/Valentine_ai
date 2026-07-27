@@ -71,6 +71,14 @@ class PositionManager:
         if "stale_price_range_pct" not in position_details:
             position_details["stale_price_range_pct"] = self.default_stale_pct
 
+        # Lumina Stability Additions: Thesis Strength, Grace Period & Trend Persistence Engine
+        position_details["thesis_strength"] = float(position_details.get("confidence", position_details.get("entry_confidence", 0.83)))
+        position_details["entry_strategy"] = position_details.get("strategy", "Volatility Expansion Breakout")
+        position_details["grace_period_sec"] = float(position_details.get("grace_period_sec", 90.0))  # 90s Grace Period
+        position_details["invalidation_consecutive_cycles"] = 0
+        position_details["invalidation_first_detected_at"] = 0.0
+        position_details["trend_history"] = []
+
         self._positions[trade_id] = position_details
         logger.info(f"PositionManager started tracking trade {trade_id} ({position_details['symbol']}) with TP stages: {position_details['tp_stages']} | Stale limit: {round(position_details['stale_threshold_sec']/3600, 1)}h")
 
@@ -238,13 +246,68 @@ class PositionManager:
                             await self._close_position(trade_id, current_price, "STOP_LOSS")
                             continue
 
-                    # 4. Intelligent Early Exit Engine (Thesis Invalidation Check)
+                    # 4. Intelligent Early Exit Engine (Thesis Invalidation Check with Grace Period & Entry/Exit Symmetry)
                     from app.trading.mtf_confirmation import MTFConfirmationGuard
-                    invalidated, inv_reason = await MTFConfirmationGuard.get_instance().check_thesis_invalidation(symbol, side, current_price)
-                    if invalidated:
-                        logger.warning(f"⚠️ [INTELLIGENT EARLY EXIT] Trade {trade_id} {symbol} ({side}): Thesis invalidated. Reason: {inv_reason}")
-                        await self._close_position(trade_id, current_price, "THESIS_INVALIDATION")
-                        continue
+                    holding_time_sec = time.time() - pos.get("opened_at", time.time())
+                    grace_period_sec = pos.get("grace_period_sec", 90.0)
+
+                    invalidity_strength, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_weighted_mtf_invalidation(symbol, side, current_price)
+
+                    # Trend Persistence Engine: maintain trend history
+                    trend_history = pos.setdefault("trend_history", [])
+                    trend_history.append(invalidity_strength)
+                    if len(trend_history) > 10:
+                        trend_history.pop(0)
+
+                    thesis_strength = pos.get("thesis_strength", 0.83)
+
+                    # Entry / Exit Symmetry: Require current invalidity strength to meet or exceed entry thesis strength
+                    strength_succeeded = invalidity_strength >= thesis_strength
+
+                    if strength_succeeded:
+                        if pos.get("invalidation_first_detected_at", 0.0) == 0.0:
+                            pos["invalidation_first_detected_at"] = time.time()
+                        pos["invalidation_consecutive_cycles"] = pos.get("invalidation_consecutive_cycles", 0) + 1
+                    else:
+                        # Reset persistence counter if market conditions recover
+                        pos["invalidation_consecutive_cycles"] = 0
+                        pos["invalidation_first_detected_at"] = 0.0
+
+                    first_detected = pos.get("invalidation_first_detected_at", 0.0)
+                    persistence_time_sec = time.time() - first_detected if first_detected > 0.0 else 0.0
+                    consecutive_cycles = pos.get("invalidation_consecutive_cycles", 0)
+
+                    # Check invalidation trigger conditions:
+                    # 1. Reversal must persist for >= 3 consecutive cycles OR >= 60 seconds
+                    # 2. Invalidity strength must satisfy entry/exit symmetry (invalidity_strength >= thesis_strength)
+                    persist_confirmed = (consecutive_cycles >= 3 or persistence_time_sec >= 60.0)
+
+                    if strength_succeeded and persist_confirmed:
+                        if holding_time_sec < grace_period_sec:
+                            logger.info(
+                                f"🛡️ [GRACE PERIOD PROTECTED] Trade {trade_id} {symbol} ({side}): "
+                                f"Thesis invalidation signal suppressed during Grace Period ({holding_time_sec:.1f}s / {grace_period_sec:.0f}s). "
+                                f"Invalidity Strength: {invalidity_strength:.2f} >= Thesis Strength: {thesis_strength:.2f}."
+                            )
+                        else:
+                            # Enhanced Diagnostics Logging
+                            logger.warning(
+                                f"🚪 [INTELLIGENT EARLY EXIT - THESIS INVALIDATED]\n"
+                                f"  - Trade ID: {trade_id} ({symbol} {side})\n"
+                                f"  - Entry Confidence (Thesis Strength): {thesis_strength:.2f}\n"
+                                f"  - Entry Strategy: {pos.get('entry_strategy', 'Volatility Expansion Breakout')}\n"
+                                f"  - Current Confidence: {pos.get('confidence', thesis_strength):.2f}\n"
+                                f"  - Current Strategy / Opposing Bias: {mtf_details.get('opposing_side', 'N/A')}\n"
+                                f"  - Trend Score (Invalidity Strength): {invalidity_strength:.2f} / {thesis_strength:.2f}\n"
+                                f"  - MTF Breakdown: {mtf_details.get('formatted_breakdown', 'N/A')}\n"
+                                f"  - Reason Score: {invalidity_strength * 100:.1f}%\n"
+                                f"  - Persistence Time: {persistence_time_sec:.1f}s ({consecutive_cycles} cycles)\n"
+                                f"  - Holding Duration: {holding_time_sec:.1f}s (Grace Period Passed: {grace_period_sec:.0f}s)\n"
+                                f"  - Exit Confidence: {invalidity_strength:.2f}\n"
+                                f"  - Final Decision: CLOSED via THESIS_INVALIDATION"
+                            )
+                            await self._close_position(trade_id, current_price, "THESIS_INVALIDATION")
+                            continue
 
                     # 5. Time-Based Stale Trade Exit Engine (Capital Recycling)
                     opened_at = pos.get("opened_at", time.time())

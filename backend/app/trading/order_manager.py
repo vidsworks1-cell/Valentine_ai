@@ -420,7 +420,9 @@ class OrderManager:
                     "lowest_price": trade.entry_price,
                     "market_regime": trade.market_regime,
                     "atr": trade.atr,
-                    "binance_order_id": binance_order_id
+                    "binance_order_id": binance_order_id,
+                    "confidence": opportunity.get("confidence_score", 0.83),
+                    "strategy": opportunity.get("strategy_used", "Volatility Expansion Breakout")
                 })
 
             except Exception as e:

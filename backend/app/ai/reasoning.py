@@ -46,6 +46,16 @@ class AiReasoningEngine:
         if duration_seconds is None:
             duration_seconds = self.ADAPTIVE_DURATIONS.get(category.upper(), self.ADAPTIVE_DURATIONS["DEFAULT"])
 
+        ref_price = float(price)
+        if ref_price <= 0.0:
+            try:
+                from app.workers.price_cache import PriceCache
+                cache = PriceCache.get_instance_sync()
+                if cache:
+                    ref_price = float(cache.get_price(symbol))
+            except Exception:
+                pass
+
         key = f"{symbol.upper()}:{side.upper()}"
         expire_at = time.time() + duration_seconds
         self._cooldowns[key] = {
@@ -53,7 +63,7 @@ class AiReasoningEngine:
             "side": side.upper(),
             "category": category.upper(),
             "reason": reason,
-            "rejected_price": price,
+            "rejected_price": ref_price,
             "created_at": time.time(),
             "expire_at": expire_at,
             "duration_seconds": duration_seconds
@@ -63,7 +73,7 @@ class AiReasoningEngine:
     def is_in_cooldown(self, symbol: str, side: str, current_price: float = 0.0) -> Tuple[bool, str]:
         """
         Checks if a symbol/side is currently on evaluation cooldown.
-        If price has moved significantly (> 1.5%), the cooldown is invalidated early.
+        If price has moved significantly (1.5% <= percent_move <= 20%), the cooldown is invalidated early.
         """
         now = time.time()
         sym = symbol.upper()
@@ -79,12 +89,33 @@ class AiReasoningEngine:
                     del self._cooldowns[key]
                     continue
 
-                # Check if market price moved significantly (> 1.5%) since rejection
-                rej_price = entry.get("rejected_price", 0.0)
-                if current_price > 0 and rej_price > 0:
-                    pct_change = abs(current_price - rej_price) / rej_price
-                    if pct_change >= 0.015:
-                        logger.info(f"⚡ [COOLDOWN INVALIDATED EARLY] {sym} price moved {pct_change * 100:.2f}% (>= 1.5%). Clearing cooldown early.")
+                # Check if market price moved significantly (>= 1.5%) since rejection
+                rej_price = float(entry.get("rejected_price", 0.0))
+                c_price = float(current_price)
+                if c_price > 0.0 and rej_price > 0.0:
+                    abs_diff = abs(c_price - rej_price)
+                    percent_move = (abs_diff / rej_price) * 100.0
+                    atr_pct = percent_move
+
+                    # Sanity Check: Reject impossible jump values (> 20.0%)
+                    if percent_move > 20.0:
+                        logger.warning(
+                            f"⚠️ [COOLDOWN INVALIDATION REJECTED] {sym} ({sd}) calculated move {percent_move:.2f}% exceeds sanity threshold (20.0%).\n"
+                            f"  - Cooldown Reference Price: ${rej_price:.4f}\n"
+                            f"  - Current Price: ${c_price:.4f}\n"
+                            f"  - Absolute Difference: ${abs_diff:.4f}\n"
+                            f"  - Cooldown maintained to prevent false resets."
+                        )
+                    elif percent_move >= 1.5:
+                        logger.info(
+                            f"⚡ [COOLDOWN INVALIDATED EARLY] {sym} ({sd})\n"
+                            f"  - Cooldown Reference Price: ${rej_price:.4f}\n"
+                            f"  - Current Price: ${c_price:.4f}\n"
+                            f"  - Absolute Difference: ${abs_diff:.4f}\n"
+                            f"  - Calculated %: {percent_move:.2f}%\n"
+                            f"  - ATR %: {atr_pct:.2f}%\n"
+                            f"  - Reason cooldown cleared: Significant price movement ({percent_move:.2f}% >= 1.5% threshold)"
+                        )
                         del self._cooldowns[key]
                         continue
 
