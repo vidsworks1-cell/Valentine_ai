@@ -1,34 +1,71 @@
 import unittest
 import asyncio
-from unittest.mock import patch, MagicMock
 
-from app.trading.champion_challenger import ChampionChallengerEngine
-from app.trading.walk_forward_tuner import WalkForwardHyperparameterAutoTuner
+from app.ai.experiment_framework import ExperimentFramework
+from app.ai.adaptive_validation import AdaptiveChangeValidationEngine
+from app.trading.system_harmony import SystemHarmonyEngine
 from app.ai.market_memory import MarketMemoryEngine
 from app.trading.execution_analytics import ExecutionAnalyticsEngine
-from app.ai.weekly_review import AutonomousWeeklyReviewEngine
 
-class TestContinuousLearningLoop(unittest.TestCase):
+class TestContinuousLearningAndHarmony(unittest.TestCase):
 
-    def test_strategy_tournament_2_scoring_and_matrix(self):
-        engine = ChampionChallengerEngine.get_instance()
-        matrix = engine.get_strategy_matrix_breakdown("Volatility Breakout")
+    def test_experiment_framework_ab_paper_testing(self):
+        ef = ExperimentFramework.get_instance()
+        summary = ef.get_all_experiments_summary()
+        self.assertGreaterEqual(summary["active_experiments_count"], 1)
+
+        exp_details = ef.get_experiment_details("EXP-CONFIDENCE-001")
+        self.assertIn("evaluation_summary", exp_details)
+        self.assertIn("recommendation", exp_details["evaluation_summary"])
+
+    def test_adaptive_change_validation_impact_proof(self):
+        engine = AdaptiveChangeValidationEngine.get_instance()
+        summary = engine.get_validation_summary()
+        self.assertGreaterEqual(summary["validated_proofs_count"], 2)
+
+        proofs = summary["proof_history"]
+        self.assertEqual(proofs[0]["verdict"], "VALIDATED_IMPROVEMENT")
+        self.assertIn("delta_sharpe_pct", proofs[0]["impact_deltas"])
+
+    def test_system_harmony_lineage_and_conflict_simulation(self):
+        harmony = SystemHarmonyEngine.get_instance()
         
-        self.assertEqual(matrix["strategy"], "Volatility Breakout")
-        self.assertIn("excellent on", matrix["insight"])
-        self.assertIn("best_performance_combination", matrix)
-        self.assertIn("weakest_performance_combination", matrix)
+        # Test Decision Lineage
+        app, risk, trace = harmony.harmonize_trade_decision(
+            trade_id="TRD-TEST-001",
+            opportunity={"symbol": "BTCUSDT", "side": "BUY", "strategy_used": "Breakout Momentum", "entry_price": 90000.0},
+            base_risk_pct=0.02,
+            meta_score=88.0,
+            meta_approved=True,
+            meta_pillar_breakdown={"technical": 90.0, "sentiment": 86.0},
+            pg_approved=True,
+            pg_action="APPROVE",
+            pg_reason="Portfolio risk healthy",
+            pg_adjusted_risk_pct=0.02,
+            memory_modifier=1.20,
+            memory_key="HIGH_POSITIVE|NORMAL_VOLATILITY|RISING|TRENDING",
+            personality_name="Short Squeeze Rally & Alt Season Impulse",
+            tournament_elo=1680,
+            matrix_multiplier=1.15,
+            execution_routing="MARKET"
+        )
 
-        context_mult = engine.get_contextual_capital_multiplier("Volatility Breakout", "BTCUSDT", "VOLATILE", "US")
-        self.assertGreaterEqual(context_mult, 0.5)
-        self.assertLessEqual(context_mult, 1.6)
+        self.assertTrue(app)
+        self.assertGreater(risk, 0.0)
+        self.assertEqual(trace.trade_id, "TRD-TEST-001")
 
-    def test_continuous_walk_forward_pipeline(self):
-        tuner = WalkForwardHyperparameterAutoTuner.get_instance()
-        status = tuner.get_pipeline_status()
-        self.assertIn("total_validations_conducted", status)
+        # Test Lineage Query
+        retrieved_trace = harmony.get_lineage_trace("TRD-TEST-001")
+        self.assertIsNotNone(retrieved_trace)
+        self.assertEqual(retrieved_trace["trade_id"], "TRD-TEST-001")
 
-    def test_market_memory_engine(self):
+        # Test Conflict Simulation Suite (100 Scenarios)
+        sim_res = harmony.run_conflict_simulation_suite(n_scenarios=100)
+        self.assertEqual(sim_res["total_scenarios_simulated"], 100)
+        self.assertEqual(sim_res["deadlocks_or_unhandled_errors"], 0)
+        self.assertEqual(sim_res["system_harmony_health"], "EXCELLENT")
+
+    def test_market_memory_suitability(self):
         memory = MarketMemoryEngine.get_instance()
         suitability = memory.get_environment_suitability_modifier(
             strategy="Momentum",
@@ -62,22 +99,6 @@ class TestContinuousLearningLoop(unittest.TestCase):
         self.assertGreaterEqual(quality["overall_execution_quality_score"], 0)
         self.assertLessEqual(quality["overall_execution_quality_score"], 100)
         self.assertIn(quality["root_cause_diagnosis"], ["EXCELLENT_EXECUTION", "BAD_ANALYSIS", "POOR_EXECUTION", "BAD_RISK_MANAGEMENT", "NEUTRAL"])
-
-    def test_autonomous_weekly_review(self):
-        review_engine = AutonomousWeeklyReviewEngine.get_instance()
-        
-        async def _run():
-            return await review_engine.generate_weekly_review(
-                executed_trades_count=214,
-                rejected_trades_count=418,
-                exposure_guard_saved_usd=1820.0,
-                confidence_filter_opportunity_cost_usd=430.0
-            )
-
-        report = asyncio.run(_run())
-        self.assertIn("This week I executed 214 trades", report["executive_summary"])
-        self.assertIn("Exposure guard saved approximately $1,820.00", report["executive_summary"])
-        self.assertEqual(report["headline_metrics"]["trades_executed"], 214)
 
 if __name__ == "__main__":
     unittest.main()

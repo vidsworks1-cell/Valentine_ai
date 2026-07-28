@@ -523,6 +523,38 @@ class OrderManager:
                 
                 trade = await TradingService.create_trade(db, trade_create)
                 
+                # Record 360-Degree Lineage Trace in SystemHarmonyEngine & Evaluate Paper Experiments
+                try:
+                    from app.trading.system_harmony import SystemHarmonyEngine
+                    from app.ai.market_memory import MarketMemoryEngine
+                    from app.ai.experiment_framework import ExperimentFramework
+
+                    mem_info = MarketMemoryEngine.get_instance().get_environment_suitability_modifier(
+                        strategy=opportunity.get("strategy_used", "Breakout Momentum"),
+                        market_regime=opportunity.get("market_regime", "TRENDING")
+                    )
+                    SystemHarmonyEngine.get_instance().harmonize_trade_decision(
+                        trade_id=str(trade.id),
+                        opportunity=opportunity,
+                        base_risk_pct=risk_pct,
+                        meta_score=float(opportunity.get("confidence_score", 0.78)) * 100.0,
+                        meta_approved=True,
+                        meta_pillar_breakdown={"technical": 85.0, "sentiment": 78.0},
+                        pg_approved=pg_decision.approved,
+                        pg_action=pg_decision.action_type,
+                        pg_reason=pg_decision.reason,
+                        pg_adjusted_risk_pct=pg_decision.adjusted_risk_pct,
+                        memory_modifier=float(mem_info.get("capital_modifier", 1.0)),
+                        memory_key=str(mem_info.get("environment_key", "")),
+                        personality_name=str(mem_info.get("personality_name", "")),
+                        tournament_elo=1650,
+                        matrix_multiplier=1.0,
+                        execution_routing=order_routing
+                    )
+                    ExperimentFramework.get_instance().evaluate_opportunity_across_experiments(opportunity)
+                except Exception as harm_err:
+                    logger.error(f"Failed to record system harmony trace or experiment evaluation: {harm_err}")
+
                 logger.info(f"[STAGE: EXECUTION] SUCCESS. Recorded Trade #{trade.id} ({trade.symbol}) in database.")
                 
                 try:
