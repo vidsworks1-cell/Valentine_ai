@@ -95,6 +95,29 @@ class MissedOpportunityLearner:
         )
         return record
 
+    def get_counterfactual_threshold_offset(self) -> float:
+        """
+        Calculates counterfactual threshold offset based on recent rejected trade outcomes.
+        If blocked trades frequently reach Take Profit (> 50% hit TP), returns a negative offset
+        (e.g., -0.04 to -0.08) to unblock high-conviction signals and prevent data starvation.
+        """
+        evaluated_records = [r for r in self._records if r["status"] in ["SAVED_BY_GUARD", "COST_PROFIT"]]
+        
+        cost_profit_count = sum(1 for r in evaluated_records if r["status"] == "COST_PROFIT")
+        saved_count = sum(1 for r in evaluated_records if r["status"] == "SAVED_BY_GUARD")
+        total_eval = cost_profit_count + saved_count
+
+        if total_eval >= 2 and cost_profit_count > saved_count:
+            ratio = cost_profit_count / total_eval
+            offset = -0.04 - (0.04 * ratio)
+            return round(offset, 2)
+        
+        pending_rejections = [r for r in self._records if r["category"] == "CONFIDENCE_FILTER"]
+        if len(pending_rejections) >= 3:
+            return -0.03
+
+        return 0.0
+
     async def evaluate_pending_opportunities(self):
         """
         Counterfactually evaluates pending missed opportunities against live market prices.

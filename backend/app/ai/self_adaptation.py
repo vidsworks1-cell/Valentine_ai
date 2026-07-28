@@ -101,6 +101,10 @@ class SelfAdaptationEngine:
                     self._last_evaluated_at = datetime.now(timezone.utc)
                     return
 
+                # Skip redundant calculation if trade set hasn't changed and recently evaluated
+                if self._last_evaluated_at and len(trades) == self._total_closed_trades and (datetime.now(timezone.utc) - self._last_evaluated_at).total_seconds() < 180:
+                    return
+
                 # Calculate overall system performance metrics across trade history
                 total_trades_count = len(trades)
                 recent_sample = trades[:20]
@@ -147,15 +151,17 @@ class SelfAdaptationEngine:
                         threshold_calibration = -0.08  # Lower threshold aggressively during high-performance phase
                         insights.append(f"🎯 Dynamic Calibration: High system win rate ({overall_win_rate:.0f}%, streak: {recent_streak:+d}). Calibrating threshold lower (-0.08) to capture clean trade setups.")
                     elif overall_win_rate >= 50.0:
-                        threshold_calibration = -0.05  # Moderate threshold reduction during healthy performance
-                        insights.append(f"🎯 Dynamic Calibration: Healthy system performance ({overall_win_rate:.0f}% win rate). Calibrating threshold offset (-0.05).")
+                        threshold_calibration = -0.06  # Moderate threshold reduction during healthy performance
+                        insights.append(f"🎯 Dynamic Calibration: Healthy system performance ({overall_win_rate:.0f}% win rate). Calibrating threshold offset (-0.06).")
                     elif overall_win_rate >= 40.0:
-                        threshold_calibration = -0.02
+                        threshold_calibration = -0.05
                     else:
-                        threshold_calibration = 0.02  # Slight adjustment during drawdown without locking the system
-                        insights.append(f"🛡️ Dynamic Calibration: System underperformance detected ({overall_win_rate:.0f}% win rate). Adjusting threshold (+0.02) to maintain trade throughput.")
+                        # In drawdown / low win rate, DO NOT freeze system with high threshold!
+                        # Calibrate lower (-0.08) to allow high-conviction trades to break data starvation deadlock.
+                        threshold_calibration = -0.08
+                        insights.append(f"🔄 Dynamic Calibration: Low historical win rate ({overall_win_rate:.0f}%). Applying Unblock Offset (-0.08) to break data-starvation deadlock & gather fresh trade evidence.")
                 else:
-                    threshold_calibration = -0.05  # Responsive calibration for small trade samples
+                    threshold_calibration = -0.06  # Responsive calibration for small trade samples
 
                 self._overall_win_rate = round(overall_win_rate, 1)
                 self._recent_streak = recent_streak
@@ -298,8 +304,8 @@ class SelfAdaptationEngine:
             - adaptive_modifier (float): Additive modifier to confidence score (e.g. +0.05 or -0.15)
             - adaptation_reasons (List[str]): Explanations of adaptations applied
         """
-        # Ensure performance stats are populated
-        if not self._last_evaluated_at or (datetime.now(timezone.utc) - self._last_evaluated_at).total_seconds() > 60:
+        # Ensure performance stats are populated (debounced to 300s)
+        if not self._last_evaluated_at or (datetime.now(timezone.utc) - self._last_evaluated_at).total_seconds() > 300:
             await self.analyze_performance()
 
         strategy = setup.get("strategy_used", "Unknown")
@@ -409,21 +415,30 @@ class SelfAdaptationEngine:
         """
         Computes the dynamically calibrated confidence threshold based on:
         1. Persona baseline minimum confidence
-        2. Market regime offset (+0.02 for RANGING, 0.00 for TRENDING)
+        2. Market regime offset (+0.01 for RANGING, 0.00 for TRENDING)
         3. Self-adaptation dynamic performance calibration delta
+        4. Counterfactual Missed Opportunity Feedback offset (unblocks data starvation)
         """
-        regime_offset = 0.02 if market_regime.upper() == "RANGING" else (0.0 if market_regime.upper() == "TRENDING" else 0.01)
-        raw_threshold = base_persona_min_conf + regime_offset + self._dynamic_threshold_calibration
+        regime_offset = 0.01 if market_regime.upper() == "RANGING" else 0.0
+
+        counterfactual_offset = 0.0
+        try:
+            from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+            counterfactual_offset = MissedOpportunityLearner.get_instance().get_counterfactual_threshold_offset()
+        except Exception:
+            pass
+
+        raw_threshold = base_persona_min_conf + regime_offset + self._dynamic_threshold_calibration + counterfactual_offset
         
-        # Floor at 0.65 (so system never trades reckless noise) and Cap at 0.80 (so system never freezes)
-        calibrated_threshold = round(max(0.65, min(0.80, raw_threshold)), 2)
+        # Floor at 0.62 (so system never trades reckless noise) and Cap at 0.74 (so system NEVER freezes or deadlocks)
+        calibrated_threshold = round(max(0.62, min(0.74, raw_threshold)), 2)
 
         logger.info(
             f"🎯 [DYNAMIC THRESHOLD CALIBRATION] Persona Baseline: {base_persona_min_conf:.2f} | "
             f"Win Rate: {self._overall_win_rate:.1f}% | "
             f"Calibration Offset: {self._dynamic_threshold_calibration:+.2f} | "
-            f"Regime Offset ({market_regime}): {regime_offset:+.2f} | "
-            f"Raw: {raw_threshold:.2f} -> Final Threshold: {calibrated_threshold:.2f}"
+            f"Counterfactual Offset: {counterfactual_offset:+.2f} | "
+            f"Regime Offset ({market_regime}): {regime_offset:+.2f} -> Final Threshold: {calibrated_threshold:.2f}"
         )
         return calibrated_threshold
 
