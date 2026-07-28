@@ -144,24 +144,52 @@ class SelfAdaptationEngine:
                 # 1. Compute Strategy Stats & Modifiers
                 new_strat_stats = {}
                 insights = []
+                structured_recs = []
 
                 # Global Dynamic Threshold Calibration Delta
+                target_threshold_calibration = 0.0
                 if total_trades_count >= 5:
                     if overall_win_rate >= 65.0 or recent_streak >= 3:
-                        threshold_calibration = -0.08  # Lower threshold aggressively during high-performance phase
-                        insights.append(f"🎯 Dynamic Calibration: High system win rate ({overall_win_rate:.0f}%, streak: {recent_streak:+d}). Calibrating threshold lower (-0.08) to capture clean trade setups.")
+                        target_threshold_calibration = -0.08
                     elif overall_win_rate >= 50.0:
-                        threshold_calibration = -0.06  # Moderate threshold reduction during healthy performance
-                        insights.append(f"🎯 Dynamic Calibration: Healthy system performance ({overall_win_rate:.0f}% win rate). Calibrating threshold offset (-0.06).")
+                        target_threshold_calibration = -0.06
                     elif overall_win_rate >= 40.0:
-                        threshold_calibration = -0.05
+                        target_threshold_calibration = -0.05
                     else:
-                        # In drawdown / low win rate, DO NOT freeze system with high threshold!
-                        # Calibrate lower (-0.08) to allow high-conviction trades to break data starvation deadlock.
-                        threshold_calibration = -0.08
-                        insights.append(f"🔄 Dynamic Calibration: Low historical win rate ({overall_win_rate:.0f}%). Applying Unblock Offset (-0.08) to break data-starvation deadlock & gather fresh trade evidence.")
+                        target_threshold_calibration = -0.08
+
+                # Calculate Learning Confidence Score for Global Threshold Calibration
+                thresh_conf = self.compute_learning_confidence(
+                    num_observations=total_trades_count,
+                    win_rate=overall_win_rate,
+                    module_consensus_count=2
+                )
+
+                if thresh_conf["auto_apply"]:
+                    threshold_calibration = target_threshold_calibration
+                    insights.append(
+                        f"🎯 Dynamic Calibration [CONFIDENCE: {thresh_conf['confidence_pct']}% - AUTO-APPLIED]: "
+                        f"Overall win rate {overall_win_rate:.0f}% across {total_trades_count} trades. "
+                        f"Applying threshold offset ({threshold_calibration:+.2f})."
+                    )
                 else:
-                    threshold_calibration = -0.06  # Responsive calibration for small trade samples
+                    # In observation mode, apply half-strength conservative adjustment and log recommendation
+                    threshold_calibration = round(target_threshold_calibration * 0.5, 2)
+                    insights.append(
+                        f"👁️ Dynamic Calibration [CONFIDENCE: {thresh_conf['confidence_pct']}% - OBSERVATION MODE]: "
+                        f"Recommendation ({target_threshold_calibration:+.2f}) logged for observation. Applying conservative offset ({threshold_calibration:+.2f})."
+                    )
+
+                structured_recs.append({
+                    "id": "REC_GLOBAL_THRESHOLD",
+                    "type": "GLOBAL_THRESHOLD_CALIBRATION",
+                    "target": "Global Confidence Threshold",
+                    "proposed_action": f"Adjust confidence threshold offset by {target_threshold_calibration:+.2f}",
+                    "confidence_score_pct": thresh_conf["confidence_pct"],
+                    "status": thresh_conf["status"],
+                    "learning_factors": thresh_conf["factors"],
+                    "reasoning": f"Based on {total_trades_count} observations with system win rate at {overall_win_rate:.1f}%."
+                })
 
                 self._overall_win_rate = round(overall_win_rate, 1)
                 self._recent_streak = recent_streak
@@ -183,31 +211,55 @@ class SelfAdaptationEngine:
                         else:
                             break
 
-                    confidence_modifier = 0.0
-                    status = "ACTIVE"
+                    target_modifier = 0.0
+                    proposed_status = "ACTIVE"
 
-                    # Rules:
-                    # If strategy lost 8 of last 10 trades or 5+ consecutive losses -> reduce weighting heavily / disable
                     if losses >= 8 or consecutive_losses >= 5 or (total_recent >= 5 and win_rate < 30.0):
-                        confidence_modifier = -0.15
-                        status = "DISABLED" if losses >= 9 else "PENALIZED"
-                        insights.append(
-                            f"⚠️ Strategy '{strat}' has lost {losses}/{total_recent} recent trades ({win_rate:.0f}% win rate). "
-                            f"Applying confidence penalty (-0.15) and status: {status}."
-                        )
+                        target_modifier = -0.15
+                        proposed_status = "DISABLED" if losses >= 9 else "PENALIZED"
                     elif win_rate >= 65.0 and total_recent >= 5:
-                        confidence_modifier = 0.08
-                        status = "BOOSTED"
-                        insights.append(
-                            f"🚀 Strategy '{strat}' is performing exceptionally with {win_rate:.0f}% win rate over {total_recent} trades. "
-                            f"Applying confidence boost (+0.08)."
-                        )
+                        target_modifier = 0.08
+                        proposed_status = "BOOSTED"
                     elif win_rate < 40.0 and total_recent >= 5:
-                        confidence_modifier = -0.05
-                        status = "PENALIZED"
-                        insights.append(
-                            f"📉 Strategy '{strat}' win rate dropped to {win_rate:.0f}%. Applying mild confidence penalty (-0.05)."
-                        )
+                        target_modifier = -0.05
+                        proposed_status = "PENALIZED"
+
+                    # Calculate Learning Confidence for Strategy Recommendation
+                    strat_conf = self.compute_learning_confidence(
+                        num_observations=total_recent,
+                        win_rate=win_rate,
+                        module_consensus_count=2
+                    )
+
+                    if target_modifier != 0.0:
+                        if strat_conf["auto_apply"]:
+                            confidence_modifier = target_modifier
+                            status = proposed_status
+                            insights.append(
+                                f"🎯 Strategy '{strat}' [CONFIDENCE: {strat_conf['confidence_pct']}% - AUTO-APPLIED]: "
+                                f"Win rate {win_rate:.0f}% over {total_recent} trades. Action: {status} ({confidence_modifier:+.2f})."
+                            )
+                        else:
+                            confidence_modifier = round(target_modifier * 0.5, 2)
+                            status = "OBSERVATION_MODE"
+                            insights.append(
+                                f"👁️ Strategy '{strat}' [CONFIDENCE: {strat_conf['confidence_pct']}% - OBSERVATION MODE]: "
+                                f"Proposed action ({proposed_status} {target_modifier:+.2f}) logged under observation threshold."
+                            )
+
+                        structured_recs.append({
+                            "id": f"REC_STRAT_{strat.upper().replace(' ', '_')}",
+                            "type": "STRATEGY_WEIGHTING",
+                            "target": strat,
+                            "proposed_action": f"Set status to {proposed_status} with confidence modifier {target_modifier:+.2f}",
+                            "confidence_score_pct": strat_conf["confidence_pct"],
+                            "status": strat_conf["status"],
+                            "learning_factors": strat_conf["factors"],
+                            "reasoning": f"Win rate {win_rate:.1f}% across {total_recent} recent trades with {consecutive_losses} consecutive losses."
+                        })
+                    else:
+                        confidence_modifier = 0.0
+                        status = "ACTIVE"
 
                     new_strat_stats[strat] = {
                         "total_trades": len(s_trades),
@@ -217,6 +269,7 @@ class SelfAdaptationEngine:
                         "win_rate_pct": round(win_rate, 1),
                         "consecutive_losses": consecutive_losses,
                         "confidence_modifier": round(confidence_modifier, 2),
+                        "learning_confidence_pct": strat_conf["confidence_pct"],
                         "status": status
                     }
 
@@ -229,26 +282,52 @@ class SelfAdaptationEngine:
                     win_rate = (wins / total_recent) * 100.0 if total_recent > 0 else 50.0
                     net_pnl = sum((tr.profit_loss or 0) for tr in sym_trades)
 
-                    confidence_modifier = 0.0
-                    status = "ACTIVE"
-
-                    # Apply sample-size weighting (shrinkage) so small samples (e.g. 3-5 trades) don't apply oversized penalties
                     sample_weight = min(1.0, total_recent / 10.0)
+                    target_modifier = 0.0
+                    proposed_status = "ACTIVE"
 
                     if win_rate < 35.0 and total_recent >= 3:
-                        confidence_modifier = round(-0.08 * sample_weight, 2)
-                        status = "PENALIZED"
-                        insights.append(
-                            f"⚠️ Asset '{sym}' underperforming with {win_rate:.0f}% win rate ({total_recent} trades). "
-                            f"Applying sample-weighted confidence penalty ({confidence_modifier:+.2f})."
-                        )
+                        target_modifier = round(-0.08 * sample_weight, 2)
+                        proposed_status = "PENALIZED"
                     elif win_rate >= 65.0 and total_recent >= 3:
-                        confidence_modifier = round(0.05 * sample_weight, 2)
-                        status = "BOOSTED"
-                        insights.append(
-                            f"📈 Asset '{sym}' outperforming with {win_rate:.0f}% win rate ({total_recent} trades). "
-                            f"Applying sample-weighted confidence bonus ({confidence_modifier:+.2f})."
-                        )
+                        target_modifier = round(0.05 * sample_weight, 2)
+                        proposed_status = "BOOSTED"
+
+                    sym_conf = self.compute_learning_confidence(
+                        num_observations=total_recent,
+                        win_rate=win_rate,
+                        module_consensus_count=1
+                    )
+
+                    if target_modifier != 0.0:
+                        if sym_conf["auto_apply"]:
+                            confidence_modifier = target_modifier
+                            status = proposed_status
+                            insights.append(
+                                f"🎯 Asset '{sym}' [CONFIDENCE: {sym_conf['confidence_pct']}% - AUTO-APPLIED]: "
+                                f"Win rate {win_rate:.0f}% ({total_recent} trades). Applied modifier ({confidence_modifier:+.2f})."
+                            )
+                        else:
+                            confidence_modifier = 0.0
+                            status = "OBSERVATION_MODE"
+                            insights.append(
+                                f"👁️ Asset '{sym}' [CONFIDENCE: {sym_conf['confidence_pct']}% - OBSERVATION MODE]: "
+                                f"Proposed penalty ({target_modifier:+.2f}) logged under observation threshold."
+                            )
+
+                        structured_recs.append({
+                            "id": f"REC_SYM_{sym}",
+                            "type": "SYMBOL_MODIFIER",
+                            "target": sym,
+                            "proposed_action": f"Apply symbol confidence modifier {target_modifier:+.2f}",
+                            "confidence_score_pct": sym_conf["confidence_pct"],
+                            "status": sym_conf["status"],
+                            "learning_factors": sym_conf["factors"],
+                            "reasoning": f"Asset win rate {win_rate:.1f}% across {total_recent} trades."
+                        })
+                    else:
+                        confidence_modifier = 0.0
+                        status = "ACTIVE"
 
                     new_sym_stats[sym] = {
                         "total_trades": len(sym_trades),
@@ -257,6 +336,7 @@ class SelfAdaptationEngine:
                         "win_rate_pct": round(win_rate, 1),
                         "net_pnl": round(net_pnl, 2),
                         "confidence_modifier": round(confidence_modifier, 2),
+                        "learning_confidence_pct": sym_conf["confidence_pct"],
                         "status": status
                     }
 
@@ -291,13 +371,52 @@ class SelfAdaptationEngine:
                 self._strategy_stats = new_strat_stats
                 self._symbol_stats = new_sym_stats
                 self._matrix_stats = new_matrix_stats
+                self._structured_recommendations = structured_recs
                 self._learning_insights = insights if insights else ["Lumina performance within expected variance parameters across all strategies."]
                 self._last_evaluated_at = datetime.now(timezone.utc)
 
-                logger.info(f"[SELF-ADAPTATION] Analysis complete across {len(trades)} trades. Insights: {len(self._learning_insights)}")
+                logger.info(f"[SELF-ADAPTATION] Analysis complete across {len(trades)} trades. Insights: {len(self._learning_insights)} | Recommendations: {len(self._structured_recommendations)}")
 
             except Exception as e:
                 logger.error(f"[SELF-ADAPTATION] Error during performance analysis: {e}")
+
+    def compute_learning_confidence(
+        self,
+        num_observations: int,
+        win_rate: float,
+        regime_consistency_std: float = 0.0,
+        module_consensus_count: int = 1
+    ) -> Dict[str, Any]:
+        """
+        Calculates a statistical Learning Confidence Score (%) for an adaptive recommendation.
+        Factors evaluated:
+        1. Observation Count (0-40 pts): Weight based on sample size (min 20-25 trades for max confidence).
+        2. Statistical Effect / Significance (0-30 pts): Deviation from 50% baseline win rate.
+        3. Regime Consistency (0-15 pts): Performance stability across market regimes.
+        4. Multi-Module Consensus (0-15 pts): Agreement with Second Brain, Elo ratings, and Counterfactual Learner.
+        """
+        sample_score = min(40.0, (num_observations / 20.0) * 40.0)
+        deviation = abs(win_rate - 50.0)
+        effect_score = min(30.0, (deviation / 25.0) * 30.0)
+        consistency_score = max(0.0, 15.0 - (regime_consistency_std * 0.5))
+        consensus_score = min(15.0, module_consensus_count * 5.0)
+
+        total_confidence = round(sample_score + effect_score + consistency_score + consensus_score, 1)
+        total_confidence = max(10.0, min(99.0, total_confidence))
+        auto_apply = total_confidence >= 80.0
+
+        return {
+            "confidence_pct": total_confidence,
+            "auto_apply": auto_apply,
+            "status": "AUTO_APPLIED" if auto_apply else "OBSERVATION_MODE",
+            "factors": {
+                "num_observations": num_observations,
+                "sample_score_pts": round(sample_score, 1),
+                "effect_size_pts": round(effect_score, 1),
+                "consistency_pts": round(consistency_score, 1),
+                "consensus_pts": round(consensus_score, 1)
+            }
+        }
 
     async def evaluate_opportunity_adaptation(self, setup: Dict[str, Any]) -> Tuple[bool, float, List[str]]:
         """
@@ -460,6 +579,7 @@ class SelfAdaptationEngine:
             "symbol_performance": self._symbol_stats,
             "regime_volatility_matrix": self._matrix_stats,
             "learning_insights": self._learning_insights,
+            "learning_recommendations": getattr(self, "_structured_recommendations", []),
             "recent_post_trade_retros": self._post_trade_retros[-10:]
         }
 
