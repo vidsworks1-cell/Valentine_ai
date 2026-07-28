@@ -232,19 +232,22 @@ class SelfAdaptationEngine:
                     confidence_modifier = 0.0
                     status = "ACTIVE"
 
-                    if win_rate < 35.0 and total_recent >= 5:
-                        confidence_modifier = -0.08
+                    # Apply sample-size weighting (shrinkage) so small samples (e.g. 3-5 trades) don't apply oversized penalties
+                    sample_weight = min(1.0, total_recent / 10.0)
+
+                    if win_rate < 35.0 and total_recent >= 3:
+                        confidence_modifier = round(-0.08 * sample_weight, 2)
                         status = "PENALIZED"
                         insights.append(
-                            f"⚠️ Asset '{sym}' consistently underperforming with {win_rate:.0f}% win rate. "
-                            f"Reducing confidence multiplier (-0.08)."
+                            f"⚠️ Asset '{sym}' underperforming with {win_rate:.0f}% win rate ({total_recent} trades). "
+                            f"Applying sample-weighted confidence penalty ({confidence_modifier:+.2f})."
                         )
-                    elif win_rate >= 65.0 and total_recent >= 5:
-                        confidence_modifier = 0.05
+                    elif win_rate >= 65.0 and total_recent >= 3:
+                        confidence_modifier = round(0.05 * sample_weight, 2)
                         status = "BOOSTED"
                         insights.append(
-                            f"📈 Asset '{sym}' outperforming with {win_rate:.0f}% win rate. "
-                            f"Applying confidence bonus (+0.05)."
+                            f"📈 Asset '{sym}' outperforming with {win_rate:.0f}% win rate ({total_recent} trades). "
+                            f"Applying sample-weighted confidence bonus ({confidence_modifier:+.2f})."
                         )
 
                     new_sym_stats[sym] = {

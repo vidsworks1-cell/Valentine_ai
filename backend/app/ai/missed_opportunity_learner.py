@@ -98,10 +98,19 @@ class MissedOpportunityLearner:
     def get_counterfactual_threshold_offset(self) -> float:
         """
         Calculates counterfactual threshold offset based on recent rejected trade outcomes.
-        If blocked trades frequently reach Take Profit (> 50% hit TP), returns a negative offset
-        (e.g., -0.04 to -0.08) to unblock high-conviction signals and prevent data starvation.
+        If analytical rejections (CONFIDENCE_FILTER, COOLDOWN) frequently reach Take Profit (> 50% hit TP),
+        returns a negative offset (e.g., -0.04 to -0.08) to unblock high-conviction signals and prevent data starvation.
+        
+        NOTE: Excludes risk/portfolio constraint rejections (MISSED_FILL, POSITION_OPEN, PORTFOLIO_GUARD)
+        so capital allocation limits do not distort analytical confidence calibration.
         """
-        evaluated_records = [r for r in self._records if r["status"] in ["SAVED_BY_GUARD", "COST_PROFIT"]]
+        # Filter for analytical rejections only (exclude capital/exposure rejections)
+        analytical_records = [
+            r for r in self._records 
+            if r.get("category") in ["CONFIDENCE_FILTER", "COOLDOWN", "SELF_ADAPTATION_BLOCK"]
+        ]
+
+        evaluated_records = [r for r in analytical_records if r["status"] in ["SAVED_BY_GUARD", "COST_PROFIT"]]
         
         cost_profit_count = sum(1 for r in evaluated_records if r["status"] == "COST_PROFIT")
         saved_count = sum(1 for r in evaluated_records if r["status"] == "SAVED_BY_GUARD")
@@ -112,7 +121,7 @@ class MissedOpportunityLearner:
             offset = -0.04 - (0.04 * ratio)
             return round(offset, 2)
         
-        pending_rejections = [r for r in self._records if r["category"] == "CONFIDENCE_FILTER"]
+        pending_rejections = [r for r in analytical_records if r["category"] == "CONFIDENCE_FILTER"]
         if len(pending_rejections) >= 3:
             return -0.03
 
