@@ -409,14 +409,14 @@ class AiReasoningEngine:
                         }
                         
                         if passed_filter:
-                            logger.info(f"🚨 OPPORTUNITY DETECTED & PASSED FILTER: {symbol} {proposed_side} via {strategy} at {price} (Raw Conf: {raw_confidence}, Mod: {adaptive_modifier:+.2f} -> Adapted Conf: {adapted_confidence} >= Threshold: {dynamic_threshold})")
+                            logger.info(f"🚨 OPPORTUNITY DETECTED & PASSED FILTER: {symbol} {proposed_side} via {strategy} at {price} (Persona: {active_persona.get('name', 'Preset')}, Raw Conf: {raw_confidence}, Mod: {adaptive_modifier:+.2f} -> Adapted Conf: {adapted_confidence} >= Dynamic Threshold: {dynamic_threshold})")
                             if adaptation_reasons:
                                 logger.info(f"🧠 [SELF-ADAPTATION INSIGHTS] {adaptation_log_str}")
                             # Trigger automated order placement if autonomy rules permit
                             await self._propose_trade_to_manager(self.last_detected_setup)
                         else:
                             rejection_msg = f"Confidence filter failed ({adapted_confidence} < {dynamic_threshold})"
-                            logger.info(f"⚠️ OPPORTUNITY REJECTED BY CONFIDENCE FILTER: {symbol} {proposed_side} via {strategy} at {price} (Adapted Conf: {adapted_confidence} < Threshold: {dynamic_threshold})")
+                            logger.info(f"⚠️ OPPORTUNITY REJECTED BY CONFIDENCE FILTER: {symbol} {proposed_side} via {strategy} at {price} (Persona: {active_persona.get('name', 'Preset')}, Adapted Conf: {adapted_confidence} < Dynamic Threshold: {dynamic_threshold})")
                             # Place on adaptive confidence filter cooldown (45s)
                             self.set_cooldown(symbol, proposed_side, category="CONFIDENCE_FILTER", reason=rejection_msg, price=price)
 

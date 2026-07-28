@@ -152,8 +152,8 @@ class SelfAdaptationEngine:
                     elif overall_win_rate >= 40.0:
                         threshold_calibration = -0.02
                     else:
-                        threshold_calibration = 0.05  # Raise threshold during drawdown to protect capital
-                        insights.append(f"🛡️ Dynamic Calibration: System underperformance detected ({overall_win_rate:.0f}% win rate). Raising threshold (+0.05) to filter strictly.")
+                        threshold_calibration = 0.02  # Slight adjustment during drawdown without locking the system
+                        insights.append(f"🛡️ Dynamic Calibration: System underperformance detected ({overall_win_rate:.0f}% win rate). Adjusting threshold (+0.02) to maintain trade throughput.")
                 else:
                     threshold_calibration = -0.05  # Responsive calibration for small trade samples
 
@@ -415,8 +415,16 @@ class SelfAdaptationEngine:
         regime_offset = 0.02 if market_regime.upper() == "RANGING" else (0.0 if market_regime.upper() == "TRENDING" else 0.01)
         raw_threshold = base_persona_min_conf + regime_offset + self._dynamic_threshold_calibration
         
-        # Floor at 0.65 (so system never trades reckless noise) and Cap at 0.88 (so system never freezes)
-        calibrated_threshold = round(max(0.65, min(0.88, raw_threshold)), 2)
+        # Floor at 0.65 (so system never trades reckless noise) and Cap at 0.80 (so system never freezes)
+        calibrated_threshold = round(max(0.65, min(0.80, raw_threshold)), 2)
+
+        logger.info(
+            f"🎯 [DYNAMIC THRESHOLD CALIBRATION] Persona Baseline: {base_persona_min_conf:.2f} | "
+            f"Win Rate: {self._overall_win_rate:.1f}% | "
+            f"Calibration Offset: {self._dynamic_threshold_calibration:+.2f} | "
+            f"Regime Offset ({market_regime}): {regime_offset:+.2f} | "
+            f"Raw: {raw_threshold:.2f} -> Final Threshold: {calibrated_threshold:.2f}"
+        )
         return calibrated_threshold
 
     def get_adaptation_summary(self) -> Dict[str, Any]:
