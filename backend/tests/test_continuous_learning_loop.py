@@ -100,5 +100,32 @@ class TestContinuousLearningAndHarmony(unittest.TestCase):
         self.assertLessEqual(quality["overall_execution_quality_score"], 100)
         self.assertIn(quality["root_cause_diagnosis"], ["EXCELLENT_EXECUTION", "BAD_ANALYSIS", "POOR_EXECUTION", "BAD_RISK_MANAGEMENT", "NEUTRAL"])
 
+    def test_autonomous_research_agent(self):
+        from app.ai.autonomous_research_agent import AutonomousResearchAgent
+        agent = AutonomousResearchAgent.get_instance()
+        
+        # Test summary
+        summary = agent.get_research_agent_summary()
+        self.assertGreaterEqual(summary["total_hypotheses_generated"], 3)
+
+        # Test hypothesis discovery
+        discovered = agent.generate_new_hypotheses()
+        self.assertEqual(len(discovered), 2)
+
+        # Test paper experiment design from hypothesis
+        exp_design = agent.design_paper_experiment_from_hypothesis("HYP-2026-001")
+        self.assertIn("experiment_registered", exp_design)
+
+        # Test statistical evaluation
+        eval_res = agent.evaluate_hypothesis_statistical_significance("HYP-2026-001")
+        self.assertIn("statistical_test_results", eval_res)
+        self.assertIn("recommendation", eval_res)
+
+        # Test production adoption
+        adoption = agent.adopt_hypothesis_into_production("HYP-2026-001")
+        self.assertIn("status", adoption)
+        self.assertEqual(adoption["status"], "PROMOTED_TO_PRODUCTION")
+
+
 if __name__ == "__main__":
     unittest.main()
