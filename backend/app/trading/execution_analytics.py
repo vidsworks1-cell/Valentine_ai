@@ -109,6 +109,23 @@ class ExecutionAnalyticsEngine:
             self._missed_fills.pop(0)
         logger.warning(f"🚫 [MISSED FILL RECORDED] {symbol} {side} via {strategy}: {reason}")
 
+        try:
+            from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+            MissedOpportunityLearner.get_instance().record_missed_opportunity(
+                symbol=symbol,
+                side=side,
+                entry_price=price,
+                stop_loss=0.0,
+                take_profit=0.0,
+                strategy=strategy,
+                category="MISSED_FILL",
+                reason=reason,
+                confidence_score=0.80,
+                confidence_threshold=0.80
+            )
+        except Exception as e:
+            logger.error(f"Failed to record missed fill in MissedOpportunityLearner: {e}")
+
     def get_execution_metrics(self) -> Dict[str, Any]:
         """
         Calculates aggregate execution efficiency and performance analytics.
@@ -195,9 +212,126 @@ class ExecutionAnalyticsEngine:
             penalty = -0.06
             reason = f"[EXECUTION QUALITY] High adverse slippage detected on {symbol_upper} ({avg_slippage:.3f}%, {adverse_rate:.0f}% adverse rate). Applied -0.06 penalty."
             return penalty, reason
-        elif avg_slippage >= 0.10:
-            penalty = -0.03
-            reason = f"[EXECUTION QUALITY] Moderate slippage detected on {symbol_upper} ({avg_slippage:.3f}%). Applied -0.03 penalty."
-            return penalty, reason
-
         return 0.0, ""
+
+    def calculate_trade_execution_quality(
+        self,
+        trade_id: str,
+        symbol: str,
+        side: str,
+        strategy: str,
+        ordered_price: float,
+        fill_price: float,
+        exit_price: float,
+        stop_loss: float,
+        take_profit: float,
+        pnl: float,
+        max_favorable_excursion: float = 0.0,
+        max_adverse_excursion: float = 0.0,
+        holding_time_seconds: float = 300.0
+    ) -> Dict[str, Any]:
+        """
+        Calculates comprehensive Trade Execution Quality Score (0-100) and root-cause diagnosis.
+        Pillars:
+        1. Signal Quality (0-100)
+        2. Fill Quality (0-100)
+        3. Exit Quality (0-100)
+        4. Opportunity Cost (0-100)
+        5. Risk Efficiency (0-100)
+        
+        Root Cause Diagnoses:
+        - BAD_ANALYSIS
+        - POOR_EXECUTION
+        - BAD_RISK_MANAGEMENT
+        - EXCELLENT_EXECUTION
+        """
+        # 1. Fill Quality (0-100)
+        slippage_pct = (abs(fill_price - ordered_price) / ordered_price) * 100.0 if ordered_price > 0 else 0.0
+        fill_quality = max(0.0, min(100.0, 100.0 - (slippage_pct * 500.0)))
+
+        # 2. Signal Quality (0-100)
+        # Ratio of favorable initial price move vs immediate drawdown
+        if max_favorable_excursion > 0 or max_adverse_excursion > 0:
+            mfe_ratio = max_favorable_excursion / max(0.0001, max_favorable_excursion + max_adverse_excursion)
+            signal_quality = round(mfe_ratio * 100.0, 1)
+        else:
+            signal_quality = 75.0 if pnl > 0 else 45.0
+
+        # 3. Exit Quality (0-100)
+        # Capture ratio: Realized PnL vs MFE
+        if max_favorable_excursion > 0:
+            realized_move = abs(exit_price - fill_price) if pnl > 0 else -abs(exit_price - fill_price)
+            exit_capture_ratio = max(0.0, min(1.0, realized_move / max_favorable_excursion))
+            exit_quality = round(exit_capture_ratio * 100.0, 1)
+        else:
+            exit_quality = 80.0 if pnl > 0 else 35.0
+
+        # 4. Opportunity Cost (0-100)
+        # Holding duration efficiency: Penalty for lengthy drawdowns before resolution
+        if holding_time_seconds > 3600.0 and pnl <= 0:
+            opportunity_cost_score = 40.0
+        elif holding_time_seconds < 1800.0:
+            opportunity_cost_score = 90.0
+        else:
+            opportunity_cost_score = 70.0
+
+        # 5. Risk Efficiency (0-100)
+        # R-Multiple captured vs Stop Loss distance
+        sl_distance = abs(fill_price - stop_loss) if stop_loss > 0 else (fill_price * 0.015)
+        r_multiple = pnl / (sl_distance * 10.0) if sl_distance > 0 else 0.0
+        if r_multiple >= 2.0:
+            risk_efficiency = 100.0
+        elif r_multiple >= 1.0:
+            risk_efficiency = 85.0
+        elif r_multiple >= 0.0:
+            risk_efficiency = 65.0
+        else:
+            risk_efficiency = max(0.0, 50.0 + (r_multiple * 20.0))
+
+        # Overall Weighted Execution Quality Score (0 - 100)
+        overall_score = round(
+            (signal_quality * 0.25) +
+            (fill_quality * 0.20) +
+            (exit_quality * 0.25) +
+            (opportunity_cost_score * 0.15) +
+            (risk_efficiency * 0.15),
+            1
+        )
+
+        # Root Cause Diagnosis
+        if overall_score >= 75.0:
+            root_cause = "EXCELLENT_EXECUTION"
+            diagnosis_details = "Trade executed with strong signal precision, minimal fill slippage, and optimal exit capture."
+        elif signal_quality < 50.0:
+            root_cause = "BAD_ANALYSIS"
+            diagnosis_details = "Entry signal timing was flawed; trade experienced immediate adverse price excursion."
+        elif fill_quality < 50.0:
+            root_cause = "POOR_EXECUTION"
+            diagnosis_details = "High entry/exit fill slippage degraded expected risk-reward ratio."
+        elif exit_quality < 50.0 or risk_efficiency < 50.0:
+            root_cause = "BAD_RISK_MANAGEMENT"
+            diagnosis_details = "Sub-optimal exit management gave back favorable profit run-up or breached risk parameters."
+        else:
+            root_cause = "NEUTRAL"
+            diagnosis_details = "Acceptable execution quality under volatile market conditions."
+
+        report = {
+            "trade_id": str(trade_id),
+            "symbol": symbol.upper(),
+            "side": side.upper(),
+            "strategy": strategy,
+            "overall_execution_quality_score": overall_score,
+            "root_cause_diagnosis": root_cause,
+            "diagnosis_details": diagnosis_details,
+            "breakdown": {
+                "signal_quality": signal_quality,
+                "fill_quality": fill_quality,
+                "exit_quality": exit_quality,
+                "opportunity_cost_score": opportunity_cost_score,
+                "risk_efficiency": risk_efficiency
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+        logger.info(f"📊 [TRADE EXECUTION QUALITY] Trade {trade_id} ({symbol} {side}): Score {overall_score}/100 | Diagnosis: {root_cause}")
+        return report

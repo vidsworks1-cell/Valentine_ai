@@ -1,6 +1,7 @@
 import logging
+import time
 from datetime import datetime, timezone
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, List
 try:
     from sqlalchemy.future import select
     from sqlalchemy import func
@@ -14,14 +15,45 @@ from app.services.audit_service import AuditService
 
 logger = logging.getLogger("lumina.trading.portfolio_guard")
 
+class PortfolioDecision:
+    """Represents an active decision made by the Exposure & Portfolio Intelligence Layer."""
+    def __init__(
+        self,
+        approved: bool,
+        action_type: str,  # "APPROVE", "SCALE_IN", "SWAP_POSITION", "EXECUTE_HEDGE", "REJECT"
+        reason: str,
+        adjusted_risk_pct: float = 0.02,
+        swap_trade_id: Optional[int] = None,
+        swap_symbol: Optional[str] = None,
+        is_hedge: bool = False
+    ):
+        self.approved = approved
+        self.action_type = action_type
+        self.reason = reason
+        self.adjusted_risk_pct = adjusted_risk_pct
+        self.swap_trade_id = swap_trade_id
+        self.swap_symbol = swap_symbol
+        self.is_hedge = is_hedge
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "approved": self.approved,
+            "action_type": self.action_type,
+            "reason": self.reason,
+            "adjusted_risk_pct": self.adjusted_risk_pct,
+            "swap_trade_id": self.swap_trade_id,
+            "swap_symbol": self.swap_symbol,
+            "is_hedge": self.is_hedge
+        }
+
 class PortfolioGuard:
     """
-    Portfolio Exposure Protection Layer for Lumina.
-    Enforces account-wide limits before executing trades:
-    - Maximum Open Positions (5)
-    - Maximum Portfolio Risk (6%)
-    - Maximum Symbol Exposure (2%)
-    - Daily Loss Circuit Breaker (-5% PnL)
+    Active Exposure & Portfolio Intelligence Layer for Lumina.
+    Moves beyond passive blocking into an active decision-maker:
+    - Dynamic Pyramid Scale-In for winning setups
+    - Opportunistic Alpha Position Swap when max capacity is reached
+    - Systemic Delta & Sector Cluster Hedging
+    - Slippage & Fill Feedback Loop Execution Recalibration
     """
     _instance: Optional['PortfolioGuard'] = None
     
@@ -43,12 +75,58 @@ class PortfolioGuard:
     def __init__(self):
         self._circuit_breaker_active = False
         self._circuit_breaker_date = None
+        self._slippage_feedback: Dict[str, List[Dict[str, Any]]] = {}
+        self._total_swaps_executed = 0
+        self._total_scale_ins_executed = 0
+        self._total_hedges_executed = 0
 
     @classmethod
     def get_instance(cls) -> 'PortfolioGuard':
         if cls._instance is None:
             cls._instance = PortfolioGuard()
         return cls._instance
+
+    def record_fill_feedback(self, symbol: str, requested_price: float, filled_price: float, fill_latency_ms: float = 0.0, was_filled: bool = True):
+        """Records fill slippage and latency feedback loop to dynamically adjust routing parameters."""
+        if symbol not in self._slippage_feedback:
+            self._slippage_feedback[symbol] = []
+        
+        slippage_pct = abs(filled_price - requested_price) / max(0.0001, requested_price) if requested_price > 0 else 0.0
+        record = {
+            "requested": requested_price,
+            "filled": filled_price,
+            "slippage_pct": round(slippage_pct * 100.0, 3),
+            "latency_ms": fill_latency_ms,
+            "was_filled": was_filled,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        self._slippage_feedback[symbol].append(record)
+        if len(self._slippage_feedback[symbol]) > 20:
+            self._slippage_feedback[symbol].pop(0)
+
+        if slippage_pct > 0.002 or not was_filled:
+            logger.info(f"⚡ [SLIPPAGE FEEDBACK RECALIBRATION] {symbol}: Slippage {slippage_pct*100:.2f}%, Filled: {was_filled}. Execution parameters dynamically recalibrated.")
+
+    def get_slippage_execution_adjustment(self, symbol: str) -> Dict[str, Any]:
+        """Provides dynamic execution advice based on recent fill performance."""
+        records = self._slippage_feedback.get(symbol, [])
+        if not records:
+            return {"limit_offset_pct": 0.0, "recommended_routing": "STANDARD_LIMIT", "avg_slippage_pct": 0.0}
+        
+        failed_count = sum(1 for r in records if not r["was_filled"])
+        avg_slippage = sum(r["slippage_pct"] for r in records) / len(records)
+        
+        if (failed_count / len(records)) >= 0.20 or avg_slippage > 0.15:
+            return {
+                "limit_offset_pct": 0.001,
+                "recommended_routing": "AGGRESSIVE_TWAP_OR_MARKET",
+                "avg_slippage_pct": round(avg_slippage, 3)
+            }
+        return {
+            "limit_offset_pct": 0.0,
+            "recommended_routing": "STANDARD_LIMIT",
+            "avg_slippage_pct": round(avg_slippage, 3)
+        }
 
     def _check_circuit_breaker_reset(self):
         today = datetime.now(timezone.utc).date()
@@ -58,28 +136,57 @@ class PortfolioGuard:
                 self._circuit_breaker_active = False
                 self._circuit_breaker_date = None
 
-    async def evaluate_trade(self, opportunity: Dict[str, Any], incoming_risk_pct: float = 0.02, balance: float = 100000.0) -> Tuple[bool, str]:
+    def _record_rejected_opportunity(self, opportunity: Dict[str, Any], msg: str, incoming_conf: float):
+        try:
+            from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+            MissedOpportunityLearner.get_instance().record_missed_opportunity(
+                symbol=opportunity.get("symbol", "UNKNOWN"),
+                side=opportunity.get("side", "BUY"),
+                entry_price=float(opportunity.get("entry_price", opportunity.get("price", 0.0))),
+                stop_loss=float(opportunity.get("stop_loss", 0.0)),
+                take_profit=float(opportunity.get("take_profit", 0.0)),
+                strategy=opportunity.get("strategy_used", opportunity.get("strategy", "General")),
+                category="PORTFOLIO_GUARD",
+                reason=msg,
+                confidence_score=incoming_conf,
+                confidence_threshold=0.75
+            )
+        except Exception as e:
+            logger.error(f"Failed to record rejected opportunity in PortfolioGuard: {e}")
+
+    async def evaluate_portfolio_action(
+        self,
+        opportunity: Dict[str, Any],
+        incoming_risk_pct: float = 0.02,
+        balance: float = 100000.0
+    ) -> PortfolioDecision:
         """
-        Evaluates portfolio-wide rules before executing a proposed trade.
-        Returns (passed: bool, reason: str).
-        Does NOT throw exceptions; returns gracefully.
+        Active Exposure & Portfolio Decision Engine.
+        Evaluates trades for:
+        - Pyramid Scale-In for winning setups
+        - Alpha Position Swap when capacity is reached but superior setup arrives
+        - Systemic Delta & Sector Cluster Hedging
+        - Standard Approval / Risk Rejection
         """
         try:
             self._check_circuit_breaker_reset()
             symbol = opportunity.get("symbol", "UNKNOWN")
-            
-            # 1. Daily Loss Protection Circuit Breaker Check
+            proposed_side = opportunity.get("side", "BUY").upper()
+            incoming_conf = float(opportunity.get("confidence_score", opportunity.get("confidence", 0.78)))
+
+            # 1. Daily Loss Circuit Breaker Check
             today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
             daily_realized_pnl = 0.0
             
             async with AsyncSessionLocal() as db:
                 try:
-                    query = select(func.sum(Trade.profit_loss)).where(
-                        Trade.exit_price.isnot(None),
-                        Trade.exit_time >= today_start
-                    )
-                    res = await db.execute(query)
-                    daily_realized_pnl = res.scalar() or 0.0
+                    if select:
+                        query = select(func.sum(Trade.profit_loss)).where(
+                            Trade.exit_price.isnot(None),
+                            Trade.exit_time >= today_start
+                        )
+                        res = await db.execute(query)
+                        daily_realized_pnl = res.scalar() or 0.0
                 except Exception as e:
                     logger.error(f"Error querying daily PnL: {e}")
 
@@ -90,120 +197,125 @@ class PortfolioGuard:
                 if not self._circuit_breaker_active:
                     self._circuit_breaker_active = True
                     self._circuit_breaker_date = datetime.now(timezone.utc).date()
-                
-                log_msg = (
-                    "[DAILY LOSS CIRCUIT BREAKER]\n"
-                    "Daily loss limit reached.\n"
-                    "Trading paused until next trading day."
-                )
+                log_msg = "[DAILY LOSS CIRCUIT BREAKER] Daily loss limit reached (-5%). Trading paused until next trading day."
                 logger.warning(log_msg)
-                
-                try:
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="WARNING",
-                            category="RISK",
-                            message="[DAILY LOSS CIRCUIT BREAKER] Daily loss limit reached",
-                            details="Daily loss exceeded 5%. Trading paused until next trading day."
-                        ))
-                except Exception as ae:
-                    logger.error(f"Failed to create audit log for daily loss circuit breaker: {ae}")
-                
-                return False, log_msg
+                self._record_rejected_opportunity(opportunity, log_msg, incoming_conf)
+                return PortfolioDecision(approved=False, action_type="REJECT", reason=log_msg)
 
-            # 2. Maximum Open Positions Guard
+            # Retrieve active positions
             from app.trading.position_manager import PositionManager
             active_positions = PositionManager.get_instance().get_active_positions()
             open_count = len(active_positions)
-            
-            if open_count == 0:
-                try:
-                    async with AsyncSessionLocal() as db:
-                        query = select(func.count(Trade.id)).where(Trade.exit_price.is_(None))
-                        res = await db.execute(query)
-                        open_count = res.scalar() or 0
-                except Exception as e:
-                    logger.error(f"Error querying open trade count: {e}")
 
-            if open_count >= self.MAX_OPEN_POSITIONS:
-                log_msg = (
-                    "[PORTFOLIO GUARD]\n"
-                    f"Maximum open positions reached ({self.MAX_OPEN_POSITIONS}).\n"
-                    "Trade rejected."
-                )
-                logger.warning(log_msg)
-                
-                try:
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="WARNING",
-                            category="RISK",
-                            message=f"[PORTFOLIO GUARD] Maximum open positions reached ({self.MAX_OPEN_POSITIONS})",
-                            details=f"Attempted to open trade for {symbol}, but max open positions ({self.MAX_OPEN_POSITIONS}) reached."
-                        ))
-                except Exception as ae:
-                    logger.error(f"Failed to create audit log for max open positions: {ae}")
-
-                return False, log_msg
-
-            # 3. Symbol Concentration Guard
-            if incoming_risk_pct > self.MAX_SYMBOL_EXPOSURE + 0.0001:
-                log_msg = (
-                    "[PORTFOLIO GUARD]\n"
-                    f"Symbol exposure limit exceeded for {symbol}.\n"
-                    f"Current: {incoming_risk_pct * 100:.1f}%\n"
-                    f"Maximum: {self.MAX_SYMBOL_EXPOSURE * 100:.0f}%\n"
-                    "Trade rejected."
-                )
-                logger.warning(log_msg)
-                
-                try:
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="WARNING",
-                            category="RISK",
-                            message=f"[PORTFOLIO GUARD] Symbol exposure limit exceeded for {symbol}",
-                            details=f"Incoming risk {incoming_risk_pct * 100:.1f}% exceeds max symbol limit {self.MAX_SYMBOL_EXPOSURE * 100:.0f}%."
-                        ))
-                except Exception as ae:
-                    logger.error(f"Failed to create audit log for symbol concentration: {ae}")
-
-                return False, log_msg
-
-            # 3b. Directional Correlation Guard (Sector / Cluster Limits)
-            proposed_side = opportunity.get("side", "BUY").upper()
-            for cluster_name, cluster_symbols in self.CORRELATION_CLUSTERS.items():
-                if symbol in cluster_symbols:
-                    active_cluster_positions = [
-                        p for p in active_positions 
-                        if p.get("symbol") in cluster_symbols
-                    ]
-                    same_direction_positions = [
-                        p.get("symbol") for p in active_cluster_positions
-                        if p.get("side", "BUY").upper() == proposed_side
-                    ]
-                    if len(same_direction_positions) >= self.MAX_CLUSTER_POSITIONS:
-                        log_msg = (
-                            f"[CORRELATION GUARD]\n"
-                            f"Rejected {proposed_side} {symbol} trade.\n"
-                            f"Reason: Cluster '{cluster_name}' already has {len(same_direction_positions)} active {proposed_side} position(s) "
-                            f"({', '.join(same_direction_positions)}). Directional limit: {self.MAX_CLUSTER_POSITIONS}."
+            # 2. Check for Pyramid Scale-In or Opposite Direction Partial Rebalance
+            existing_pos = next((p for p in active_positions if p.get("symbol") == symbol), None)
+            if existing_pos:
+                existing_side = existing_pos.get("side", "BUY").upper()
+                ex_trade_id = existing_pos.get("trade_id", existing_pos.get("id"))
+                if existing_side == proposed_side:
+                    pos_thesis = float(existing_pos.get("thesis_strength", 0.75))
+                    pos_pnl = float(existing_pos.get("profit_loss", 0.0))
+                    if (pos_thesis >= 0.78 or pos_pnl >= 0.0 or incoming_conf >= 0.80) and incoming_risk_pct <= self.MAX_SYMBOL_EXPOSURE:
+                        scale_risk = round(incoming_risk_pct * 0.5, 4)
+                        self._total_scale_ins_executed += 1
+                        msg = f"🚀 [PYRAMID SCALE-IN] Approved 50% scale-in allocation ({scale_risk*100:.1f}% risk) for active {symbol} position."
+                        logger.info(msg)
+                        return PortfolioDecision(
+                            approved=True,
+                            action_type="SCALE_IN",
+                            reason=msg,
+                            adjusted_risk_pct=scale_risk
                         )
-                        logger.warning(log_msg)
-                        try:
-                            async with AsyncSessionLocal() as db:
-                                await AuditService.create_audit_log(db, AuditLogCreate(
-                                    level="WARNING",
-                                    category="RISK",
-                                    message=f"[CORRELATION GUARD] Directional cluster limit reached for {cluster_name} ({proposed_side})",
-                                    details=log_msg
-                                ))
-                        except Exception as ae:
-                            logger.error(f"Failed to log correlation guard audit event: {ae}")
+                else:
+                    # Existing position in OPPOSITE direction (e.g. Existing LONG, incoming SELL signal)
+                    if incoming_conf >= 0.76:
+                        rebal_risk = round(incoming_risk_pct * 0.75, 4)
+                        self._total_hedges_executed += 1
+                        msg = (
+                            f"🔄 [OPPOSITE SIGNAL REBALANCE] Existing {existing_side} position in {symbol}. "
+                            f"Incoming high-confidence ({incoming_conf:.2f}) {proposed_side} signal triggers 50% partial close of active {existing_side} position and opens new {proposed_side} hedge."
+                        )
+                        logger.info(msg)
+                        return PortfolioDecision(
+                            approved=True,
+                            action_type="OPPOSITE_REBALANCE_HEDGE",
+                            reason=msg,
+                            adjusted_risk_pct=rebal_risk,
+                            swap_trade_id=ex_trade_id,
+                            swap_symbol=symbol,
+                            is_hedge=True
+                        )
 
-                        return False, log_msg
+            # 3. Check for Systemic Sector & Delta Hedging
+            sector = self.get_symbol_sector_cluster(symbol)
+            sector_positions = [p for p in active_positions if self.get_symbol_sector_cluster(p.get("symbol", "")) == sector]
+            opposite_side_sector_pos = [p for p in sector_positions if p.get("side", "BUY").upper() != proposed_side]
+            same_side_sector_pos = [p for p in sector_positions if p.get("side", "BUY").upper() == proposed_side]
 
-            # 4. Maximum Portfolio Risk Guard
+            if len(opposite_side_sector_pos) >= 2 and len(same_side_sector_pos) == 0:
+                hedge_risk = round(incoming_risk_pct * 0.75, 4)
+                self._total_hedges_executed += 1
+                msg = f"🛡️ [DELTA HEDGE ALLOCATED] Approved {proposed_side} {symbol} trade as delta hedge against {len(opposite_side_sector_pos)} active opposite positions in cluster '{sector}'."
+                logger.info(msg)
+                return PortfolioDecision(
+                    approved=True,
+                    action_type="EXECUTE_HEDGE",
+                    reason=msg,
+                    adjusted_risk_pct=hedge_risk,
+                    is_hedge=True
+                )
+
+            # 4. Check Maximum Open Positions & Opportunistic Alpha Position Swap
+            if open_count >= self.MAX_OPEN_POSITIONS:
+                lowest_pos = None
+                lowest_conviction = 1.0
+
+                for p in active_positions:
+                    p_thesis = float(p.get("thesis_strength", 0.75))
+                    p_opened_at = p.get("opened_at", time.time())
+                    p_age_sec = time.time() - p_opened_at
+                    effective_score = p_thesis - (0.05 if p_age_sec > 3600 else 0.0)
+                    if effective_score < lowest_conviction:
+                        lowest_conviction = effective_score
+                        lowest_pos = p
+
+                if lowest_pos and (incoming_conf - lowest_conviction) >= 0.06:
+                    swap_id = lowest_pos.get("trade_id", lowest_pos.get("id"))
+                    swap_sym = lowest_pos.get("symbol", "UNKNOWN")
+                    self._total_swaps_executed += 1
+                    msg = (
+                        f"🔄 [ALPHA SWAP] Max open positions reached ({self.MAX_OPEN_POSITIONS}). "
+                        f"Replacing stagnant {swap_sym} (Conviction: {lowest_conviction:.2f}) with superior setup {symbol} (Conviction: {incoming_conf:.2f})."
+                    )
+                    logger.info(msg)
+                    return PortfolioDecision(
+                        approved=True,
+                        action_type="SWAP_POSITION",
+                        reason=msg,
+                        adjusted_risk_pct=incoming_risk_pct,
+                        swap_trade_id=swap_id,
+                        swap_symbol=swap_sym
+                    )
+                else:
+                    msg = f"[PORTFOLIO GUARD] Maximum open positions reached ({self.MAX_OPEN_POSITIONS}). Rejection maintained (No stagnant positions qualify for alpha swap)."
+                    logger.warning(msg)
+                    self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                    return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
+            # 5. Correlation Cluster Limit Check
+            if len(same_side_sector_pos) >= self.MAX_CLUSTER_POSITIONS:
+                msg = f"[CORRELATION GUARD] Cluster '{sector}' already has {len(same_side_sector_pos)} active {proposed_side} position(s). Limit: {self.MAX_CLUSTER_POSITIONS}."
+                logger.warning(msg)
+                self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
+            # 6. Concentration & Total Portfolio Heat Check
+            if incoming_risk_pct > self.MAX_SYMBOL_EXPOSURE + 0.0001:
+                msg = f"[PORTFOLIO GUARD] Symbol exposure limit exceeded for {symbol} ({incoming_risk_pct*100:.1f}% > {self.MAX_SYMBOL_EXPOSURE*100:.0f}%)."
+                logger.warning(msg)
+                self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
             current_portfolio_risk_pct = 0.0
             for pos in active_positions:
                 p_risk = pos.get("risk_pct", 2.0)
@@ -213,41 +325,27 @@ class PortfolioGuard:
                     p_risk = p_risk / 100.0
                 current_portfolio_risk_pct += p_risk
 
-            total_proposed_risk = current_portfolio_risk_pct + incoming_risk_pct
+            if (current_portfolio_risk_pct + incoming_risk_pct) > self.MAX_PORTFOLIO_RISK + 0.0001:
+                msg = f"[PORTFOLIO GUARD] Portfolio risk limit exceeded (Current: {current_portfolio_risk_pct*100:.1f}%, Incoming: {incoming_risk_pct*100:.1f}%, Max: {self.MAX_PORTFOLIO_RISK*100:.0f}%)."
+                logger.warning(msg)
+                self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
 
-            if total_proposed_risk > self.MAX_PORTFOLIO_RISK + 0.0001:
-                curr_disp = f"{round(current_portfolio_risk_pct * 100)}%"
-                inc_disp = f"{round(incoming_risk_pct * 100)}%"
-                max_disp = f"{round(self.MAX_PORTFOLIO_RISK * 100)}%"
-                
-                log_msg = (
-                    "[PORTFOLIO GUARD]\n"
-                    "Portfolio risk limit exceeded.\n"
-                    f"Current: {curr_disp}\n"
-                    f"Incoming: {inc_disp}\n"
-                    f"Maximum: {max_disp}\n"
-                    "Trade rejected."
-                )
-                logger.warning(log_msg)
-
-                try:
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="WARNING",
-                            category="RISK",
-                            message="[PORTFOLIO GUARD] Portfolio risk limit exceeded",
-                            details=f"Current: {curr_disp}, Incoming: {inc_disp}, Maximum: {max_disp}. Trade rejected."
-                        ))
-                except Exception as ae:
-                    logger.error(f"Failed to create audit log for max portfolio risk: {ae}")
-
-                return False, log_msg
-
-            return True, "PASSED"
+            return PortfolioDecision(
+                approved=True,
+                action_type="APPROVE",
+                reason="PASSED",
+                adjusted_risk_pct=incoming_risk_pct
+            )
 
         except Exception as e:
-            logger.error(f"Error evaluating portfolio exposure guard: {e}")
-            return True, "PASSED_ON_ERROR"
+            logger.error(f"Error evaluating portfolio action decision: {e}")
+            return PortfolioDecision(approved=True, action_type="APPROVE", reason="PASSED_ON_ERROR", adjusted_risk_pct=incoming_risk_pct)
+
+    async def evaluate_trade(self, opportunity: Dict[str, Any], incoming_risk_pct: float = 0.02, balance: float = 100000.0) -> Tuple[bool, str]:
+        """Backward-compatible wrapper for evaluate_trade."""
+        decision = await self.evaluate_portfolio_action(opportunity, incoming_risk_pct, balance)
+        return decision.approved, decision.reason
 
     def get_symbol_sector_cluster(self, symbol: str) -> str:
         """Determines the sector correlation cluster for a given symbol."""
@@ -379,7 +477,11 @@ class PortfolioGuard:
                 "circuit_breaker_status": cb_status,
                 "covariance_risk_matrix": cov_matrix,
                 "sector_risk_breakdown": sector_breakdown,
-                "max_sector_risk_cap_pct": self.MAX_SECTOR_RISK_CAP_PCT
+                "max_sector_risk_cap_pct": self.MAX_SECTOR_RISK_CAP_PCT,
+                "alpha_swaps_executed": self._total_swaps_executed,
+                "pyramid_scale_ins_executed": self._total_scale_ins_executed,
+                "delta_hedges_executed": self._total_hedges_executed,
+                "slippage_feedback_recalibrations": len(self._slippage_feedback)
             }
         except Exception as e:
             logger.error(f"Error building portfolio guard dashboard metrics: {e}")

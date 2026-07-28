@@ -85,6 +85,23 @@ class PositionManager:
     def get_active_positions(self) -> List[Dict[str, Any]]:
         return list(self._positions.values())
 
+    async def scale_in_position(self, symbol: str, additional_size: float, add_price: float) -> Optional[Dict[str, Any]]:
+        """Scales into an existing open position by recalculating weighted average entry price and expanded position size."""
+        for trade_id, pos in list(self._positions.items()):
+            if pos.get("symbol") == symbol:
+                old_size = pos.get("position_size", 0.0)
+                old_entry = pos.get("entry_price", add_price)
+                new_size = old_size + additional_size
+                if new_size > 0:
+                    new_avg_entry = ((old_size * old_entry) + (additional_size * add_price)) / new_size
+                    pos["position_size"] = round(new_size, 6)
+                    pos["entry_price"] = round(new_avg_entry, 4)
+                    pos["scale_ins"] = pos.get("scale_ins", 0) + 1
+                    pos["thesis_strength"] = min(0.99, float(pos.get("thesis_strength", 0.80)) + 0.05)
+                    logger.info(f"🚀 [PYRAMID SCALE-IN EXECUTED] {symbol} trade {trade_id}: size expanded from {old_size} to {new_size:.4f}, avg entry adjusted to ${new_avg_entry:.2f}")
+                    return pos
+        return None
+
     async def _monitor_loop(self):
         cache = await PriceCache.get_instance()
         
@@ -599,6 +616,11 @@ class PositionManager:
                     })
                     asyncio.create_task(SelfAdaptationEngine.get_instance().analyze_performance())
                     asyncio.create_task(TradeJournalEngine.get_instance().journal_closed_trade(trade_id))
+                    ChampionChallengerEngine.get_instance().record_trade_outcome(
+                        strategy=pos.get("strategy", "Breakout Momentum"),
+                        pnl=pnl,
+                        exit_reason=outcome_type
+                    )
                     asyncio.create_task(ChampionChallengerEngine.get_instance().evaluate_strategies())
                 except Exception as sae:
                     logger.error(f"Failed to trigger post-trade research & adaptation workflows: {sae}")

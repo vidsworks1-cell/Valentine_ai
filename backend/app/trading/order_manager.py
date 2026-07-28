@@ -255,16 +255,22 @@ class OrderManager:
                         wallet = await PaperTradingService.create_wallet(db, "lumina_default", 100000.0)
                     balance = wallet.balance
 
-                # 2. Assemble trade schema details & Dynamic Fractional Kelly Sizing
+                # 2. Assemble trade schema details & Adaptive Multi-Factor Position Sizing
                 from app.ai.self_adaptation import SelfAdaptationEngine
-                adaptation_summary = SelfAdaptationEngine.get_instance().get_adaptation_summary()
-                empirical_win_rate = float(adaptation_summary.get("overall_win_rate_pct", 55.0)) / 100.0
-                avg_r_ratio = 2.0  # Empirical reward-to-risk ratio baseline
-                full_kelly = max(0.0, (empirical_win_rate * avg_r_ratio - (1.0 - empirical_win_rate)) / avg_r_ratio)
-                applied_fractional_kelly = 0.50  # Half Kelly
-                risk_pct = round(max(0.010, min(0.035, full_kelly * applied_fractional_kelly * 0.15)), 4)
+                from app.risk.adaptive_sizer import AdaptivePositionSizer
                 
-                logger.info(f"🎲 [DYNAMIC KELLY SIZING] Applied {risk_pct*100.0:.2f}% risk per trade (Empirical Win Rate: {empirical_win_rate*100.0:.1f}%, R-Ratio: {avg_r_ratio}, Full Kelly: {full_kelly*100.0:.1f}%)")
+                adaptation_summary = SelfAdaptationEngine.get_instance().get_adaptation_summary()
+                empirical_win_rate_pct = float(adaptation_summary.get("overall_win_rate_pct", 55.0))
+                
+                risk_pct, size_breakdown = AdaptivePositionSizer.get_instance().calculate_adaptive_risk_pct(
+                    opportunity=opportunity,
+                    balance=balance,
+                    recent_win_streak=int(adaptation_summary.get("win_streak", 0)),
+                    account_drawdown_pct=float(adaptation_summary.get("current_drawdown_pct", 0.0)) / 100.0,
+                    strategy_win_rate_pct=empirical_win_rate_pct
+                )
+                
+                logger.info(f"🎲 [ADAPTIVE POSITION SIZING] Risk Allocation: {risk_pct*100.0:.2f}% | Breakdown: {size_breakdown}")
 
                 price = opportunity["entry_price"]
                 stop_loss = opportunity["stop_loss"]
@@ -285,21 +291,84 @@ class OrderManager:
 
                 logger.info(f"⚡ [HYBRID ROUTING] Symbol {symbol} mapped to {order_routing} order routing (Regime: {market_regime}, Squeeze: {squeeze_state})")
 
-                # 2b. Portfolio Exposure Guard Check
+                # 2b. Active Exposure & Portfolio Intelligence Layer Decision Check
                 from app.trading.portfolio_guard import PortfolioGuard
-                passed_pg, pg_reason = await PortfolioGuard.get_instance().evaluate_trade(
+                pg = PortfolioGuard.get_instance()
+                pg_decision = await pg.evaluate_portfolio_action(
                     opportunity=opportunity,
                     incoming_risk_pct=risk_pct,
                     balance=balance
                 )
-                if not passed_pg:
+
+                if not pg_decision.approved:
                     try:
                         from app.ai.reasoning import AiReasoningEngine
-                        pg_cat = "CORRELATION_CLUSTER" if "CORRELATION" in pg_reason.upper() else "PORTFOLIO_RISK_HEAT"
-                        AiReasoningEngine.get_instance().set_cooldown(symbol, side, category=pg_cat, reason=pg_reason, price=price)
+                        pg_cat = "CORRELATION_CLUSTER" if "CORRELATION" in pg_decision.reason.upper() else "PORTFOLIO_RISK_HEAT"
+                        AiReasoningEngine.get_instance().set_cooldown(symbol, side, category=pg_cat, reason=pg_decision.reason, price=price)
                     except Exception as ce:
-                        logger.error(f"Failed to set cooldown on portfolio guard rejection: {ce}")
+                        logger.error(f"Failed to set cooldown on portfolio decision rejection: {ce}")
                     return
+
+                # Adjust risk percentage if active decision scaled or modified allocation
+                if pg_decision.adjusted_risk_pct != risk_pct:
+                    logger.info(f"🛡️ [PORTFOLIO ACTION RISK ADJUSTMENT] Risk adjusted from {risk_pct*100:.1f}% to {pg_decision.adjusted_risk_pct*100:.1f}% ({pg_decision.action_type})")
+                    risk_pct = pg_decision.adjusted_risk_pct
+
+                # Handle Pyramid Scale-In Action
+                if pg_decision.action_type == "SCALE_IN":
+                    from app.trading.position_manager import PositionManager
+                    add_size = RiskEvaluator.calculate_atr_position_size(balance, price, atr_val, risk_pct, stop_loss)
+                    scaled_pos = await PositionManager.get_instance().scale_in_position(symbol, add_size, price)
+                    if scaled_pos:
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="INFO",
+                            category="PORTFOLIO_INTELLIGENCE",
+                            message=f"🚀 [PYRAMID SCALE-IN EXECUTED] Scaled {add_size:.4f} into active {symbol} position",
+                            details=pg_decision.reason
+                        ))
+                        return
+
+                # Handle Opposite Direction Signal Partial Close & Hedge
+                if pg_decision.action_type == "OPPOSITE_REBALANCE_HEDGE" and pg_decision.swap_trade_id:
+                    logger.info(f"🔄 [OPPOSITE REBALANCE EXECUTING] Partially closing active opposite trade #{pg_decision.swap_trade_id} ({symbol}) by 50% and executing {side} hedge")
+                    try:
+                        from app.trading.position_manager import PositionManager
+                        pm = PositionManager.get_instance()
+                        target_pos = next((p for p in pm.get_active_positions() if p.get("trade_id") == pg_decision.swap_trade_id or p.get("id") == pg_decision.swap_trade_id), None)
+                        if target_pos:
+                            half_sz = round(target_pos.get("position_size", 0.0) * 0.5, 6)
+                            if half_sz > 0:
+                                await pm._partial_close_position(pg_decision.swap_trade_id, price, half_sz, "OPPOSITE_SIGNAL_REBALANCE")
+                                await AuditService.create_audit_log(db, AuditLogCreate(
+                                    level="INFO",
+                                    category="PORTFOLIO_INTELLIGENCE",
+                                    message=f"🔄 [OPPOSITE REBALANCE EXECUTED] Closed 50% ({half_sz}) of active {symbol} position to derisk",
+                                    details=pg_decision.reason
+                                ))
+                    except Exception as rebal_err:
+                        logger.error(f"Failed to execute opposite signal partial rebalance: {rebal_err}")
+
+                # Handle Alpha Position Swap Action (Close stagnant position before entering superior setup)
+                if pg_decision.action_type == "SWAP_POSITION" and pg_decision.swap_trade_id:
+                    logger.info(f"🔄 [ALPHA SWAP EXECUTING] Closing stagnant trade #{pg_decision.swap_trade_id} ({pg_decision.swap_symbol}) to enter superior {symbol} setup")
+                    try:
+                        from app.trading.position_manager import PositionManager
+                        pm = PositionManager.get_instance()
+                        cache = await PriceCache.get_instance()
+                        p_data = cache.get_price(pg_decision.swap_symbol or "")
+                        swap_exit_p = p_data if isinstance(p_data, float) and p_data > 0 else price
+                        await pm._close_position(pg_decision.swap_trade_id, swap_exit_p, "ALPHA_SWAP_REPLACEMENT")
+                        await AuditService.create_audit_log(db, AuditLogCreate(
+                            level="INFO",
+                            category="PORTFOLIO_INTELLIGENCE",
+                            message=f"🔄 [ALPHA SWAP EXECUTED] Replaced stagnant {pg_decision.swap_symbol} with superior {symbol} setup",
+                            details=pg_decision.reason
+                        ))
+                    except Exception as se:
+                        logger.error(f"Failed to execute alpha position swap for trade {pg_decision.swap_trade_id}: {se}")
+
+                if pg_decision.is_hedge:
+                    opportunity["entry_reason"] = f"[DELTA HEDGE] {opportunity.get('entry_reason', '')}"
 
                 # Dynamic position sizing based on ATR Risk Engine calculation
                 position_size = RiskEvaluator.calculate_atr_position_size(
@@ -409,7 +478,7 @@ class OrderManager:
                 else:
                     logger.info(f"[STAGE: EXECUTION] Executing paper {opportunity['side']} order for {opportunity['symbol']} (Routing: {order_routing}). Entry Price: {price}, Quantity: {position_size}.")
 
-                # Track Execution Quality & Slippage in Execution Analytics Engine
+                # Track Execution Quality & Slippage in Execution Analytics Engine & PortfolioGuard
                 try:
                     from app.trading.execution_analytics import ExecutionAnalyticsEngine
                     now_ms = time.time() * 1000
@@ -422,6 +491,14 @@ class OrderManager:
                         position_size=position_size,
                         signal_timestamp_ms=now_ms - 120,
                         fill_timestamp_ms=now_ms
+                    )
+                    from app.trading.portfolio_guard import PortfolioGuard
+                    PortfolioGuard.get_instance().record_fill_feedback(
+                        symbol=opportunity["symbol"],
+                        requested_price=opportunity["entry_price"],
+                        filled_price=price,
+                        fill_latency_ms=120.0,
+                        was_filled=True
                     )
                 except Exception as ex_err:
                     logger.error(f"Failed to record execution fill analytics: {ex_err}")

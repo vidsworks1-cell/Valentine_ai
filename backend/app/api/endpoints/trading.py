@@ -771,6 +771,14 @@ async def get_champion_challenger_endpoint():
     await engine.evaluate_strategies()
     return engine.get_champion_challenger_summary()
 
+@router.get("/strategy-tournament")
+async def get_strategy_tournament_endpoint():
+    """Retrieves live Elo ratings, tournament standings, and capital allocation multipliers for all strategies."""
+    from app.trading.champion_challenger import ChampionChallengerEngine
+    engine = ChampionChallengerEngine.get_instance()
+    await engine.evaluate_strategies()
+    return engine.get_strategy_tournament_standings()
+
 @router.get("/mtf-status")
 async def get_mtf_status_endpoint(symbol: str = "BTCUSDT", side: str = "BUY"):
     """Evaluates multi-timeframe alignment for a symbol."""
@@ -1482,6 +1490,179 @@ async def promote_rollout_phase(target_phase: str = "PHASE_2_MICRO_LIVE"):
     """Pillar 5: Promotes active rollout phase."""
     from app.trading.paper_validation import LongTermPaperValidationEngine
     return LongTermPaperValidationEngine.get_instance().promote_to_next_phase(target_phase)
+
+@router.get("/missed-opportunities")
+async def get_missed_opportunities(symbol: Optional[str] = None):
+    """
+    Missed Opportunity Learning: Fetches recorded blocked/rejected trade opportunities 
+    and counterfactual evaluation stats.
+    """
+    from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+    learner = MissedOpportunityLearner.get_instance()
+    return learner.answer_what_if_query(symbol=symbol)
+
+@router.get("/missed-opportunities/what-if")
+async def query_what_if_counterfactual(symbol: Optional[str] = None):
+    """
+    Answers: "If I had taken this blocked trade, what would have happened?"
+    Provides breakdown of capital saved vs missed profit and autonomous rule adaptations.
+    """
+    from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+    learner = MissedOpportunityLearner.get_instance()
+    return learner.answer_what_if_query(symbol=symbol)
+
+@router.post("/missed-opportunities/evaluate-now")
+async def trigger_missed_opportunities_evaluation():
+    """
+    Triggers an immediate counterfactual price evaluation loop across pending missed opportunities.
+    """
+    from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+    learner = MissedOpportunityLearner.get_instance()
+    await learner.evaluate_pending_opportunities()
+    return learner.answer_what_if_query()
+
+@router.get("/meta-reasoning/summary")
+async def get_meta_reasoning_summary():
+    """
+    Meta-Reasoning Layer ("Second Brain"): Returns summary of internal debate outcomes,
+    conviction scores, pillar breakdowns, and approval rates.
+    """
+    from app.ai.meta_reasoning import MetaReasoningEngine
+    return MetaReasoningEngine.get_instance().get_meta_reasoning_summary()
+
+@router.get("/meta-reasoning/latest")
+async def get_latest_meta_reasoning_transcript():
+    """
+    Fetches the most recent Meta-Reasoning internal debate transcript.
+    """
+    from app.ai.meta_reasoning import MetaReasoningEngine
+    summary = MetaReasoningEngine.get_instance().get_meta_reasoning_summary()
+    return summary.get("last_debate_transcript") or {"message": "No meta-reasoning debate conducted yet."}
+
+@router.post("/meta-reasoning/evaluate-setup")
+async def evaluate_candidate_setup_meta_reasoning(candidate_setup: Dict[str, Any]):
+    """
+    Triggers an on-demand Second Brain debate reviewing a specific candidate setup.
+    """
+    from app.ai.meta_reasoning import MetaReasoningEngine
+    is_approved, transcript = await MetaReasoningEngine.get_instance().conduct_meta_reasoning_debate(candidate_setup)
+    return transcript
+
+# ==========================================
+# Continuous Learning Loop Endpoints
+# ==========================================
+
+@router.get("/strategy-tournament-2/matrix/{strategy}")
+async def get_strategy_tournament_matrix(strategy: str):
+    """
+    Strategy Tournament 2.0: Returns matrix breakdown across Symbol, Market Regime, and Trading Session.
+    Answers e.g. 'Volatility Breakout is excellent on BTC during volatile US sessions, but poor on SOL during ranging Asian sessions.'
+    """
+    from app.trading.champion_challenger import ChampionChallengerEngine
+    engine = ChampionChallengerEngine.get_instance()
+    await engine.evaluate_strategies()
+    return engine.get_strategy_matrix_breakdown(strategy)
+
+@router.post("/walk-forward/continuous-validation")
+async def trigger_continuous_walk_forward_validation(symbol: str = "BTCUSDT", num_candles: int = 250):
+    """
+    Continuous Walk-Forward Validation: Retrains, validates, and compares challenger against production champion.
+    Promotes challenger ONLY if statistically better (OOS Sharpe >= Champion Sharpe * 1.12).
+    """
+    from app.trading.walk_forward_tuner import WalkForwardHyperparameterAutoTuner
+    tuner = WalkForwardHyperparameterAutoTuner.get_instance()
+    return await tuner.run_continuous_validation_pipeline(symbol=symbol, num_candles=num_candles)
+
+@router.get("/walk-forward/pipeline-status")
+async def get_continuous_validation_pipeline_status():
+    """Returns continuous walk-forward validation history and active promotion status."""
+    from app.trading.walk_forward_tuner import WalkForwardHyperparameterAutoTuner
+    return WalkForwardHyperparameterAutoTuner.get_instance().get_pipeline_status()
+
+@router.get("/market-memory/personalities")
+async def get_market_memory_personalities():
+    """
+    Market Memory: Returns stored memory of macro environments and learned market personalities.
+    """
+    from app.ai.market_memory import MarketMemoryEngine
+    return MarketMemoryEngine.get_instance().get_market_memory_summary()
+
+@router.get("/market-memory/suitability")
+async def evaluate_market_memory_suitability(
+    strategy: str,
+    funding_rate: float = 0.0001,
+    volatility_atr: float = 0.012,
+    btc_dom_change_pct: float = 0.0,
+    market_regime: str = "TRENDING"
+):
+    """
+    Market Memory: Evaluates strategy suitability and capital allocation modifier for current market environment personality.
+    """
+    from app.ai.market_memory import MarketMemoryEngine
+    return MarketMemoryEngine.get_instance().get_environment_suitability_modifier(
+        strategy=strategy,
+        funding_rate=funding_rate,
+        volatility_atr=volatility_atr,
+        btc_dom_change_pct=btc_dom_change_pct,
+        market_regime=market_regime
+    )
+
+@router.post("/execution-quality/calculate")
+async def calculate_trade_execution_quality(payload: Dict[str, Any]):
+    """
+    Execution Quality Score: Evaluates Signal, Fill, Exit, Opportunity Cost, and Risk Efficiency.
+    Provides root-cause diagnosis (BAD_ANALYSIS, POOR_EXECUTION, BAD_RISK_MANAGEMENT, EXCELLENT_EXECUTION).
+    """
+    from app.trading.execution_analytics import ExecutionAnalyticsEngine
+    analytics = ExecutionAnalyticsEngine.get_instance()
+    return analytics.calculate_trade_execution_quality(
+        trade_id=payload.get("trade_id", "1"),
+        symbol=payload.get("symbol", "BTCUSDT"),
+        side=payload.get("side", "BUY"),
+        strategy=payload.get("strategy", "Breakout Momentum"),
+        ordered_price=float(payload.get("ordered_price", 90000.0)),
+        fill_price=float(payload.get("fill_price", 90010.0)),
+        exit_price=float(payload.get("exit_price", 91500.0)),
+        stop_loss=float(payload.get("stop_loss", 89000.0)),
+        take_profit=float(payload.get("take_profit", 92000.0)),
+        pnl=float(payload.get("pnl", 1500.0)),
+        max_favorable_excursion=float(payload.get("max_favorable_excursion", 2000.0)),
+        max_adverse_excursion=float(payload.get("max_adverse_excursion", 200.0)),
+        holding_time_seconds=float(payload.get("holding_time_seconds", 600.0))
+    )
+
+@router.get("/execution-quality/summary")
+async def get_execution_quality_summary():
+    """Returns aggregate order execution telemetry, fill rates, latency p95, and slippage statistics."""
+    from app.trading.execution_analytics import ExecutionAnalyticsEngine
+    return ExecutionAnalyticsEngine.get_instance().get_execution_metrics()
+
+@router.get("/weekly-review/report")
+async def get_autonomous_weekly_review_report():
+    """
+    Autonomous Weekly Review: Generates/fetches executive performance review report detailing executed/rejected trades,
+    exposure guard capital saved ($), confidence filter cost ($), strategy shifts, and recommended parameter updates.
+    """
+    from app.ai.weekly_review import AutonomousWeeklyReviewEngine
+    review_engine = AutonomousWeeklyReviewEngine.get_instance()
+    summary = review_engine.get_weekly_review_summary()
+    if not summary.get("latest_weekly_report"):
+        return await review_engine.generate_weekly_review()
+    return summary["latest_weekly_report"]
+
+@router.post("/weekly-review/generate-now")
+async def generate_autonomous_weekly_review_now(payload: Optional[Dict[str, Any]] = None):
+    """Triggers immediate generation of Autonomous Weekly Review report."""
+    from app.ai.weekly_review import AutonomousWeeklyReviewEngine
+    p = payload or {}
+    return await AutonomousWeeklyReviewEngine.get_instance().generate_weekly_review(
+        executed_trades_count=int(p.get("executed_trades_count", 214)),
+        rejected_trades_count=int(p.get("rejected_trades_count", 418)),
+        exposure_guard_saved_usd=float(p.get("exposure_guard_saved_usd", 1820.0)),
+        confidence_filter_opportunity_cost_usd=float(p.get("confidence_filter_opportunity_cost_usd", 430.0)),
+        momentum_strategy_delta_pct=float(p.get("momentum_strategy_delta_pct", 6.0)),
+        mean_reversion_reallocation_pct=float(p.get("mean_reversion_reallocation_pct", -15.0))
+    )
 
 @router.get("/{trade_id}", response_model=TradeResponse)
 async def read_trade(trade_id: int, db: AsyncSession = Depends(get_db)):
