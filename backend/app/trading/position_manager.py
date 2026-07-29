@@ -85,8 +85,8 @@ class PositionManager:
     def get_active_positions(self) -> List[Dict[str, Any]]:
         return list(self._positions.values())
 
-    async def scale_in_position(self, symbol: str, additional_size: float, add_price: float) -> Optional[Dict[str, Any]]:
-        """Scales into an existing open position by recalculating weighted average entry price and expanded position size."""
+    async def scale_in_position(self, symbol: str, additional_size: float, add_price: float, added_risk_pct: float = 0.0) -> Optional[Dict[str, Any]]:
+        """Scales into an existing open position by recalculating weighted average entry price, expanded position size, and cumulative risk."""
         for trade_id, pos in list(self._positions.items()):
             if pos.get("symbol") == symbol:
                 old_size = pos.get("position_size", 0.0)
@@ -97,8 +97,13 @@ class PositionManager:
                     pos["position_size"] = round(new_size, 6)
                     pos["entry_price"] = round(new_avg_entry, 4)
                     pos["scale_ins"] = pos.get("scale_ins", 0) + 1
+                    pos["risk_pct"] = round(float(pos.get("risk_pct", 0.01)) + added_risk_pct, 6)
                     pos["thesis_strength"] = min(0.99, float(pos.get("thesis_strength", 0.80)) + 0.05)
-                    logger.info(f"🚀 [PYRAMID SCALE-IN EXECUTED] {symbol} trade {trade_id}: size expanded from {old_size} to {new_size:.4f}, avg entry adjusted to ${new_avg_entry:.2f}")
+                    logger.info(
+                        f"🚀 [PYRAMID SCALE-IN EXECUTED] {symbol} trade {trade_id} (Scale-in #{pos['scale_ins']}): "
+                        f"size expanded from {old_size} to {new_size:.4f}, avg entry adjusted to ${new_avg_entry:.2f}, "
+                        f"cumulative risk: {pos['risk_pct']*100:.2f}%"
+                    )
                     return pos
         return None
 

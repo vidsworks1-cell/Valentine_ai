@@ -63,6 +63,7 @@ class PortfolioGuard:
     MAX_DAILY_LOSS = 0.05       # 5% Daily Loss Circuit Breaker
     MAX_CLUSTER_POSITIONS = 2   # Max 2 simultaneous positions per correlation cluster
     MAX_SECTOR_RISK_CAP_PCT = 3.5 # Max 3.5% portfolio risk per sector cluster
+    MAX_SCALE_INS_PER_POSITION = 2 # Max 2 scale-ins per position (3 entries max total)
 
     # Correlation Clusters Mapping
     CORRELATION_CLUSTERS = {
@@ -242,11 +243,38 @@ class PortfolioGuard:
                     pos_pnl = float(existing_pos.get("profit_loss", 0.0))
                     tp_stages = existing_pos.get("tp_stages", [])
                     tp1_hit = tp_stages[0].get("hit", False) if tp_stages else False
+                    scale_ins_count = int(existing_pos.get("scale_ins", 0))
+                    current_risk = float(existing_pos.get("risk_pct", 0.01))
 
-                    if (tp1_hit or pos_thesis >= 0.78 or pos_pnl >= 0.0 or incoming_conf >= 0.80) and incoming_risk_pct <= self.MAX_SYMBOL_EXPOSURE:
-                        scale_risk = round(incoming_risk_pct * 0.5, 4)
+                    proposed_scale_risk = round(incoming_risk_pct * 0.5, 4)
+                    new_cumulative_risk = current_risk + proposed_scale_risk
+
+                    # Enforce Scale-In Hard Limits:
+                    # 1. Hard cap on scale-in count (max 2 scale-ins per position)
+                    if scale_ins_count >= self.MAX_SCALE_INS_PER_POSITION:
+                        msg = (
+                            f"[POSITION EXPOSURE GUARD] Scale-in rejected for {symbol}. "
+                            f"Maximum scale-in limit reached ({scale_ins_count}/{self.MAX_SCALE_INS_PER_POSITION} scale-ins executed)."
+                        )
+                        logger.warning(msg)
+                        self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                        return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
+                    # 2. Hard cap on cumulative risk per symbol (max MAX_SYMBOL_EXPOSURE = 2.0%)
+                    if new_cumulative_risk > self.MAX_SYMBOL_EXPOSURE + 0.0001:
+                        msg = (
+                            f"[POSITION EXPOSURE GUARD] Scale-in rejected for {symbol}. "
+                            f"Would exceed maximum cumulative symbol risk cap (Current: {current_risk*100:.2f}%, "
+                            f"Scale-in: {proposed_scale_risk*100:.2f}%, New Total: {new_cumulative_risk*100:.2f}% > Cap: {self.MAX_SYMBOL_EXPOSURE*100:.2f}%)."
+                        )
+                        logger.warning(msg)
+                        self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                        return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
+                    if (tp1_hit or pos_thesis >= 0.78 or pos_pnl >= 0.0 or incoming_conf >= 0.80):
+                        scale_risk = proposed_scale_risk
                         self._total_scale_ins_executed += 1
-                        msg = f"🚀 [PYRAMID SCALE-IN] Approved 50% scale-in allocation ({scale_risk*100:.1f}% risk) for active {symbol} position."
+                        msg = f"🚀 [PYRAMID SCALE-IN] Approved 50% scale-in allocation ({scale_risk*100:.2f}% risk, Scale-in #{scale_ins_count+1}/{self.MAX_SCALE_INS_PER_POSITION}) for active {symbol} position."
                         logger.info(msg)
                         return PortfolioDecision(
                             approved=True,

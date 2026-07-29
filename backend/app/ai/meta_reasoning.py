@@ -107,19 +107,27 @@ class MetaReasoningEngine:
             momentum_score = 68.0
             mom_note = "Moderate momentum velocity near key decision boundary."
 
-        # 5. Score Higher Timeframe Agreement (4H/1D Alignment)
+        # 5. Score Higher Timeframe Agreement (4H/1D & MTF Alignment)
         try:
             from app.trading.mtf_confirmation import MTFConfirmationGuard
-            mtf_res = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(symbol, side)
-            if mtf_res.get("mtf_aligned", True):
-                htf_score = 90.0
-                htf_note = "4H and 1D macro timeframes strongly aligned with trade side."
+            price_val = setup.get("entry_price", 0.0)
+            strat_val = setup.get("strategy_used") or setup.get("strategy")
+            passed_mtf, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(
+                symbol=symbol,
+                side=side,
+                price=price_val,
+                strategy=strat_val
+            )
+            if passed_mtf:
+                htf_score = min(95.0, max(75.0, mtf_align_pct * 1.1))
+                htf_note = f"4H/1D and MTF timeframes strongly aligned ({mtf_align_pct:.1f}%)."
             else:
-                htf_score = 55.0
-                htf_note = "Counter-trend trade relative to higher timeframe macro structure."
-        except Exception:
-            htf_score = 80.0
-            htf_note = "Higher timeframe multi-timeframe alignment baseline confirmed."
+                htf_score = max(30.0, mtf_align_pct * 0.8)
+                htf_note = f"Counter-trend trade relative to MTF structure ({mtf_align_pct:.1f}% vs required {mtf_details.get('required_threshold_pct', 66.0):.1f}%)."
+        except Exception as me:
+            logger.warning(f"MTF evaluation in MetaReasoning debate failed: {me}")
+            htf_score = 60.0
+            htf_note = "Higher timeframe multi-timeframe alignment baseline unconfirmed."
 
         # 6. Score News & Event Risk
         try:

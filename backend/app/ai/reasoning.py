@@ -268,6 +268,17 @@ class AiReasoningEngine:
                         regime_weight = feature_weights.get("regime_synergy_factor", 0.15)
                         rvol_weight = feature_weights.get("rvol_volume_confluence", 0.25)
 
+                        # Pre-evaluate MTF alignment for early pre-filtering and Bayesian calibration
+                        from app.trading.mtf_confirmation import MTFConfirmationGuard
+                        passed_mtf_pre, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(
+                            symbol=symbol, side=proposed_side, price=price, strategy=strategy
+                        )
+
+                        # Signal Generation Pre-Filter: Skip setups with severe MTF macro contradiction (< 40.0% alignment)
+                        if mtf_details.get("macro_contradiction") or mtf_align_pct < 40.0:
+                            logger.info(f"🚫 [SIGNAL PRE-FILTER] Skipped generating {proposed_side} setup for {symbol} ({strategy}): Severe MTF misalignment ({mtf_align_pct:.1f}%)")
+                            continue
+
                         base_confidence = 0.82
                         regime_confluence_bonus = 0.05 if (market_regime == "TRENDING" and strategy == "Breakout Momentum") or (market_regime == "RANGING" and strategy == "Mean Reversion") else -0.03
                         volatility_quality_bonus = 0.03 if (0.008 <= relative_volatility <= 0.013) else -0.02
@@ -312,7 +323,7 @@ class AiReasoningEngine:
 
                         # 4. Bayesian Belief Calibration
                         bayesian_signals = {
-                            "mtf_aligned": regime_confluence_bonus > 0,
+                            "mtf_aligned": passed_mtf_pre,
                             "rvol_surge": volatility_quality_bonus > 0,
                             "squeeze_firing": squeeze_state == "SQUEEZE_FIRING",
                             "macro_risk_low": macro_info.get("trade_permitted", True),

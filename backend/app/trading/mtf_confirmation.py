@@ -21,11 +21,29 @@ class MTFConfirmationGuard:
     """
     _instance: Optional['MTFConfirmationGuard'] = None
 
+    def __init__(self):
+        self._evaluated_signals_count: int = 0
+        self._approved_signals_count: int = 0
+        self._rejected_signals_count: int = 0
+
     @classmethod
     def get_instance(cls) -> 'MTFConfirmationGuard':
         if cls._instance is None:
             cls._instance = MTFConfirmationGuard()
         return cls._instance
+
+    def get_mtf_telemetry_summary(self) -> Dict[str, Any]:
+        """Returns MTF evaluation telemetry including total evaluated, approved, rejected, and rejection rate."""
+        total = self._evaluated_signals_count
+        approvals = self._approved_signals_count
+        rejections = self._rejected_signals_count
+        rej_rate = round((rejections / total * 100.0), 1) if total > 0 else 0.0
+        return {
+            "meta_evaluated_signals": total,
+            "mtf_approved_signals": approvals,
+            "mtf_rejected_signals": rejections,
+            "mtf_rejection_rate_pct": rej_rate
+        }
 
     async def evaluate_mtf_alignment(
         self,
@@ -103,6 +121,15 @@ class MTFConfirmationGuard:
         # Primary pass state uses strategy-aware weighted rule
         passed = weighted_passed
 
+        # Update Telemetry Counters
+        self._evaluated_signals_count += 1
+        if passed:
+            self._approved_signals_count += 1
+        else:
+            self._rejected_signals_count += 1
+
+        telemetry = self.get_mtf_telemetry_summary()
+
         details = {
             "symbol": sym,
             "proposed_side": side,
@@ -121,7 +148,8 @@ class MTFConfirmationGuard:
             "macro_contradiction": macro_contradiction,
             "unweighted_passed": unweighted_passed,
             "weighted_passed": weighted_passed,
-            "counterfactual_pass_difference": unweighted_passed != weighted_passed
+            "counterfactual_pass_difference": unweighted_passed != weighted_passed,
+            "telemetry": telemetry
         }
 
         if macro_contradiction:

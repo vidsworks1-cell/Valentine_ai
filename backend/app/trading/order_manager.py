@@ -290,7 +290,7 @@ class OrderManager:
                 if pg_decision.action_type == "SCALE_IN":
                     from app.trading.position_manager import PositionManager
                     add_size = RiskEvaluator.calculate_atr_position_size(balance, price, atr_val, risk_pct, stop_loss, apply_volatility_scaling=False)
-                    scaled_pos = await PositionManager.get_instance().scale_in_position(symbol, add_size, price)
+                    scaled_pos = await PositionManager.get_instance().scale_in_position(symbol, add_size, price, added_risk_pct=risk_pct)
                     if scaled_pos:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="INFO",
@@ -562,7 +562,9 @@ class OrderManager:
                     "atr": trade.atr,
                     "binance_order_id": binance_order_id,
                     "confidence": opportunity.get("confidence_score", 0.83),
-                    "strategy": opportunity.get("strategy_used", "Volatility Expansion Breakout")
+                    "strategy": opportunity.get("strategy_used", "Volatility Expansion Breakout"),
+                    "risk_pct": risk_pct,
+                    "scale_ins": 0
                 })
 
             except Exception as e:
