@@ -1968,3 +1968,30 @@ async def run_deterministic_replay_comparison(
         num_candles=num_candles
     )
 
+@router.post("/replay/mtf-experiment")
+async def run_mtf_replay_experiment(num_candles: int = 120):
+    """Executes a replay experiment comparing strict unweighted MTF vs dynamic strategy-weighted MTF alignment."""
+    from app.trading.historical_replay import HistoricalReplayEngine
+    return HistoricalReplayEngine.get_instance().run_mtf_guard_replay_experiment(num_candles=num_candles)
+
+@router.post("/replay/confidence-experiment")
+async def run_confidence_threshold_replay_experiment(
+    thresholds: Optional[List[float]] = None,
+    num_candles: int = 120
+):
+    """Executes a replay experiment comparing candidate confidence thresholds (e.g. 0.72 vs 0.71 vs 0.70)."""
+    from app.trading.historical_replay import HistoricalReplayEngine
+    return HistoricalReplayEngine.get_instance().run_confidence_threshold_replay_experiment(thresholds=thresholds, num_candles=num_candles)
+
+@router.get("/attribution/interaction-stack")
+async def get_interaction_stack_analytics():
+    """Fetches protective guard interaction stack and cumulative defensive drag analytics."""
+    from app.trading.portfolio_attribution import PortfolioAttributionEngine
+    attr = PortfolioAttributionEngine.get_instance()
+    return {
+        "interaction_stack_stats": attr.interaction_stack_stats,
+        "recent_attributions": attr.get_attribution_summary()
+    }
+
+
+

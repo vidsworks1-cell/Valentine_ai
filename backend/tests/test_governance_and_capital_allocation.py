@@ -80,5 +80,40 @@ class TestModelGovernanceAndCapitalAllocation(unittest.TestCase):
         self.assertIn("comparison", result)
         self.assertIn("recommendation", result["comparison"])
 
+    def test_mtf_guard_and_confidence_experiments(self):
+        # 1. Test MTF Replay Experiment
+        mtf_exp = self.replay.run_mtf_guard_replay_experiment(num_candles=40)
+        self.assertIn("policy_results", mtf_exp)
+        self.assertIn("DYNAMIC_STRATEGY_WEIGHTED", mtf_exp["policy_results"])
+        self.assertIn("recommended_policy", mtf_exp["experiment_summary"])
+
+        # 2. Test Confidence Threshold Experiment
+        conf_exp = self.replay.run_confidence_threshold_replay_experiment(thresholds=[0.72, 0.71, 0.70], num_candles=40)
+        self.assertIn("threshold_evaluations", conf_exp)
+        self.assertIn("threshold_0.71", conf_exp["threshold_evaluations"])
+        self.assertIn("optimal_threshold", conf_exp["experiment_summary"])
+
+        # 3. Test Interaction Stack Analytics
+        self.attribution.record_interaction_stack_evaluation(applied_scalers_count=3, cumulative_scale_factor=0.35)
+        summary = self.attribution.get_attribution_summary()
+        self.assertIn("interaction_stack_stats", summary)
+        self.assertIn("mtf_guard", summary["subsystem_breakdown"])
+
+    def test_async_mtf_strategy_weighted_guard(self):
+        import asyncio
+        from app.trading.mtf_confirmation import MTFConfirmationGuard
+        async def _run():
+            guard = MTFConfirmationGuard.get_instance()
+            passed, score, details = await guard.evaluate_mtf_alignment(
+                symbol="BTCUSDT",
+                side="BUY",
+                price=65000.0,
+                strategy="Mean Reversion",
+                conviction_score=82.0
+            )
+            self.assertIn("weighted_alignment_pct", details)
+            self.assertEqual(details["weight_type"], "MEAN_REVERSION_WEIGHTED")
+        asyncio.run(_run())
+
 if __name__ == "__main__":
     unittest.main()

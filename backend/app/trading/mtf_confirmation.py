@@ -27,13 +27,27 @@ class MTFConfirmationGuard:
             cls._instance = MTFConfirmationGuard()
         return cls._instance
 
-    async def evaluate_mtf_alignment(self, symbol: str, side: str, price: float) -> Tuple[bool, float, Dict[str, Any]]:
+    async def evaluate_mtf_alignment(
+        self,
+        symbol: str,
+        side: str,
+        price: float,
+        strategy: Optional[str] = None,
+        conviction_score: Optional[float] = None
+    ) -> Tuple[bool, float, Dict[str, Any]]:
         """
         Evaluates multi-timeframe alignment for a given trade setup.
+        Supports Strategy-Weighted TF Alignment & Dynamic Conviction Threshold Tuning.
+
+        Timeframe Weights:
+        - Mean Reversion: 5m (35%), 15m (45%), 1h (20%) -> Focuses on micro/intermediate exhaustion.
+        - Trend / Volatility Breakout: 5m (20%), 15m (35%), 1h (45%) -> Focuses on macro trend confluence.
+        - Default: Unweighted equal (33.3% each).
+
         Returns:
-            - passed (bool): True if alignment >= 66% and no macro contradiction
-            - alignment_pct (float): Alignment score percentage (e.g. 66.7 or 100.0)
-            - detail_dict (dict): Breakdown per timeframe (5m, 15m, 1h)
+            - passed (bool): True if alignment meets standard/weighted threshold without hard macro contradiction.
+            - alignment_pct (float): Dynamic weighted or unweighted alignment score percentage.
+            - detail_dict (dict): Comprehensive breakdown per timeframe (5m, 15m, 1h), weights used, and counterfactuals.
         """
         sym = symbol.upper()
         cache = await PriceCache.get_instance()
@@ -47,26 +61,70 @@ class MTFConfirmationGuard:
         tf_1h = side if (price_int) % 2 == 0 else ("SELL" if side == "BUY" else "BUY")
 
         agree_count = sum(1 for tf in [tf_5m, tf_15m, tf_1h] if tf == side)
-        alignment_pct = round((agree_count / 3.0) * 100.0, 1)
+        unweighted_pct = round((agree_count / 3.0) * 100.0, 1)
 
-        macro_contradiction = (tf_1h != side and agree_count < 2)
+        # Strategy-aware weighting assignment
+        strat_clean = (strategy or "").lower()
+        if "mean reversion" in strat_clean:
+            w_5m, w_15m, w_1h = 0.35, 0.45, 0.20
+            weight_type = "MEAN_REVERSION_WEIGHTED"
+        elif "breakout" in strat_clean or "trend" in strat_clean:
+            w_5m, w_15m, w_1h = 0.20, 0.35, 0.45
+            weight_type = "TREND_BREAKOUT_WEIGHTED"
+        else:
+            w_5m, w_15m, w_1h = 0.333, 0.333, 0.334
+            weight_type = "UNWEIGHTED_EQUAL"
+
+        weighted_score = (
+            (1.0 if tf_5m == side else 0.0) * w_5m +
+            (1.0 if tf_15m == side else 0.0) * w_15m +
+            (1.0 if tf_1h == side else 0.0) * w_1h
+        ) * 100.0
+        weighted_pct = round(weighted_score, 1)
+
+        # Hard Macro Contradiction Guard: BUY during strong 1h downtrend when micro support is absent
+        macro_contradiction = (tf_1h != side and agree_count < 2 and weighted_pct < 45.0)
+
+        # Dynamic Threshold Relaxation for High Conviction Signals (from Second Brain)
+        required_threshold = 66.0
+        if conviction_score and conviction_score >= 80.0:
+            required_threshold = 55.0  # High conviction allows slight MTF divergence if micro/intermediate agree
+
+        # Final Pass Determination
+        unweighted_passed = unweighted_pct >= 66.0
+        weighted_passed = weighted_pct >= required_threshold and not macro_contradiction
+        
+        # Primary pass state uses strategy-aware weighted rule
+        passed = weighted_passed
 
         details = {
             "symbol": sym,
             "proposed_side": side,
+            "strategy": strategy or "GENERIC",
+            "conviction_score": conviction_score,
             "tf_5m_bias": tf_5m,
             "tf_15m_bias": tf_15m,
             "tf_1h_bias": tf_1h,
             "agree_count": agree_count,
-            "alignment_pct": alignment_pct,
-            "macro_contradiction": macro_contradiction
+            "unweighted_alignment_pct": unweighted_pct,
+            "weighted_alignment_pct": weighted_pct,
+            "weight_type": weight_type,
+            "weights_used": {"5m": w_5m, "15m": w_15m, "1h": w_1h},
+            "required_threshold_pct": required_threshold,
+            "macro_contradiction": macro_contradiction,
+            "unweighted_passed": unweighted_passed,
+            "weighted_passed": weighted_passed,
+            "counterfactual_pass_difference": unweighted_passed != weighted_passed
         }
 
         if macro_contradiction:
-            return False, alignment_pct, details
+            logger.info(f"🛡️ [MTF GUARD REJECT] {sym} {side} blocked by hard 1h macro contradiction (Weighted: {weighted_pct}%)")
+            return False, weighted_pct, details
 
-        passed = alignment_pct >= 66.0
-        return passed, alignment_pct, details
+        if unweighted_passed != weighted_passed:
+            logger.info(f"🧠 [MTF GUARD WEIGHTED DIVERGENCE] {sym} {side} ({strategy}): Unweighted={unweighted_pct}%, Weighted={weighted_pct}% (Threshold: {required_threshold}%). Result: {'PASS' if passed else 'FAIL'}")
+
+        return passed, weighted_pct, details
 
     async def evaluate_volume_liquidity_confluence(self, symbol: str, side: str, price: float) -> Tuple[bool, float, Dict[str, Any]]:
         """
