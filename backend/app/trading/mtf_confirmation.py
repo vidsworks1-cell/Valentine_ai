@@ -87,8 +87,14 @@ class MTFConfirmationGuard:
 
         # Dynamic Threshold Relaxation for High Conviction Signals (from Second Brain)
         required_threshold = 66.0
-        if conviction_score and conviction_score >= 80.0:
+        relaxation_applied = False
+        if conviction_score and conviction_score >= 75.0:
             required_threshold = 55.0  # High conviction allows slight MTF divergence if micro/intermediate agree
+            relaxation_applied = True
+            logger.info(
+                f"⚡ [HIGH CONVICTION MTF RELAXATION] {sym} {side} ({strategy}): Conviction score {conviction_score:.1f} >= 75.0. "
+                f"Relaxed MTF threshold from 66.0% to 55.0%."
+            )
 
         # Final Pass Determination
         unweighted_passed = unweighted_pct >= 66.0
@@ -111,6 +117,7 @@ class MTFConfirmationGuard:
             "weight_type": weight_type,
             "weights_used": {"5m": w_5m, "15m": w_15m, "1h": w_1h},
             "required_threshold_pct": required_threshold,
+            "relaxation_applied": relaxation_applied,
             "macro_contradiction": macro_contradiction,
             "unweighted_passed": unweighted_passed,
             "weighted_passed": weighted_passed,

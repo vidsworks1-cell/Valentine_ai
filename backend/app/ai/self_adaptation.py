@@ -55,6 +55,10 @@ class SelfAdaptationEngine:
         }
         self._last_calibration_time: Optional[float] = None
         self._min_alpha_improvement_usd: float = 30.0
+        
+        # Multi-Penalty Co-occurrence Tracking & Smart Dampener State
+        self._multi_penalty_events_count: int = 0
+        self._stacked_penalty_history: List[Dict[str, Any]] = []
 
     @classmethod
     def get_instance(cls) -> 'SelfAdaptationEngine':
@@ -546,6 +550,34 @@ class SelfAdaptationEngine:
         except Exception:
             pass
 
+        # 5. Multi-Penalty Stacking Detection & Smart Dampener Guard
+        negative_penalties = [
+            r for r in reasons if "penalty" in r.lower() or "penalized" in r.lower()
+        ]
+        if len(negative_penalties) >= 2:
+            self._multi_penalty_events_count += 1
+            raw_modifier = adaptive_modifier
+            # Apply Cumulative Dampener Cap (Max -0.15 cumulative negative modifier)
+            MAX_CUMULATIVE_PENALTY = -0.15
+            if adaptive_modifier < MAX_CUMULATIVE_PENALTY:
+                adaptive_modifier = MAX_CUMULATIVE_PENALTY
+                reasons.append(
+                    f"[STACKED PENALTY DAMPENER] Detected {len(negative_penalties)} concurrent penalties (Raw: {raw_modifier:+.2f}). "
+                    f"Applied smart dampening cap: {adaptive_modifier:+.2f} to prevent over-conservatism."
+                )
+            event_entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "symbol": symbol,
+                "strategy": strategy,
+                "regime": regime,
+                "penalties_count": len(negative_penalties),
+                "raw_modifier": round(raw_modifier, 2),
+                "dampened_modifier": round(adaptive_modifier, 2),
+                "reasons": negative_penalties
+            }
+            self._stacked_penalty_history.insert(0, event_entry)
+            self._stacked_penalty_history = self._stacked_penalty_history[:20]  # retain last 20 events
+
         return is_allowed, round(adaptive_modifier, 2), reasons
 
     def get_dynamic_confidence_threshold(self, base_persona_min_conf: float = 0.78, market_regime: str = "TRENDING") -> float:
@@ -669,6 +701,11 @@ class SelfAdaptationEngine:
             "total_closed_trades": self._total_closed_trades,
             "dynamic_threshold_calibration": self._dynamic_threshold_calibration,
             "shadow_policy": getattr(self, "_shadow_policy", {}),
+            "stacked_penalty_telemetry": {
+                "multi_penalty_events_count": getattr(self, "_multi_penalty_events_count", 0),
+                "max_cumulative_penalty_cap": -0.15,
+                "recent_stacked_events": getattr(self, "_stacked_penalty_history", [])[:5]
+            },
             "strategy_performance": self._strategy_stats,
             "symbol_performance": self._symbol_stats,
             "regime_volatility_matrix": self._matrix_stats,

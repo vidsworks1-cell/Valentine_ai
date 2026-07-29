@@ -431,6 +431,7 @@ class AiReasoningEngine:
                             meta_approved, meta_transcript = await meta_engine.conduct_meta_reasoning_debate(self.last_detected_setup)
                             
                             self.last_detected_setup["meta_reasoning"] = meta_transcript
+                            self.last_detected_setup["conviction_score"] = meta_transcript.get("overall_conviction_score", adapted_confidence * 100.0)
 
                             if meta_approved:
                                 logger.info(

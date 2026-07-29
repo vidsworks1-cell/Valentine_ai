@@ -109,6 +109,27 @@ class TestModelGovernanceAndCapitalAllocation(unittest.TestCase):
         self.assertIn("shadow_policy", calib_res)
         self.assertEqual(calib_res["shadow_policy"]["status"], "PROMOTED_LIVE")
 
+        # 5. Test Multi-Penalty Co-occurrence Tracking & Smart Dampening Cap
+        import asyncio
+        async def _test_adaptation():
+            # Inject simulated penalties
+            engine._strategy_stats["Mean Reversion"] = {"confidence_modifier": -0.10, "status": "PENALIZED", "win_rate_pct": 30.0, "recent_sample": 10}
+            engine._symbol_stats["BTCUSDT"] = {"confidence_modifier": -0.08, "status": "PENALIZED", "win_rate_pct": 32.0}
+            allowed, mod, reasons = await engine.evaluate_opportunity_adaptation({
+                "strategy_used": "Mean Reversion",
+                "symbol": "BTCUSDT",
+                "market_regime": "TRENDING",
+                "entry_price": 65000.0,
+                "atr": 600.0
+            })
+            self.assertTrue(allowed)
+            self.assertEqual(mod, -0.15)  # Dampened from -0.28 raw to -0.15 cap
+            summary = engine.get_adaptation_summary()
+            self.assertIn("stacked_penalty_telemetry", summary)
+            self.assertGreaterEqual(summary["stacked_penalty_telemetry"]["multi_penalty_events_count"], 1)
+
+        asyncio.run(_test_adaptation())
+
 
     def test_async_mtf_strategy_weighted_guard(self):
         import asyncio
@@ -120,10 +141,12 @@ class TestModelGovernanceAndCapitalAllocation(unittest.TestCase):
                 side="BUY",
                 price=65000.0,
                 strategy="Mean Reversion",
-                conviction_score=82.0
+                conviction_score=78.5
             )
             self.assertIn("weighted_alignment_pct", details)
             self.assertEqual(details["weight_type"], "MEAN_REVERSION_WEIGHTED")
+            self.assertTrue(details["relaxation_applied"])
+            self.assertEqual(details["required_threshold_pct"], 55.0)
         asyncio.run(_run())
 
 if __name__ == "__main__":

@@ -76,12 +76,17 @@ class OrderManager:
 
             # 0c. Multi-Timeframe Confirmation Guard Check (5m, 15m, 1h alignment)
             from app.trading.mtf_confirmation import MTFConfirmationGuard
+            conviction_val = (
+                opportunity.get("conviction_score") or
+                opportunity.get("meta_reasoning", {}).get("overall_conviction_score") or
+                (opportunity.get("confidence_score", 0.0) * 100.0)
+            )
             passed_mtf, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(
                 symbol=symbol,
                 side=side,
                 price=opportunity.get("entry_price", 0.0),
                 strategy=opportunity.get("strategy_used"),
-                conviction_score=opportunity.get("conviction_score")
+                conviction_score=conviction_val
             )
             if not passed_mtf:
                 mtf_reason = (
