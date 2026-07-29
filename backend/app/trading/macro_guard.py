@@ -26,8 +26,8 @@ class SystemicMacroGuardEngine:
     _instance: Optional['SystemicMacroGuardEngine'] = None
 
     def __init__(self):
-        self.risk_threshold_elevated: float = 0.65
-        self.risk_threshold_critical: float = 0.80
+        self.risk_threshold_elevated: float = 0.72
+        self.risk_threshold_critical: float = 0.82
         self.lead_asset: str = "BTCUSDT"
         self.recent_trim_events: List[Dict[str, Any]] = []
         self.last_evaluated_at: Optional[str] = None
@@ -124,8 +124,8 @@ class SystemicMacroGuardEngine:
         else:
             regime = "NORMAL_DECENTRALIZED"
 
-        # Pre-emptive De-risking Action during Systemic Cascade
-        if regime in ["SYSTEMIC_CASCADE_WARNING", "ELEVATED_MACRO_RISK"]:
+        # Pre-emptive De-risking Action during Systemic Cascade (Only on critical risk or BTC impulse drop)
+        if regime == "SYSTEMIC_CASCADE_WARNING" or (regime == "ELEVATED_MACRO_RISK" and btc_impulse_drop):
             try:
                 from app.trading.position_manager import PositionManager
                 pm = PositionManager.get_instance()
@@ -142,7 +142,8 @@ class SystemicMacroGuardEngine:
                         current_px = prices.get(symbol, pos.get("entry_price", 100.0))
                         new_sl = round(max(orig_sl, current_px * 0.995), 2) # Tighten stop loss to 0.5% below current price
 
-                        if new_sl > orig_sl:
+                        # Require a meaningful step (at least 0.5% higher than orig_sl) to prevent micro-adjusting on every tick
+                        if new_sl >= round(orig_sl * 1.005, 2):
                             pos["trailing_stop"] = new_sl
                             event = {
                                 "trade_id": trade_id,

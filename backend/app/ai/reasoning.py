@@ -33,6 +33,7 @@ class AiReasoningEngine:
         "PORTFOLIO_RISK_HEAT": 120.0,    # 120s: Wait for portfolio risk/heat to ease
         "CORRELATION_CLUSTER": 180.0,    # 180s: Wait for cluster risk to subside
         "SELF_ADAPTATION_BLOCK": 180.0,  # 180s: Strategy regime mismatch cooldown
+        "DIRECTIONAL_WHIPSAW": 300.0,   # 300s: Cooldown when opposite direction signal is rejected to prevent whipsaws
         "MARKET_DATA_STALE": 30.0,       # 30s: Short retry for price feed updates
         "EMERGENCY_SAFETY": 600.0,       # 600s (10m): Extended safety hold on system errors
         "DEFAULT": 120.0

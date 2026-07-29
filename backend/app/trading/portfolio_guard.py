@@ -292,12 +292,42 @@ class PortfolioGuard:
                         return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
                 else:
                     # Existing position in OPPOSITE direction (e.g. Existing LONG, incoming SELL signal)
-                    if incoming_conf >= 0.76:
+                    opened_at = existing_pos.get("opened_at") or existing_pos.get("timestamp")
+                    pos_pnl = float(existing_pos.get("profit_loss", 0.0))
+                    
+                    # Directional Whipsaw Guard: Calculate open duration seconds
+                    holding_seconds = 9999.0
+                    if opened_at:
+                        try:
+                            if isinstance(opened_at, (int, float)):
+                                holding_seconds = time.time() - float(opened_at)
+                            elif isinstance(opened_at, str):
+                                dt = datetime.fromisoformat(opened_at.replace('Z', '+00:00'))
+                                holding_seconds = (datetime.now(timezone.utc) - dt).total_seconds()
+                        except Exception:
+                            holding_seconds = 9999.0
+
+                    min_required_holding = 300 if pos_pnl < 0 else 180
+                    if holding_seconds < min_required_holding:
+                        msg = (
+                            f"🛡️ [DIRECTIONAL WHIPSAW GUARD] Blocked opposite {proposed_side} signal for {symbol}. "
+                            f"Active opposite {existing_side} position was opened only {holding_seconds:.0f}s ago (< {min_required_holding}s min holding period to prevent whipsaw)."
+                        )
+                        logger.warning(msg)
+                        try:
+                            from app.ai.reasoning import AiReasoningEngine
+                            AiReasoningEngine.get_instance().set_cooldown(symbol, proposed_side, category="DIRECTIONAL_WHIPSAW", reason=msg)
+                        except Exception:
+                            pass
+                        self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                        return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
+                    if incoming_conf >= 0.82:
                         rebal_risk = round(incoming_risk_pct * 0.75, 4)
                         self._total_hedges_executed += 1
                         msg = (
-                            f"🔄 [OPPOSITE SIGNAL REBALANCE] Existing {existing_side} position in {symbol}. "
-                            f"Incoming high-confidence ({incoming_conf:.2f}) {proposed_side} signal triggers 50% partial close of active {existing_side} position and opens new {proposed_side} hedge."
+                            f"🔄 [OPPOSITE SIGNAL REBALANCE] Existing {existing_side} position in {symbol} held for {holding_seconds:.0f}s. "
+                            f"Incoming ultra-high-confidence ({incoming_conf:.2f}) {proposed_side} signal triggers 50% partial close of active {existing_side} position and opens new {proposed_side} hedge."
                         )
                         logger.info(msg)
                         return PortfolioDecision(
@@ -312,7 +342,7 @@ class PortfolioGuard:
                     else:
                         msg = (
                             f"[POSITION EXPOSURE GUARD] Active opposite {existing_side} position for {symbol} exists, "
-                            f"but incoming {proposed_side} signal confidence ({incoming_conf:.2f}) is below hedge threshold (0.76)."
+                            f"but incoming {proposed_side} signal confidence ({incoming_conf:.2f}) is below hedge threshold (0.82)."
                         )
                         logger.warning(msg)
                         self._record_rejected_opportunity(opportunity, msg, incoming_conf)
