@@ -1889,3 +1889,82 @@ async def update_trade(trade_id: int, trade_in: TradeUpdate, db: AsyncSession = 
             detail=f"Trade with ID {trade_id} not found"
         )
     return trade
+
+# ==========================================
+# Model Governance & Lineage Registry APIs
+# ==========================================
+
+@router.get("/governance/versions")
+async def get_model_governance_summary():
+    """Fetches active model subsystem versions, decision lineage history, and rollback registry."""
+    from app.trading.model_governance import ModelGovernanceEngine
+    return ModelGovernanceEngine.get_instance().get_governance_summary()
+
+@router.post("/governance/rollback")
+async def trigger_model_version_rollback(target_checkpoint_id: Optional[str] = None, reason: str = "Manual governance rollback"):
+    """Triggers an automatic or manual version rollback to a previous stable model checkpoint."""
+    from app.trading.model_governance import ModelGovernanceEngine
+    return ModelGovernanceEngine.get_instance().trigger_rollback(target_checkpoint_id=target_checkpoint_id, reason=reason)
+
+@router.post("/governance/checkpoint")
+async def create_model_version_checkpoint(new_versions: Dict[str, str], notes: str = ""):
+    """Promotes a new set of subsystem versions into an active version checkpoint."""
+    from app.trading.model_governance import ModelGovernanceEngine
+    return ModelGovernanceEngine.get_instance().create_version_checkpoint(new_versions=new_versions, notes=notes)
+
+# ==========================================
+# Dynamic Capital Allocation Engine APIs
+# ==========================================
+
+@router.get("/capital-allocation")
+async def get_capital_allocation_summary(total_equity: float = 100000.0):
+    """Fetches dynamic strategy capital allocation breakdown and portfolio rebalance history."""
+    from app.trading.capital_allocation import CapitalAllocationEngine
+    return CapitalAllocationEngine.get_instance().get_allocation_summary(total_equity=total_equity)
+
+@router.post("/capital-allocation/rebalance")
+async def rebalance_capital_allocation(total_equity: float = 100000.0, current_regime: str = "VOLATILE"):
+    """Forces dynamic portfolio capital rebalancing across active strategy buckets."""
+    from app.trading.capital_allocation import CapitalAllocationEngine
+    return CapitalAllocationEngine.get_instance().recalculate_strategy_allocations(total_equity=total_equity, current_regime=current_regime)
+
+# ==========================================
+# Long-Term Portfolio Performance Attribution APIs
+# ==========================================
+
+@router.get("/attribution/summary")
+async def get_portfolio_attribution_summary():
+    """Fetches institutional portfolio performance attribution metrics across autonomous subsystems."""
+    from app.trading.portfolio_attribution import PortfolioAttributionEngine
+    return PortfolioAttributionEngine.get_instance().get_attribution_summary()
+
+# ==========================================
+# Deterministic Multi-Version Replay APIs
+# ==========================================
+
+@router.post("/replay/deterministic-compare")
+async def run_deterministic_replay_comparison(
+    control_versions: Optional[Dict[str, str]] = None,
+    challenger_versions: Optional[Dict[str, str]] = None,
+    num_candles: int = 100
+):
+    """Executes a side-by-side deterministic replay comparison between Control and Challenger model versions."""
+    from app.trading.historical_replay import HistoricalReplayEngine
+    from app.trading.model_governance import ModelGovernanceEngine
+    
+    ctrl = control_versions or ModelGovernanceEngine.get_instance().active_versions
+    chall = challenger_versions or {
+        "strategy_engine": "v2.5.0-rc1",
+        "portfolio_guard": "v2.0.0-rc1",
+        "meta_reasoning": "v3.2.0-rc1",
+        "self_adaptation": "v2.3.0-rc1",
+        "confidence_model": "v3.4.0-rc1",
+        "sizing_engine": "v2.1.0-rc1"
+    }
+    
+    return HistoricalReplayEngine.get_instance().run_deterministic_version_comparison(
+        control_versions=ctrl,
+        challenger_versions=chall,
+        num_candles=num_candles
+    )
+
