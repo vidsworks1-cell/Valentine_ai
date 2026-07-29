@@ -465,48 +465,31 @@ class AiReasoningEngine:
                                 logger.info(f"🧠 [SELF-ADAPTATION INSIGHTS] {adaptation_log_str}")
                             # Trigger automated order placement
                             await self._propose_trade_to_manager(self.last_detected_setup)
-                        else:
-                            if not meta_approved:
-                                meta_rejection_reason = (
-                                    f"Meta-Reasoning Second Brain rejected trade: {meta_transcript['debate_conclusion']}"
+                        elif not meta_approved:
+                            meta_rejection_reason = (
+                                f"Meta-Reasoning Second Brain rejected trade: {meta_transcript.get('debate_conclusion', 'Low conviction')}"
+                            )
+                            logger.warning(f"🚫 [META-REASONING REJECTED] {symbol} {proposed_side} via {strategy}: {meta_rejection_reason}")
+                            self.set_cooldown(symbol, proposed_side, category="META_REASONING_REJECT", reason=meta_rejection_reason, price=price)
+                            try:
+                                from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+                                MissedOpportunityLearner.get_instance().record_missed_opportunity(
+                                    symbol=symbol,
+                                    side=proposed_side,
+                                    entry_price=price,
+                                    stop_loss=stop_loss,
+                                    take_profit=take_profit,
+                                    strategy=strategy,
+                                    category="META_REASONING_REJECT",
+                                    reason=meta_rejection_reason,
+                                    confidence_score=adapted_confidence,
+                                    confidence_threshold=dynamic_threshold
                                 )
-                                logger.warning(f"🚫 [META-REASONING REJECTED] {symbol} {proposed_side} via {strategy}: {meta_rejection_reason}")
-                                self.set_cooldown(symbol, proposed_side, category="META_REASONING_REJECT", reason=meta_rejection_reason, price=price)
-                                try:
-                                    from app.ai.missed_opportunity_learner import MissedOpportunityLearner
-                                    MissedOpportunityLearner.get_instance().record_missed_opportunity(
-                                        symbol=symbol,
-                                        side=proposed_side,
-                                        entry_price=price,
-                                        stop_loss=stop_loss,
-                                        take_profit=take_profit,
-                                        strategy=strategy,
-                                        category="META_REASONING_REJECT",
-                                        reason=meta_rejection_reason,
-                                        confidence_score=adapted_confidence,
-                                        confidence_threshold=dynamic_threshold
-                                    )
-                                except Exception as mol_err:
-                                    logger.error(f"Failed to record missed opportunity for meta reasoning reject: {mol_err}")
-                                try:
-                                    from app.ai.missed_opportunity_learner import MissedOpportunityLearner
-                                    MissedOpportunityLearner.get_instance().record_missed_opportunity(
-                                        symbol=symbol,
-                                        side=proposed_side,
-                                        entry_price=price,
-                                        stop_loss=stop_loss,
-                                        take_profit=take_profit,
-                                        strategy=strategy,
-                                        category="META_REASONING_REJECT",
-                                        reason=meta_rejection_reason,
-                                        confidence_score=adapted_confidence,
-                                        confidence_threshold=0.70
-                                    )
-                                except Exception as mol_err:
-                                    logger.error(f"Failed to record missed opportunity for meta-reasoning reject: {mol_err}")
+                            except Exception as mol_err:
+                                logger.error(f"Failed to record missed opportunity for meta reasoning reject: {mol_err}")
                         else:
                             rejection_msg = f"Confidence filter failed ({adapted_confidence} < {dynamic_threshold})"
-                            logger.info(f"⚠️ OPPORTUNITY REJECTED BY CONFIDENCE FILTER: {symbol} {proposed_side} via {strategy} at {price} (Persona: {active_persona.get('name', 'Preset')}, Adapted Conf: {adapted_confidence} < Dynamic Threshold: {dynamic_threshold})")
+                            logger.info(f"⚠️ OPPORTUNITY REJECTED BY CONFIDENCE FILTER: {symbol} {proposed_side} via {strategy} at ${price} (Persona: {active_persona.get('name', 'Preset')}, Adapted Conf: {adapted_confidence} < Dynamic Threshold: {dynamic_threshold})")
                             # Place on adaptive confidence filter cooldown (45s)
                             self.set_cooldown(symbol, proposed_side, category="CONFIDENCE_FILTER", reason=rejection_msg, price=price)
                             try:
