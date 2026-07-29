@@ -37,8 +37,11 @@ class RiskEvaluator:
         if relative_volatility > 0.015:
             scaling_factor = 0.015 / relative_volatility
             adjusted_risk_pct = max_risk_pct * scaling_factor
-            adjusted_risk_pct = max(adjusted_risk_pct, 0.005) # Keep a floor of 0.5% risk
-            logger.info(f"⚡ High volatility ({relative_volatility:.4f}). Scaling risk pct from {max_risk_pct*100:.1f}% to {adjusted_risk_pct*100:.2f}%")
+            # Portfolio-level constraint (max_risk_pct) is the final ceiling authority.
+            # Volatility scaling reduces risk further and never raises risk above max_risk_pct.
+            min_floor = min(max_risk_pct, 0.001)
+            adjusted_risk_pct = max(min(adjusted_risk_pct, max_risk_pct), min_floor)
+            logger.info(f"⚡ High volatility ({relative_volatility:.4f}). Scaling risk pct from {max_risk_pct*100:.2f}% to {adjusted_risk_pct*100:.2f}% (Portfolio Ceiling: {max_risk_pct*100:.2f}%)")
 
         allowed_risk_amt = balance * adjusted_risk_pct
 
@@ -80,7 +83,8 @@ class RiskEvaluator:
         if relative_volatility > 0.015:
             scaling_factor = 0.015 / relative_volatility
             adjusted_risk_pct = max_risk_pct * scaling_factor
-            adjusted_risk_pct = max(adjusted_risk_pct, 0.005)
+            min_floor = min(max_risk_pct, 0.001)
+            adjusted_risk_pct = max(min(adjusted_risk_pct, max_risk_pct), min_floor)
 
         max_allowed_risk = round(balance * adjusted_risk_pct, 4)
         actual_risk = round(stop_distance * size, 4)

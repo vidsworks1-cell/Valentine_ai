@@ -149,5 +149,28 @@ class TestModelGovernanceAndCapitalAllocation(unittest.TestCase):
             self.assertEqual(details["required_threshold_pct"], 55.0)
         asyncio.run(_run())
 
+    def test_risk_evaluator_portfolio_ceiling_preservation(self):
+        from app.risk.evaluator import RiskEvaluator
+        # Portfolio guard restricts max risk pct to 0.2% (0.002)
+        portfolio_restricted_risk_pct = 0.002
+        balance = 100000.0
+        entry_price = 65000.0
+        high_atr = 2000.0  # High volatility relative to price (2000/65000 = ~0.0307 > 0.015)
+        stop_loss = 64000.0
+
+        size = RiskEvaluator.calculate_atr_position_size(
+            balance=balance,
+            entry_price=entry_price,
+            atr=high_atr,
+            max_risk_pct=portfolio_restricted_risk_pct,
+            stop_loss=stop_loss
+        )
+        
+        # Risk evaluated: stop_distance (1000.0) * size
+        # Must strictly be <= balance * portfolio_restricted_risk_pct (200.0 USD)
+        actual_risk_usd = 1000.0 * size
+        allowed_risk_usd = balance * portfolio_restricted_risk_pct
+        self.assertLessEqual(actual_risk_usd, allowed_risk_usd + 0.01)
+
 if __name__ == "__main__":
     unittest.main()

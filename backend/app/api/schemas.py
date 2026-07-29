@@ -17,8 +17,8 @@ except ImportError:
 class TradeBase(BaseModel):
     symbol: str = Field(..., max_length=20, examples=["BTCUSDT"])
     side: str = Field(..., examples=["BUY"])
-    entry_price: float = Field(..., gt=0.0)
-    position_size: float = Field(..., gt=0.0)
+    entry_price: float = Field(0.0, ge=0.0)
+    position_size: float = Field(0.0, ge=0.0)
     stop_loss: float = Field(0.0, ge=0.0)
     take_profit: float = Field(0.0, ge=0.0)
     strategy_used: str = Field("AZA_STRATEGY")

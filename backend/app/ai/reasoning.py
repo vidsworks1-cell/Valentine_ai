@@ -339,7 +339,37 @@ class AiReasoningEngine:
                         )
 
                         bayesian_confidence = bayesian_calibration.get("calibrated_confidence", base_confidence)
-                        raw_confidence = round(max(0.70, min(0.96, (0.5 * bayesian_confidence) + (0.5 * (base_confidence + pruned_signal_adjustment)) + (random.random() * 0.02))), 2)
+                        
+                        # Pre-evaluate Meta-Reasoning Second Brain to get multi-pillar conviction score
+                        from app.ai.meta_reasoning import MetaReasoningEngine
+                        meta_engine = MetaReasoningEngine.get_instance()
+                        
+                        pre_setup = {
+                            "symbol": symbol,
+                            "side": proposed_side,
+                            "entry_price": price,
+                            "stop_loss": stop_loss,
+                            "take_profit": take_profit,
+                            "strategy_used": strategy,
+                            "market_regime": market_regime,
+                            "atr": atr,
+                            "squeeze_info": squeeze_info,
+                            "confidence_score": bayesian_confidence
+                        }
+                        meta_approved, meta_transcript = await meta_engine.conduct_meta_reasoning_debate(pre_setup)
+                        meta_conviction_score = meta_transcript.get("overall_conviction_score", 75.0)
+                        meta_conviction_decimal = meta_conviction_score / 100.0
+
+                        # Un-compressed Composite Raw Confidence incorporating 7-Pillar Meta Conviction
+                        # Restores broad dispersion across [0.55 - 0.95] rather than compressing into 0.62-0.65
+                        raw_confidence = round(
+                            max(0.50, min(0.96,
+                                (0.45 * meta_conviction_decimal) +
+                                (0.35 * bayesian_confidence) +
+                                (0.20 * (base_confidence + pruned_signal_adjustment))
+                            )),
+                            2
+                        )
 
                         # Dynamic confidence thresholding configured by Active Trading Persona Preset & Self-Adaptation Engine
                         from app.trading.trading_persona import TradingPersonaPresetEngine
@@ -400,7 +430,7 @@ class AiReasoningEngine:
                             continue
 
                         adapted_confidence = round(max(0.0, min(1.0, raw_confidence + adaptive_modifier)), 2)
-                        passed_filter = adapted_confidence >= dynamic_threshold
+                        passed_filter = (adapted_confidence >= dynamic_threshold) and meta_approved
 
                         adaptation_log_str = "; ".join(adaptation_reasons) if adaptation_reasons else "Performance nominal."
                         
@@ -418,6 +448,8 @@ class AiReasoningEngine:
                             "adaptive_modifier": adaptive_modifier,
                             "confidence_threshold": dynamic_threshold,
                             "passed_filter": passed_filter,
+                            "meta_reasoning": meta_transcript,
+                            "conviction_score": meta_conviction_score,
                             "entry_reason": f"AI Engine evaluated ticker telemetry. Symbol {symbol} trading at ${price} with live update count {tally}. High conviction {strategy} trigger generated based on dynamic ATR of ${atr}. Applied dynamic confidence threshold: {dynamic_threshold}. Self-Adaptation: {adaptation_log_str}",
                             "adaptation_insights": adaptation_reasons,
                             "atr": atr,
@@ -425,29 +457,37 @@ class AiReasoningEngine:
                         }
                         
                         if passed_filter:
-                            # 5. Meta-Reasoning Second Brain Debate Review
-                            from app.ai.meta_reasoning import MetaReasoningEngine
-                            meta_engine = MetaReasoningEngine.get_instance()
-                            meta_approved, meta_transcript = await meta_engine.conduct_meta_reasoning_debate(self.last_detected_setup)
-                            
-                            self.last_detected_setup["meta_reasoning"] = meta_transcript
-                            self.last_detected_setup["conviction_score"] = meta_transcript.get("overall_conviction_score", adapted_confidence * 100.0)
-
-                            if meta_approved:
-                                logger.info(
-                                    f"🚨 OPPORTUNITY APPROVED BY META-REASONING SECOND BRAIN: {symbol} {proposed_side} via {strategy} at ${price} "
-                                    f"(Conviction Score: {meta_transcript['overall_conviction_score']}/100 >= 70)"
-                                )
-                                if adaptation_reasons:
-                                    logger.info(f"🧠 [SELF-ADAPTATION INSIGHTS] {adaptation_log_str}")
-                                # Trigger automated order placement
-                                await self._propose_trade_to_manager(self.last_detected_setup)
-                            else:
+                            logger.info(
+                                f"🚨 OPPORTUNITY APPROVED BY META-REASONING SECOND BRAIN: {symbol} {proposed_side} via {strategy} at ${price} "
+                                f"(Conviction Score: {meta_conviction_score}/100 >= 70 | Adapted Conf: {adapted_confidence} >= {dynamic_threshold})"
+                            )
+                            if adaptation_reasons:
+                                logger.info(f"🧠 [SELF-ADAPTATION INSIGHTS] {adaptation_log_str}")
+                            # Trigger automated order placement
+                            await self._propose_trade_to_manager(self.last_detected_setup)
+                        else:
+                            if not meta_approved:
                                 meta_rejection_reason = (
                                     f"Meta-Reasoning Second Brain rejected trade: {meta_transcript['debate_conclusion']}"
                                 )
                                 logger.warning(f"🚫 [META-REASONING REJECTED] {symbol} {proposed_side} via {strategy}: {meta_rejection_reason}")
                                 self.set_cooldown(symbol, proposed_side, category="META_REASONING_REJECT", reason=meta_rejection_reason, price=price)
+                                try:
+                                    from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+                                    MissedOpportunityLearner.get_instance().record_missed_opportunity(
+                                        symbol=symbol,
+                                        side=proposed_side,
+                                        entry_price=price,
+                                        stop_loss=stop_loss,
+                                        take_profit=take_profit,
+                                        strategy=strategy,
+                                        category="META_REASONING_REJECT",
+                                        reason=meta_rejection_reason,
+                                        confidence_score=adapted_confidence,
+                                        confidence_threshold=dynamic_threshold
+                                    )
+                                except Exception as mol_err:
+                                    logger.error(f"Failed to record missed opportunity for meta reasoning reject: {mol_err}")
                                 try:
                                     from app.ai.missed_opportunity_learner import MissedOpportunityLearner
                                     MissedOpportunityLearner.get_instance().record_missed_opportunity(
