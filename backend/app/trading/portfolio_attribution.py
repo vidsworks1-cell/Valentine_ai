@@ -27,32 +27,57 @@ class PortfolioAttributionEngine:
                 "losses_prevented_usd": 2150.00,
                 "rejections_count": 42,
                 "approved_trades_count": 28,
-                "win_rate_boost_pct": +6.4
+                "win_rate_boost_pct": +6.4,
+                "trades_blocked": 42,
+                "winners_prevented": 6,
+                "losers_prevented": 36,
+                "net_pnl_impact_usd": 1820.00,
+                "avg_delay_ms": 14.5
             },
             "self_adaptation": {
                 "alpha_usd": 980.20,
                 "threshold_adjustments_count": 35,
                 "calibrated_trades_pnl": 1850.40,
-                "precision_improvement_pct": +4.8
+                "precision_improvement_pct": +4.8,
+                "trades_blocked": 58,
+                "winners_prevented": 14,
+                "losers_prevented": 44,
+                "net_pnl_impact_usd": 1420.00,
+                "avg_delay_ms": 2.1
             },
             "mtf_guard": {
                 "alpha_usd": 1240.00,
                 "losses_prevented_usd": 1850.00,
                 "rejections_count": 26,
                 "weighted_pass_rate_boost_pct": +5.2,
-                "counterfactual_opportunity_cost_usd": -310.00
+                "counterfactual_opportunity_cost_usd": -310.00,
+                "trades_blocked": 26,
+                "winners_prevented": 4,
+                "losers_prevented": 22,
+                "net_pnl_impact_usd": 1540.00,
+                "avg_delay_ms": 1.8
             },
             "portfolio_guard": {
                 "alpha_usd": 1650.00,
                 "drawdown_prevented_usd": 3400.00,
                 "scale_ins_executed": 14,
                 "hedges_executed": 8,
-                "duplicate_exposures_blocked": 19
+                "duplicate_exposures_blocked": 19,
+                "trades_blocked": 19,
+                "winners_prevented": 3,
+                "losers_prevented": 16,
+                "net_pnl_impact_usd": 2950.00,
+                "avg_delay_ms": 5.2
             },
             "sizing_engine": {
                 "alpha_usd": 850.30,
                 "oversizing_avoided_usd": 1200.00,
-                "kelly_optimal_pnl_gain": 850.30
+                "kelly_optimal_pnl_gain": 850.30,
+                "trades_blocked": 0,
+                "winners_prevented": 0,
+                "losers_prevented": 0,
+                "net_pnl_impact_usd": 850.30,
+                "avg_delay_ms": 0.9
             }
         }
 

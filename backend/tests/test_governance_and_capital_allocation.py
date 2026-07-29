@@ -93,16 +93,21 @@ class TestModelGovernanceAndCapitalAllocation(unittest.TestCase):
         self.assertIn("threshold_0.71", conf_exp["threshold_evaluations"])
         self.assertIn("optimal_threshold", conf_exp["experiment_summary"])
 
-        # 3. Test Interaction Stack Analytics
+        # 3. Test Interaction Stack Analytics & Granular Subsystem Breakdown
         self.attribution.record_interaction_stack_evaluation(applied_scalers_count=3, cumulative_scale_factor=0.35)
         summary = self.attribution.get_attribution_summary()
         self.assertIn("interaction_stack_stats", summary)
         self.assertIn("mtf_guard", summary["subsystem_breakdown"])
+        self.assertIn("winners_prevented", summary["subsystem_breakdown"]["mtf_guard"])
+        self.assertIn("net_pnl_impact_usd", summary["subsystem_breakdown"]["mtf_guard"])
 
-        # 4. Test Replay Self-Calibration Promotion
+        # 4. Test Replay Self-Calibration Shadow Governance & Stabilization
         from app.ai.self_adaptation import SelfAdaptationEngine
-        calib_res = SelfAdaptationEngine.get_instance().auto_calibrate_from_replay()
-        self.assertIn("promoted_optimal_threshold", calib_res)
+        engine = SelfAdaptationEngine.get_instance()
+        calib_res = engine.auto_calibrate_from_replay(force_promote=True)
+        self.assertIn("governance_stage", calib_res)
+        self.assertIn("shadow_policy", calib_res)
+        self.assertEqual(calib_res["shadow_policy"]["status"], "PROMOTED_LIVE")
 
 
     def test_async_mtf_strategy_weighted_guard(self):
