@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import json
+import time
 from typing import Dict, Any, List, Optional
 from app.risk.evaluator import RiskEvaluator
 from app.database.session import AsyncSessionLocal
@@ -75,19 +76,27 @@ class OrderManager:
 
             # 0c. Multi-Timeframe Confirmation Guard Check (5m, 15m, 1h alignment)
             from app.trading.mtf_confirmation import MTFConfirmationGuard
-            passed_mtf, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(symbol, side, opportunity.get("entry_price", 0.0))
+            passed_mtf, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(
+                symbol=symbol,
+                side=side,
+                price=opportunity.get("entry_price", 0.0),
+                strategy=opportunity.get("strategy_used"),
+                conviction_score=opportunity.get("conviction_score")
+            )
             if not passed_mtf:
                 mtf_reason = (
                     f"[MTF GUARD]\n"
                     f"Rejected {side} trade for {symbol}.\n"
-                    f"Reason: Multi-timeframe alignment insufficient ({mtf_align_pct:.1f}%).\n"
-                    f"5m: {mtf_details['tf_5m_bias']} | 15m: {mtf_details['tf_15m_bias']} | 1h: {mtf_details['tf_1h_bias']}."
+                    f"Reason: Multi-timeframe alignment insufficient ({mtf_align_pct:.1f}% vs threshold {mtf_details.get('required_threshold_pct', 66.0):.1f}%).\n"
+                    f"5m: {mtf_details['tf_5m_bias']} | 15m: {mtf_details['tf_15m_bias']} | 1h: {mtf_details['tf_1h_bias']} | Weight Model: {mtf_details.get('weight_type', 'UNWEIGHTED_EQUAL')}."
                 )
                 logger.warning(mtf_reason)
                 try:
                     from app.ai.reasoning import AiReasoningEngine
                     from app.trading.execution_analytics import ExecutionAnalyticsEngine
                     from app.services.audit_service import AuditService
+                    from app.trading.portfolio_attribution import PortfolioAttributionEngine
+                    PortfolioAttributionEngine.get_instance().record_risk_prevention_event("mtf_guard", 150.0, mtf_reason)
                     AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="MTF_DISAGREEMENT", reason=mtf_reason, price=opportunity.get("entry_price", 0.0))
                     ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), mtf_reason, opportunity.get("entry_price", 0.0))
                     async with AsyncSessionLocal() as db:
@@ -105,10 +114,15 @@ class OrderManager:
             passed_vol, vol_confluence_score, vol_details = await MTFConfirmationGuard.get_instance().evaluate_volume_liquidity_confluence(symbol, side, opportunity.get("entry_price", 0.0))
             if not passed_vol:
                 vol_rejection_reasons = "; ".join(vol_details.get("rejection_reasons", ["Confluence score below 70.0%"]))
+                vol_reason_summary = (
+                    f"Confluence score below required threshold ({vol_confluence_score:.1f}% < 70.0%)"
+                    if vol_confluence_score < 70.0
+                    else f"Volume/Liquidity risk guard triggered (Confluence Score: {vol_confluence_score:.1f}%)"
+                )
                 vol_reason = (
                     f"[MTF VOLUME & LIQUIDITY GUARD]\n"
                     f"Rejected {side} trade for {symbol}.\n"
-                    f"Reason: Insufficient Volume/Liquidity Confluence ({vol_confluence_score:.1f}% < 70.0%).\n"
+                    f"Reason: {vol_reason_summary}.\n"
                     f"RVOL (5m: {vol_details['rvol_5m']}, 15m: {vol_details['rvol_15m']}, 1h: {vol_details['rvol_1h']}) | Directional Volume Delta: {vol_details['favorable_volume_delta']}%\n"
                     f"Flags: {vol_rejection_reasons}"
                 )
