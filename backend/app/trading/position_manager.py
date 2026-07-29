@@ -173,18 +173,18 @@ class PositionManager:
 
                     # Assign regime-specific triggers & trailing multipliers
                     if regime == "RANGING":
-                        be_trigger_atr = 0.6
-                        trail_activation_atr = 0.8
-                        trail_mult = 1.2
+                        be_trigger_atr = 0.5
+                        trail_activation_atr = 0.7
+                        trail_mult = 0.8
                     elif regime == "VOLATILE":
-                        be_trigger_atr = 1.2
-                        trail_activation_atr = 1.5
-                        # Tighten trailing distance if parabolic expansion beyond 2.5x ATR
-                        trail_mult = 1.5 if peak_in_atr >= 2.5 else 2.2
+                        be_trigger_atr = 0.8
+                        trail_activation_atr = 1.0
+                        # Tighten trailing distance if parabolic expansion beyond 2.0x ATR
+                        trail_mult = 1.0 if peak_in_atr >= 2.0 else 1.2
                     else:  # TRENDING or default
-                        be_trigger_atr = 1.0
-                        trail_activation_atr = 1.2
-                        trail_mult = 1.8
+                        be_trigger_atr = 0.8
+                        trail_activation_atr = 1.0
+                        trail_mult = 1.0
 
                     pos["regime_trailing_details"] = {
                         "regime": regime,

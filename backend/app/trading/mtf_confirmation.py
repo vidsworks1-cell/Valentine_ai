@@ -100,13 +100,13 @@ class MTFConfirmationGuard:
         ) * 100.0
         weighted_pct = round(weighted_score, 1)
 
-        # Hard Macro Contradiction Guard: BUY during strong 1h downtrend when micro support is absent
-        macro_contradiction = (tf_1h != side and agree_count < 2 and weighted_pct < 45.0)
+        # Hard Macro Contradiction Guard: Any trade where 1h opposes and overall agreement is < 2 TFs or weighted score < 50.0%
+        macro_contradiction = (tf_1h != side and agree_count < 2) or (weighted_pct < 50.0)
 
         # Dynamic Threshold Relaxation for High Conviction Signals (from Second Brain)
         required_threshold = 66.0
         relaxation_applied = False
-        if conviction_score and conviction_score >= 75.0:
+        if conviction_score and conviction_score >= 75.0 and agree_count >= 2 and not macro_contradiction:
             required_threshold = 55.0  # High conviction allows slight MTF divergence if micro/intermediate agree
             relaxation_applied = True
             logger.info(

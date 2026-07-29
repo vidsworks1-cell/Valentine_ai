@@ -110,8 +110,8 @@ class MetaReasoningEngine:
         # 5. Score Higher Timeframe Agreement (4H/1D & MTF Alignment)
         try:
             from app.trading.mtf_confirmation import MTFConfirmationGuard
-            price_val = setup.get("entry_price", 0.0)
-            strat_val = setup.get("strategy_used") or setup.get("strategy")
+            price_val = candidate_setup.get("entry_price", 0.0)
+            strat_val = candidate_setup.get("strategy_used") or candidate_setup.get("strategy")
             passed_mtf, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(
                 symbol=symbol,
                 side=side,

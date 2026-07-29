@@ -274,9 +274,9 @@ class AiReasoningEngine:
                             symbol=symbol, side=proposed_side, price=price, strategy=strategy
                         )
 
-                        # Signal Generation Pre-Filter: Skip setups with severe MTF macro contradiction (< 40.0% alignment)
-                        if mtf_details.get("macro_contradiction") or mtf_align_pct < 40.0:
-                            logger.info(f"🚫 [SIGNAL PRE-FILTER] Skipped generating {proposed_side} setup for {symbol} ({strategy}): Severe MTF misalignment ({mtf_align_pct:.1f}%)")
+                        # Signal Generation Pre-Filter: Skip setups with MTF macro contradiction or insufficient alignment (< 50.0% or < 2 agreeing TFs)
+                        if mtf_details.get("macro_contradiction") or mtf_align_pct < 50.0 or mtf_details.get("agree_count", 0) < 2:
+                            logger.info(f"🚫 [SIGNAL PRE-FILTER] Skipped generating {proposed_side} setup for {symbol} ({strategy}): Insufficient MTF alignment ({mtf_align_pct:.1f}%, agree: {mtf_details.get('agree_count')}/3 TFs)")
                             continue
 
                         base_confidence = 0.82
