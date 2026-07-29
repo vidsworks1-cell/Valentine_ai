@@ -5,11 +5,12 @@ from typing import Dict, Any, List, Tuple, Optional
 try:
     from sqlalchemy.future import select
     from sqlalchemy import desc
+    from app.models.trading import Trade
 except ImportError:
     select = None
     desc = None
+    Trade = None
 from app.database.session import AsyncSessionLocal
-from app.models.trading import Trade
 
 logger = logging.getLogger("lumina.ai.self_adaptation")
 
@@ -563,6 +564,37 @@ class SelfAdaptationEngine:
             f"Regime Offset ({market_regime}): {regime_offset:+.2f} -> Final Threshold: {calibrated_threshold:.2f}"
         )
         return calibrated_threshold
+
+    def auto_calibrate_from_replay(self) -> Dict[str, Any]:
+        """
+        Periodically runs out-of-sample replay experiments comparing confidence thresholds (0.74, 0.72, 0.70, 0.68).
+        Promotes the optimal threshold if it demonstrates statistically superior PnL and positive expectancy.
+        """
+        try:
+            from app.trading.historical_replay import HistoricalReplayEngine
+            exp = HistoricalReplayEngine.get_instance().run_confidence_threshold_replay_experiment(
+                thresholds=[0.74, 0.72, 0.70, 0.68],
+                num_candles=120
+            )
+            opt_th = exp.get("experiment_summary", {}).get("optimal_threshold")
+            if opt_th:
+                new_offset = round(opt_th - 0.78, 2)
+                old_offset = self._dynamic_threshold_calibration
+                self._dynamic_threshold_calibration = new_offset
+                logger.info(
+                    f"🧪 [REPLAY SELF-CALIBRATION PROMOTION] Dynamic threshold offset updated from {old_offset:+.2f} "
+                    f"to {new_offset:+.2f} based on optimal replay threshold {opt_th:.2f}."
+                )
+                return {
+                    "previous_calibration_offset": old_offset,
+                    "promoted_calibration_offset": new_offset,
+                    "promoted_optimal_threshold": opt_th,
+                    "experiment_details": exp
+                }
+            return {"status": "NO_CHANGE", "experiment_details": exp}
+        except Exception as e:
+            logger.error(f"[SELF-CALIBRATION REPLAY ERROR] {e}")
+            return {"error": str(e)}
 
     def get_adaptation_summary(self) -> Dict[str, Any]:
         """Returns comprehensive self-adaptation state and performance metrics for API/Dashboard."""

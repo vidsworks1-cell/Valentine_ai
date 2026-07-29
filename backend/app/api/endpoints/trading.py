@@ -1993,5 +1993,12 @@ async def get_interaction_stack_analytics():
         "recent_attributions": attr.get_attribution_summary()
     }
 
+@router.post("/replay/self-calibrate")
+async def trigger_replay_self_calibration():
+    """Triggers replay-driven dynamic threshold self-calibration and promotes statistical challenger parameters."""
+    from app.ai.self_adaptation import SelfAdaptationEngine
+    return SelfAdaptationEngine.get_instance().auto_calibrate_from_replay()
+
+
 
 

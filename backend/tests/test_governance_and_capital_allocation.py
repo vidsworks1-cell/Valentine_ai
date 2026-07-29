@@ -99,6 +99,12 @@ class TestModelGovernanceAndCapitalAllocation(unittest.TestCase):
         self.assertIn("interaction_stack_stats", summary)
         self.assertIn("mtf_guard", summary["subsystem_breakdown"])
 
+        # 4. Test Replay Self-Calibration Promotion
+        from app.ai.self_adaptation import SelfAdaptationEngine
+        calib_res = SelfAdaptationEngine.get_instance().auto_calibrate_from_replay()
+        self.assertIn("promoted_optimal_threshold", calib_res)
+
+
     def test_async_mtf_strategy_weighted_guard(self):
         import asyncio
         from app.trading.mtf_confirmation import MTFConfirmationGuard
