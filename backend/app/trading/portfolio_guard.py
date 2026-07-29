@@ -209,13 +209,41 @@ class PortfolioGuard:
 
             # 2. Check for Pyramid Scale-In or Opposite Direction Partial Rebalance
             existing_pos = next((p for p in active_positions if p.get("symbol") == symbol), None)
+
+            # Check DB for unclosed trades if not found in in-memory PositionManager
+            if not existing_pos:
+                try:
+                    async with AsyncSessionLocal() as db:
+                        if select:
+                            query = select(Trade).where(
+                                Trade.symbol == symbol,
+                                Trade.exit_price.is_(None)
+                            )
+                            res = await db.execute(query)
+                            db_trade = res.scalars().first()
+                            if db_trade:
+                                existing_pos = {
+                                    "trade_id": db_trade.id,
+                                    "id": db_trade.id,
+                                    "symbol": db_trade.symbol,
+                                    "side": db_trade.side,
+                                    "entry_price": db_trade.entry_price,
+                                    "profit_loss": db_trade.profit_loss or 0.0,
+                                    "thesis_strength": 0.75
+                                }
+                except Exception as de:
+                    logger.error(f"Error checking DB for unclosed trade in PortfolioGuard: {de}")
+
             if existing_pos:
                 existing_side = existing_pos.get("side", "BUY").upper()
                 ex_trade_id = existing_pos.get("trade_id", existing_pos.get("id"))
                 if existing_side == proposed_side:
                     pos_thesis = float(existing_pos.get("thesis_strength", 0.75))
                     pos_pnl = float(existing_pos.get("profit_loss", 0.0))
-                    if (pos_thesis >= 0.78 or pos_pnl >= 0.0 or incoming_conf >= 0.80) and incoming_risk_pct <= self.MAX_SYMBOL_EXPOSURE:
+                    tp_stages = existing_pos.get("tp_stages", [])
+                    tp1_hit = tp_stages[0].get("hit", False) if tp_stages else False
+
+                    if (tp1_hit or pos_thesis >= 0.78 or pos_pnl >= 0.0 or incoming_conf >= 0.80) and incoming_risk_pct <= self.MAX_SYMBOL_EXPOSURE:
                         scale_risk = round(incoming_risk_pct * 0.5, 4)
                         self._total_scale_ins_executed += 1
                         msg = f"🚀 [PYRAMID SCALE-IN] Approved 50% scale-in allocation ({scale_risk*100:.1f}% risk) for active {symbol} position."
@@ -226,6 +254,14 @@ class PortfolioGuard:
                             reason=msg,
                             adjusted_risk_pct=scale_risk
                         )
+                    else:
+                        msg = (
+                            f"[POSITION EXPOSURE GUARD] Active {existing_side} position for {symbol} is already open and does not meet pyramid scale-in criteria "
+                            f"(TP1 hit: {tp1_hit}, PnL: ${pos_pnl:.2f}, thesis: {pos_thesis:.2f}, incoming conviction: {incoming_conf:.2f} < 0.80)."
+                        )
+                        logger.warning(msg)
+                        self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                        return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
                 else:
                     # Existing position in OPPOSITE direction (e.g. Existing LONG, incoming SELL signal)
                     if incoming_conf >= 0.76:
@@ -245,6 +281,14 @@ class PortfolioGuard:
                             swap_symbol=symbol,
                             is_hedge=True
                         )
+                    else:
+                        msg = (
+                            f"[POSITION EXPOSURE GUARD] Active opposite {existing_side} position for {symbol} exists, "
+                            f"but incoming {proposed_side} signal confidence ({incoming_conf:.2f}) is below hedge threshold (0.76)."
+                        )
+                        logger.warning(msg)
+                        self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                        return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
 
             # 3. Check for Systemic Sector & Delta Hedging
             sector = self.get_symbol_sector_cluster(symbol)
