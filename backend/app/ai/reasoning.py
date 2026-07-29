@@ -395,11 +395,6 @@ class AiReasoningEngine:
                             market_regime=market_regime
                         )
 
-                        # High Conviction Second Brain Threshold Calibration
-                        if meta_approved and meta_conviction_score >= 75.0:
-                            # Second Brain high conviction relaxes dynamic threshold (max 0.64)
-                            dynamic_threshold = round(min(dynamic_threshold, 0.64), 2)
-
                         # Evaluate performance self-adaptation
                         candidate_setup = {
                             "symbol": symbol,
@@ -410,13 +405,26 @@ class AiReasoningEngine:
                             "strategy_used": strategy,
                             "market_regime": market_regime,
                             "atr": atr,
-                            "price": price
+                            "price": price,
+                            "meta_conviction_score": meta_conviction_score
                         }
                         
                         is_allowed, adaptive_modifier, adaptation_reasons = await adaptation_engine.evaluate_opportunity_adaptation(candidate_setup)
+
+                        # Check if strategy is penalized under self-adaptation
+                        strat_penalized = False
+                        s_stats_curr = adaptation_engine._strategy_stats.get(strategy, {})
+                        if s_stats_curr:
+                            if s_stats_curr.get("status") in ["DISABLED", "SEVERELY_PENALIZED", "PENALIZED"] or s_stats_curr.get("confidence_modifier", 0.0) < 0:
+                                strat_penalized = True
+
+                        # High Conviction Second Brain Threshold Calibration (Only for healthy, non-penalized strategies)
+                        if meta_approved and meta_conviction_score >= 75.0 and not strat_penalized:
+                            # Second Brain high conviction relaxes dynamic threshold (max 0.64)
+                            dynamic_threshold = round(min(dynamic_threshold, 0.64), 2)
                         
-                        # Apply Second Brain High Conviction Bonus (+0.05 to +0.08)
-                        if meta_approved and meta_conviction_score >= 75.0:
+                        # Apply Second Brain High Conviction Bonus (+0.05 to +0.08) - Only for healthy, non-penalized strategies
+                        if meta_approved and meta_conviction_score >= 75.0 and not strat_penalized:
                             sb_bonus = round(min(0.08, 0.04 + ((meta_conviction_score - 75.0) * 0.004)), 2)
                             adaptive_modifier += sb_bonus
                             adaptation_reasons.append(
@@ -455,8 +463,8 @@ class AiReasoningEngine:
 
                         adapted_confidence = round(max(0.0, min(1.0, raw_confidence + adaptive_modifier)), 2)
                         
-                        # Ensure high conviction (>= 80.0) Meta-Reasoning approvals meet threshold floor
-                        if meta_approved and meta_conviction_score >= 80.0:
+                        # Ensure high conviction (>= 80.0) Meta-Reasoning approvals meet threshold floor (Only for healthy, non-penalized strategies)
+                        if meta_approved and meta_conviction_score >= 80.0 and not strat_penalized:
                             adapted_confidence = round(max(adapted_confidence, dynamic_threshold), 2)
 
                         passed_filter = (adapted_confidence >= dynamic_threshold) and meta_approved

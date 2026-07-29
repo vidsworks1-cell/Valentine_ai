@@ -233,14 +233,17 @@ class SelfAdaptationEngine:
                     target_modifier = 0.0
                     proposed_status = "ACTIVE"
 
-                    if losses >= 8 or consecutive_losses >= 5 or (total_recent >= 5 and win_rate < 30.0):
-                        target_modifier = -0.15
-                        proposed_status = "DISABLED" if losses >= 9 else "PENALIZED"
+                    if (total_recent >= 5 and win_rate <= 20.0) or losses >= 8 or consecutive_losses >= 5:
+                        target_modifier = -0.25
+                        proposed_status = "DISABLED"
+                    elif total_recent >= 5 and win_rate <= 30.0:
+                        target_modifier = -0.18
+                        proposed_status = "SEVERELY_PENALIZED"
                     elif win_rate >= 65.0 and total_recent >= 5:
                         target_modifier = 0.08
                         proposed_status = "BOOSTED"
                     elif win_rate < 40.0 and total_recent >= 5:
-                        target_modifier = -0.05
+                        target_modifier = -0.10
                         proposed_status = "PENALIZED"
 
                     # Calculate Learning Confidence for Strategy Recommendation
@@ -251,7 +254,8 @@ class SelfAdaptationEngine:
                     )
 
                     if target_modifier != 0.0:
-                        if strat_conf["auto_apply"]:
+                        # Auto-apply immediately if severe underperformance (DISABLED or SEVERELY_PENALIZED) to safeguard capital
+                        if strat_conf["auto_apply"] or proposed_status in ["DISABLED", "SEVERELY_PENALIZED"]:
                             confidence_modifier = target_modifier
                             status = proposed_status
                             insights.append(
@@ -462,24 +466,36 @@ class SelfAdaptationEngine:
 
         # 1. Strategy Adaptation
         s_stats = self._strategy_stats.get(strategy)
+        meta_conviction = float(setup.get("meta_conviction_score", 75.0))
         if s_stats:
             st_mod = s_stats.get("confidence_modifier", 0.0)
             st_status = s_stats.get("status", "ACTIVE")
+            win_rate = s_stats.get("win_rate_pct", 50.0)
+            recent_sample = s_stats.get("recent_sample", 0)
             
-            if st_status == "DISABLED":
+            if st_status == "DISABLED" or (recent_sample >= 5 and win_rate <= 20.0):
                 is_allowed = False
                 reasons.append(
                     f"[SELF-ADAPTATION] Strategy '{strategy}' is temporarily DISABLED due to severe underperformance "
-                    f"({s_stats.get('losses', 0)} losses in last {s_stats.get('recent_sample', 0)} trades)."
+                    f"({s_stats.get('losses', 0)} losses / win rate {win_rate:.1f}% over last {recent_sample} trades)."
                 )
-                return False, -0.20, reasons
+                return False, -0.25, reasons
+
+            if st_status == "SEVERELY_PENALIZED" or (recent_sample >= 5 and win_rate <= 30.0):
+                if meta_conviction < 85.0:
+                    is_allowed = False
+                    reasons.append(
+                        f"[SELF-ADAPTATION] Strategy '{strategy}' is SEVERELY_PENALIZED (Win rate {win_rate:.1f}% over last {recent_sample} trades) "
+                        f"and requires Meta Conviction >= 85.0 (got {meta_conviction:.1f}). Trade blocked."
+                    )
+                    return False, -0.18, reasons
 
             if st_mod != 0.0:
                 adaptive_modifier += st_mod
                 verb = "Boosted" if st_mod > 0 else "Penalized"
                 reasons.append(
                     f"[SELF-ADAPTATION] {verb} strategy '{strategy}' confidence by {st_mod:+.2f} "
-                    f"(Win rate: {s_stats.get('win_rate_pct', 50)}% over last {s_stats.get('recent_sample', 0)} trades)."
+                    f"(Win rate: {win_rate:.1f}% over last {recent_sample} trades)."
                 )
 
         # 2. Symbol Adaptation
@@ -557,8 +573,8 @@ class SelfAdaptationEngine:
         if len(negative_penalties) >= 2:
             self._multi_penalty_events_count += 1
             raw_modifier = adaptive_modifier
-            # Apply Cumulative Dampener Cap (Max -0.06 cumulative negative modifier)
-            MAX_CUMULATIVE_PENALTY = -0.06
+            # Apply Cumulative Dampener Cap (Max -0.25 cumulative negative modifier to allow severe strategy underperformance penalties to take full effect)
+            MAX_CUMULATIVE_PENALTY = -0.25
             if adaptive_modifier < MAX_CUMULATIVE_PENALTY:
                 adaptive_modifier = MAX_CUMULATIVE_PENALTY
                 reasons.append(

@@ -120,8 +120,9 @@ class CrossAssetCorrelationEngine:
         - max_correlation: highest pairwise correlation with other active positions
         - position_scaler: 1.0 (full), 0.80 (scaled), or 0.50 (scaled)
         """
-        sym = proposed_symbol.upper()
-        other_active_symbols = [s.upper() for s in active_symbols if s and s.upper() != sym]
+        clean = lambda s: s.replace("/", "").replace("-", "").replace("_", "").strip().upper() if s else ""
+        sym = clean(proposed_symbol)
+        other_active_symbols = [clean(s) for s in active_symbols if clean(s) and clean(s) != sym]
         if not other_active_symbols:
             return {
                 "proposed_symbol": sym,

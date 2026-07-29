@@ -63,8 +63,12 @@ class AdaptivePositionSizer:
             strategy_mult = 1.00
         elif strategy_win_rate_pct >= 45.0:
             strategy_mult = 0.80
+        elif strategy_win_rate_pct >= 35.0:
+            strategy_mult = 0.50
+        elif strategy_win_rate_pct >= 20.0:
+            strategy_mult = 0.30  # Reduces risk cap to ~0.15% - 0.25%
         else:
-            strategy_mult = 0.60
+            strategy_mult = 0.15  # Severely underperforming strategy max risk cap ~0.15%
 
         elo_capital_mult = 1.0
         try:
