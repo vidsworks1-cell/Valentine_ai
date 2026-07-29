@@ -117,31 +117,28 @@ class CrossAssetCorrelationEngine:
         
         Returns:
         - risk_flag: LOW, MODERATE, HIGH_CONCENTRATION
-        - max_correlation: highest pairwise correlation with active positions
-        - position_scaler: 1.0 (full), 0.60 (scaled), or 0.0 (rejected)
+        - max_correlation: highest pairwise correlation with other active positions
+        - position_scaler: 1.0 (full), 0.80 (scaled), or 0.50 (scaled)
         """
         sym = proposed_symbol.upper()
-        if not active_symbols:
+        other_active_symbols = [s.upper() for s in active_symbols if s and s.upper() != sym]
+        if not other_active_symbols:
             return {
                 "proposed_symbol": sym,
                 "max_correlation": 0.0,
                 "most_correlated_active_symbol": None,
                 "risk_flag": "LOW",
                 "position_scaler": 1.0,
-                "recommendation": "No active positions. Zero portfolio correlation risk."
+                "recommendation": "No other active positions. Zero cross-asset correlation risk."
             }
 
-        matrix_data = self.calculate_correlation_matrix(list(set([sym] + active_symbols + self.DEFAULT_SYMBOLS)))
+        matrix_data = self.calculate_correlation_matrix(list(set([sym] + other_active_symbols + self.DEFAULT_SYMBOLS)))
         matrix = matrix_data["matrix"]
 
         max_corr = -1.0
         most_corr_symbol = None
 
-        for act_sym in active_symbols:
-            if act_sym == sym:
-                max_corr = 1.0
-                most_corr_symbol = act_sym
-                break
+        for act_sym in other_active_symbols:
             corr = matrix.get(sym, {}).get(act_sym, 0.0)
             if corr > max_corr:
                 max_corr = corr
