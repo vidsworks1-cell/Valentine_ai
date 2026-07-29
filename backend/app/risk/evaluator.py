@@ -13,12 +13,13 @@ class RiskEvaluator:
         entry_price: float,
         atr: float,
         max_risk_pct: float = 0.02,
-        stop_loss: Optional[float] = None
+        stop_loss: Optional[float] = None,
+        apply_volatility_scaling: bool = False
     ) -> float:
         """Dynamically calculates position size based on actual stop loss distance and volatility scaling.
         - Translates ATR / Stop Loss to an exact risk per unit.
-        - Reduces the risk exposure percentage if relative volatility is excessively high.
-        - Calculates the exact units to purchase based on this adjusted risk framework.
+        - Max risk percentage (max_risk_pct) set by Portfolio Guard is the STRICT FINAL ceiling authority.
+        - If apply_volatility_scaling is True, volatility scaling only ever REDUCES risk below max_risk_pct.
         """
         if entry_price <= 0:
             return 1.0
@@ -31,17 +32,16 @@ class RiskEvaluator:
         else:
             stop_distance = entry_price * 0.01
 
-        # 2. Relative volatility calculation & dynamic risk percentage scaling
-        relative_volatility = (atr / entry_price) if (entry_price > 0 and atr > 0) else 0.0
+        # 2. Dynamic risk percentage & volatility scaling (if requested)
         adjusted_risk_pct = max_risk_pct
-        if relative_volatility > 0.015:
-            scaling_factor = 0.015 / relative_volatility
-            adjusted_risk_pct = max_risk_pct * scaling_factor
-            # Portfolio-level constraint (max_risk_pct) is the final ceiling authority.
-            # Volatility scaling reduces risk further and never raises risk above max_risk_pct.
-            min_floor = min(max_risk_pct, 0.001)
-            adjusted_risk_pct = max(min(adjusted_risk_pct, max_risk_pct), min_floor)
-            logger.info(f"⚡ High volatility ({relative_volatility:.4f}). Scaling risk pct from {max_risk_pct*100:.2f}% to {adjusted_risk_pct*100:.2f}% (Portfolio Ceiling: {max_risk_pct*100:.2f}%)")
+        if apply_volatility_scaling:
+            relative_volatility = (atr / entry_price) if (entry_price > 0 and atr > 0) else 0.0
+            if relative_volatility > 0.015:
+                scaling_factor = 0.015 / relative_volatility
+                # Portfolio Guard max_risk_pct is the strict final ceiling authority.
+                # Volatility scaling reduces risk further and never raises risk above max_risk_pct.
+                adjusted_risk_pct = min(max_risk_pct, max_risk_pct * scaling_factor)
+                logger.info(f"⚡ High volatility ({relative_volatility:.4f}). Scaling risk pct from {max_risk_pct*100:.2f}% to {adjusted_risk_pct*100:.2f}% (Portfolio Ceiling: {max_risk_pct*100:.2f}%)")
 
         allowed_risk_amt = balance * adjusted_risk_pct
 

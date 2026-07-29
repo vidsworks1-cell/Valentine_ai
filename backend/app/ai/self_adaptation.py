@@ -557,8 +557,8 @@ class SelfAdaptationEngine:
         if len(negative_penalties) >= 2:
             self._multi_penalty_events_count += 1
             raw_modifier = adaptive_modifier
-            # Apply Cumulative Dampener Cap (Max -0.15 cumulative negative modifier)
-            MAX_CUMULATIVE_PENALTY = -0.15
+            # Apply Cumulative Dampener Cap (Max -0.06 cumulative negative modifier)
+            MAX_CUMULATIVE_PENALTY = -0.06
             if adaptive_modifier < MAX_CUMULATIVE_PENALTY:
                 adaptive_modifier = MAX_CUMULATIVE_PENALTY
                 reasons.append(

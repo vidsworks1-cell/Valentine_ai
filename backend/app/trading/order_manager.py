@@ -225,6 +225,11 @@ class OrderManager:
                 adaptation_summary = SelfAdaptationEngine.get_instance().get_adaptation_summary()
                 empirical_win_rate_pct = float(adaptation_summary.get("overall_win_rate_pct", 55.0))
                 
+                price = opportunity["entry_price"]
+                stop_loss = opportunity["stop_loss"]
+                atr_val = opportunity.get("atr", price * 0.01)
+
+                # PIPELINE STEP 1: Adaptive Sizing
                 risk_pct, size_breakdown = AdaptivePositionSizer.get_instance().calculate_adaptive_risk_pct(
                     opportunity=opportunity,
                     balance=balance,
@@ -232,12 +237,15 @@ class OrderManager:
                     account_drawdown_pct=float(adaptation_summary.get("current_drawdown_pct", 0.0)) / 100.0,
                     strategy_win_rate_pct=empirical_win_rate_pct
                 )
-                
-                logger.info(f"🎲 [ADAPTIVE POSITION SIZING] Risk Allocation: {risk_pct*100.0:.2f}% | Breakdown: {size_breakdown}")
+                logger.info(f"🎲 [STEP 1: ADAPTIVE SIZING] Risk Allocation: {risk_pct*100.0:.2f}% | Breakdown: {size_breakdown}")
 
-                price = opportunity["entry_price"]
-                stop_loss = opportunity["stop_loss"]
-                atr_val = opportunity.get("atr", price * 0.01)
+                # PIPELINE STEP 2: Volatility Adjustment (Prior to Portfolio Guard)
+                relative_volatility = (atr_val / price) if (price > 0 and atr_val > 0) else 0.0
+                if relative_volatility > 0.015:
+                    vol_scale = min(1.0, 0.015 / relative_volatility)
+                    old_risk = risk_pct
+                    risk_pct = round(max(0.001, risk_pct * vol_scale), 6)
+                    logger.info(f"⚡ [STEP 2: VOLATILITY ADJUSTMENT] Relative Volatility ({relative_volatility:.4f}). Risk scaled from {old_risk*100:.2f}% to {risk_pct*100:.2f}%")
 
                 # 2b. Adaptive Limit / Market Hybrid Routing
                 squeeze_info = opportunity.get("squeeze_info", {})
@@ -254,7 +262,7 @@ class OrderManager:
 
                 logger.info(f"⚡ [HYBRID ROUTING] Symbol {symbol} mapped to {order_routing} order routing (Regime: {market_regime}, Squeeze: {squeeze_state})")
 
-                # 2b. Active Exposure & Portfolio Intelligence Layer Decision Check
+                # PIPELINE STEP 3: Portfolio Guard (FINAL AUTHORITY)
                 from app.trading.portfolio_guard import PortfolioGuard
                 pg = PortfolioGuard.get_instance()
                 pg_decision = await pg.evaluate_portfolio_action(
@@ -272,21 +280,22 @@ class OrderManager:
                         logger.error(f"Failed to set cooldown on portfolio decision rejection: {ce}")
                     return
 
-                # Adjust risk percentage if active decision scaled or modified allocation
+                # Lock in Portfolio Guard adjusted risk as FINAL authority
                 if pg_decision.adjusted_risk_pct != risk_pct:
-                    logger.info(f"🛡️ [PORTFOLIO ACTION RISK ADJUSTMENT] Risk adjusted from {risk_pct*100:.1f}% to {pg_decision.adjusted_risk_pct*100:.1f}% ({pg_decision.action_type})")
+                    logger.info(f"🛡️ [STEP 3: PORTFOLIO GUARD FINAL AUTHORITY] Risk locked from {risk_pct*100:.2f}% to {pg_decision.adjusted_risk_pct*100:.2f}% ({pg_decision.action_type})")
                     risk_pct = pg_decision.adjusted_risk_pct
 
+                # PIPELINE STEP 4: Execution
                 # Handle Pyramid Scale-In Action
                 if pg_decision.action_type == "SCALE_IN":
                     from app.trading.position_manager import PositionManager
-                    add_size = RiskEvaluator.calculate_atr_position_size(balance, price, atr_val, risk_pct, stop_loss)
+                    add_size = RiskEvaluator.calculate_atr_position_size(balance, price, atr_val, risk_pct, stop_loss, apply_volatility_scaling=False)
                     scaled_pos = await PositionManager.get_instance().scale_in_position(symbol, add_size, price)
                     if scaled_pos:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="INFO",
                             category="PORTFOLIO_INTELLIGENCE",
-                            message=f"🚀 [PYRAMID SCALE-IN EXECUTED] Scaled {add_size:.4f} into active {symbol} position",
+                            message=f"🚀 [PYRAMID SCALE-IN EXECUTED] Scaled {add_size:.4f} into active {symbol} position at {risk_pct*100:.2f}% risk",
                             details=pg_decision.reason
                         ))
                         return
@@ -333,13 +342,14 @@ class OrderManager:
                 if pg_decision.is_hedge:
                     opportunity["entry_reason"] = f"[DELTA HEDGE] {opportunity.get('entry_reason', '')}"
 
-                # Dynamic position sizing based on ATR Risk Engine calculation
+                # Dynamic position sizing based on ATR Risk Engine calculation (Portfolio Guard risk_pct is FINAL authority)
                 position_size = RiskEvaluator.calculate_atr_position_size(
                     balance=balance,
                     entry_price=price,
                     atr=atr_val,
                     max_risk_pct=risk_pct,
-                    stop_loss=stop_loss
+                    stop_loss=stop_loss,
+                    apply_volatility_scaling=False
                 )
 
                 # Apply macro and correlation position scalers if present
