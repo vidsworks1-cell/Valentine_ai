@@ -110,15 +110,15 @@ class AdaptivePositionSizer:
 
         streak_dd_mult = streak_mult * drawdown_mult
 
-        # 6. Probationary Trial Multiplier
+        # 6. Probationary / Multi-Tiered Risk Allocation Multiplier
         is_probationary = opportunity.get("is_probationary_trade", False)
-        probation_mult = 0.35 if is_probationary else 1.0
+        probation_mult = float(opportunity.get("probation_risk_multiplier", 0.25 if is_probationary else 1.0))
 
         # 7. Combined Multi-Factor Risk Calculation
         raw_adaptive_risk = base_risk_pct * strategy_mult * elo_capital_mult * regime_mult * volatility_mult * streak_dd_mult * probation_mult
         
-        # Hard safety floor (0.15% for probation/underperforming, up to 3.0% cap)
-        min_floor = 0.0015 if (is_probationary or strategy_win_rate_pct < 35.0) else 0.0050
+        # Hard safety floor (0.10% for probation/underperforming micro-trials, up to 3.0% cap)
+        min_floor = 0.0010 if (is_probationary or strategy_win_rate_pct < 35.0) else 0.0050
         final_risk_pct = round(max(min_floor, min(0.030, raw_adaptive_risk)), 4)
 
         breakdown = {
@@ -130,13 +130,14 @@ class AdaptivePositionSizer:
             "volatility_mult": volatility_mult,
             "streak_mult": round(streak_mult, 2),
             "drawdown_mult": round(drawdown_mult, 2),
+            "probation_mult": probation_mult,
             "final_risk_pct": round(final_risk_pct * 100, 2)
         }
 
         logger.info(
             f"🎯 [ADAPTIVE POSITION SIZING] {opportunity.get('symbol', 'UNKNOWN')} ({strategy}): "
             f"Confidence {confidence:.2f} -> Base Risk {base_risk_pct*100:.1f}%. "
-            f"Multipliers [Strategy: {strategy_mult}x, Regime ({regime}): {regime_mult}x, Volatility: {volatility_mult}x, Streak/DD: {streak_dd_mult:.2f}x] "
+            f"Multipliers [Strategy: {strategy_mult}x, Regime ({regime}): {regime_mult}x, Volatility: {volatility_mult}x, Streak/DD: {streak_dd_mult:.2f}x, Probation: {probation_mult:.2f}x] "
             f"==> Final Adaptive Risk: {final_risk_pct*100:.2f}%"
         )
 

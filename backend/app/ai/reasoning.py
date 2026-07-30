@@ -466,8 +466,8 @@ class AiReasoningEngine:
                         adapted_confidence = round(max(0.0, min(1.0, raw_confidence + adaptive_modifier)), 2)
                         
                         is_probationary = candidate_setup.get("is_probationary_trade", False)
-                        # Ensure high conviction (>= 80.0) approvals or probationary trial approvals meet threshold floor
-                        if (meta_approved and meta_conviction_score >= 80.0 and not strat_penalized) or is_probationary:
+                        # Ensure high conviction (>= 77.5 fuzzy tolerance) approvals or probationary trial approvals meet threshold floor
+                        if (meta_approved and meta_conviction_score >= 77.5 and not strat_penalized) or is_probationary:
                             adapted_confidence = round(max(adapted_confidence, dynamic_threshold), 2)
 
                         passed_filter = (adapted_confidence >= dynamic_threshold) and meta_approved

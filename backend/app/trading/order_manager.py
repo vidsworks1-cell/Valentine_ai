@@ -564,7 +564,11 @@ class OrderManager:
                     "confidence": opportunity.get("confidence_score", 0.83),
                     "strategy": opportunity.get("strategy_used", "Volatility Expansion Breakout"),
                     "risk_pct": risk_pct,
-                    "scale_ins": 0
+                    "scale_ins": 0,
+                    "entry_time": datetime.utcnow(),
+                    "is_probationary_trade": opportunity.get("is_probationary_trade", False),
+                    "probation_trigger": opportunity.get("probation_trigger"),
+                    "probation_metadata": opportunity.get("probation_metadata")
                 })
 
             except Exception as e:

@@ -611,13 +611,32 @@ class PositionManager:
                         "strategy": pos.get("strategy", "Standard Strategy")
                     })
 
+                    entry_time = pos.get("entry_time") or pos.get("created_at")
+                    holding_minutes = 0.0
+                    if isinstance(entry_time, datetime):
+                        holding_minutes = max(0.1, (datetime.utcnow() - entry_time).total_seconds() / 60.0)
+                    elif isinstance(entry_time, (int, float)):
+                        holding_minutes = max(0.1, (time.time() - float(entry_time)) / 60.0)
+
+                    stop_loss_px = float(pos.get("stop_loss", 0.0))
+                    risk_per_unit = abs(entry - stop_loss_px) if stop_loss_px > 0 and stop_loss_px != entry else 0.0
+                    if risk_per_unit > 0:
+                        r_multiple = (exit_price - entry) / risk_per_unit if side == "BUY" else (entry - exit_price) / risk_per_unit
+                    else:
+                        r_multiple = 1.0 if pnl > 0 else (-1.0 if pnl < 0 else 0.0)
+
                     SelfAdaptationEngine.get_instance().record_post_trade_retro({
                         "id": trade_id,
                         "symbol": symbol,
                         "profit_loss": pnl,
                         "profit_loss_pct": (pnl / (entry * size)) * 100.0 if (entry * size) > 0 else 0.0,
                         "strategy_used": pos.get("strategy", "Standard Strategy"),
-                        "exit_reason": outcome_type
+                        "exit_reason": outcome_type,
+                        "is_probationary_trade": pos.get("is_probationary_trade", False),
+                        "probation_trigger": pos.get("probation_trigger"),
+                        "probation_metadata": pos.get("probation_metadata"),
+                        "holding_minutes": holding_minutes,
+                        "r_multiple": r_multiple
                     })
                     asyncio.create_task(SelfAdaptationEngine.get_instance().analyze_performance())
                     asyncio.create_task(TradeJournalEngine.get_instance().journal_closed_trade(trade_id))
