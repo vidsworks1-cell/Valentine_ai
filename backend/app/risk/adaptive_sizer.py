@@ -110,11 +110,16 @@ class AdaptivePositionSizer:
 
         streak_dd_mult = streak_mult * drawdown_mult
 
-        # 6. Combined Multi-Factor Risk Calculation
-        raw_adaptive_risk = base_risk_pct * strategy_mult * elo_capital_mult * regime_mult * volatility_mult * streak_dd_mult
+        # 6. Probationary Trial Multiplier
+        is_probationary = opportunity.get("is_probationary_trade", False)
+        probation_mult = 0.35 if is_probationary else 1.0
+
+        # 7. Combined Multi-Factor Risk Calculation
+        raw_adaptive_risk = base_risk_pct * strategy_mult * elo_capital_mult * regime_mult * volatility_mult * streak_dd_mult * probation_mult
         
-        # Hard safety floor (0.5%) and cap (3.0%)
-        final_risk_pct = round(max(0.005, min(0.030, raw_adaptive_risk)), 4)
+        # Hard safety floor (0.15% for probation/underperforming, up to 3.0% cap)
+        min_floor = 0.0015 if (is_probationary or strategy_win_rate_pct < 35.0) else 0.0050
+        final_risk_pct = round(max(min_floor, min(0.030, raw_adaptive_risk)), 4)
 
         breakdown = {
             "confidence": round(confidence, 2),

@@ -231,6 +231,21 @@ class SelfAdaptationEngine:
                     losses = sum(1 for tr in recent_10 if (tr.profit_loss or 0) <= 0)
                     win_rate = (wins / total_recent) * 100.0 if total_recent > 0 else 50.0
 
+                    hours_since_last_trade = 999.0
+                    if s_trades:
+                        last_exit = s_trades[0].exit_time
+                        if last_exit:
+                            try:
+                                if isinstance(last_exit, str):
+                                    dt = datetime.fromisoformat(last_exit.replace('Z', '+00:00'))
+                                else:
+                                    dt = last_exit
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                hours_since_last_trade = round((datetime.now(timezone.utc) - dt).total_seconds() / 3600.0, 1)
+                            except Exception:
+                                hours_since_last_trade = 999.0
+
                     # Consecutive loss tracking
                     consecutive_losses = 0
                     for tr in recent_10:
@@ -243,8 +258,12 @@ class SelfAdaptationEngine:
                     proposed_status = "ACTIVE"
 
                     if (total_recent >= 5 and win_rate <= 20.0) or losses >= 8 or consecutive_losses >= 5:
-                        target_modifier = -0.25
-                        proposed_status = "DISABLED"
+                        if hours_since_last_trade >= 6.0:
+                            target_modifier = -0.15
+                            proposed_status = "PROBATION_RECOVERY"
+                        else:
+                            target_modifier = -0.25
+                            proposed_status = "DISABLED"
                     elif total_recent >= 5 and win_rate <= 30.0:
                         target_modifier = -0.18
                         proposed_status = "SEVERELY_PENALIZED"
@@ -300,6 +319,7 @@ class SelfAdaptationEngine:
                         "losses": losses,
                         "win_rate_pct": round(win_rate, 1),
                         "consecutive_losses": consecutive_losses,
+                        "hours_since_last_trade": hours_since_last_trade,
                         "confidence_modifier": round(confidence_modifier, 2),
                         "learning_confidence_pct": strat_conf["confidence_pct"],
                         "status": status
@@ -482,13 +502,25 @@ class SelfAdaptationEngine:
             win_rate = s_stats.get("win_rate_pct", 50.0)
             recent_sample = s_stats.get("recent_sample", 0)
             
+            hours_since_last = s_stats.get("hours_since_last_trade", 999.0)
             if st_status == "DISABLED" or (recent_sample >= 5 and win_rate <= 20.0):
-                is_allowed = False
-                reasons.append(
-                    f"[SELF-ADAPTATION] Strategy '{strategy}' is temporarily DISABLED due to severe underperformance "
-                    f"({s_stats.get('losses', 0)} losses / win rate {win_rate:.1f}% over last {recent_sample} trades)."
-                )
-                return False, -0.25, reasons
+                if meta_conviction >= 80.0 or hours_since_last >= 6.0:
+                    setup["is_probationary_trade"] = True
+                    probation_msg = (
+                        f"🧪 [PROBATIONARY STRATEGY TRIAL] Strategy '{strategy}' is quarantined (win rate {win_rate:.1f}%), "
+                        f"but Meta Conviction {meta_conviction:.1f} >= 80.0 permits a micro-sized (0.35x risk) trial trade to test updated filters."
+                    )
+                    logger.info(probation_msg)
+                    reasons.append(probation_msg)
+                    st_mod = -0.18
+                else:
+                    is_allowed = False
+                    reasons.append(
+                        f"[SELF-ADAPTATION] Strategy '{strategy}' is temporarily DISABLED due to severe underperformance "
+                        f"({s_stats.get('losses', 0)} losses / win rate {win_rate:.1f}% over last {recent_sample} trades). "
+                        f"Requires Meta Conviction >= 80.0 or 6h+ cooldown for Probationary Trial."
+                    )
+                    return False, -0.25, reasons
 
             if st_status == "SEVERELY_PENALIZED" or (recent_sample >= 5 and win_rate <= 30.0):
                 if meta_conviction < 85.0:
