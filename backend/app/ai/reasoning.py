@@ -226,9 +226,10 @@ class AiReasoningEngine:
                         elif squeeze_state == "SQUEEZE_ACTIVE":
                             market_regime = "RANGING"
                             strategy = "Mean Reversion"
-                        elif relative_volatility > 0.014:
+                        elif relative_volatility > 0.016:
                             market_regime = "VOLATILE"
-                            strategy = "Volatility Expansion"
+                            # Require genuine volume surge for breakout, else default to Breakout Momentum
+                            strategy = "Volatility Expansion Breakout" if squeeze_info.get("rvol", 1.0) >= 1.35 else "Breakout Momentum"
                         elif tally % 3 == 0:
                             market_regime = "TRENDING"
                             strategy = "Breakout Momentum"
@@ -244,8 +245,8 @@ class AiReasoningEngine:
                             sl_multiplier = 1.4  # Tighter stop for range boundaries
                             tp_multiplier = 2.8  # 2.8 / 1.4 = 2.0 Nominal R:R
                         else:  # VOLATILE / SQUEEZE_FIRING
-                            sl_multiplier = 2.0
-                            tp_multiplier = 4.0
+                            sl_multiplier = 2.4  # Expanded stop buffer against breakout retest whipsaws
+                            tp_multiplier = 4.8  # 4.8 / 2.4 = 2.0 Nominal R:R
 
                         stop_loss = round(price - (sl_multiplier * atr) if proposed_side == "BUY" else price + (sl_multiplier * atr), 2)
                         take_profit = round(price + (tp_multiplier * atr) if proposed_side == "BUY" else price - (tp_multiplier * atr), 2)

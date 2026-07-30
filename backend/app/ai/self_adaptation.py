@@ -67,6 +67,15 @@ class SelfAdaptationEngine:
         return cls._instance
 
     @staticmethod
+    def normalize_strategy_name(name: str) -> str:
+        if not name:
+            return "Unknown"
+        s = str(name).strip()
+        if s in ["Volatility Expansion", "Volatility Expansion Breakout"]:
+            return "Volatility Expansion Breakout"
+        return s
+
+    @staticmethod
     def get_volatility_bucket(atr: float, price: float) -> str:
         """Classifies volatility into LOW, MEDIUM, or HIGH bucket."""
         if price <= 0:
@@ -147,7 +156,7 @@ class SelfAdaptationEngine:
 
                 for t in trades:
                     # Strategy
-                    strat = t.strategy_used or "Unknown"
+                    strat = self.normalize_strategy_name(t.strategy_used or "Unknown")
                     strat_data.setdefault(strat, []).append(t)
 
                     # Symbol
@@ -453,7 +462,7 @@ class SelfAdaptationEngine:
         if not self._last_evaluated_at or (datetime.now(timezone.utc) - self._last_evaluated_at).total_seconds() > 300:
             await self.analyze_performance()
 
-        strategy = setup.get("strategy_used", "Unknown")
+        strategy = self.normalize_strategy_name(setup.get("strategy_used", "Unknown"))
         symbol = setup.get("symbol", "UNKNOWN")
         regime = setup.get("market_regime", "RANGING")
         atr = setup.get("atr", 0.0)
