@@ -503,7 +503,7 @@ class SelfAdaptationEngine:
             recent_sample = s_stats.get("recent_sample", 0)
             
             hours_since_last = s_stats.get("hours_since_last_trade", 999.0)
-            if st_status == "DISABLED" or (recent_sample >= 5 and win_rate <= 20.0):
+            if st_status in ["DISABLED", "PROBATION_RECOVERY"] or (recent_sample >= 5 and win_rate <= 20.0):
                 if meta_conviction >= 80.0 or hours_since_last >= 6.0:
                     setup["is_probationary_trade"] = True
                     probation_msg = (
@@ -512,7 +512,7 @@ class SelfAdaptationEngine:
                     )
                     logger.info(probation_msg)
                     reasons.append(probation_msg)
-                    st_mod = -0.18
+                    st_mod = -0.02  # Light modifier so adapted confidence stays above threshold; adaptive sizer scales risk to 0.35x
                 else:
                     is_allowed = False
                     reasons.append(
@@ -521,13 +521,12 @@ class SelfAdaptationEngine:
                         f"Requires Meta Conviction >= 80.0 or 6h+ cooldown for Probationary Trial."
                     )
                     return False, -0.25, reasons
-
-            if st_status == "SEVERELY_PENALIZED" or (recent_sample >= 5 and win_rate <= 30.0):
-                if meta_conviction < 85.0:
+            elif st_status in ["SEVERELY_PENALIZED", "PENALIZED"] or (recent_sample >= 5 and win_rate <= 30.0):
+                if meta_conviction < 80.0:
                     is_allowed = False
                     reasons.append(
                         f"[SELF-ADAPTATION] Strategy '{strategy}' is SEVERELY_PENALIZED (Win rate {win_rate:.1f}% over last {recent_sample} trades) "
-                        f"and requires Meta Conviction >= 85.0 (got {meta_conviction:.1f}). Trade blocked."
+                        f"and requires Meta Conviction >= 80.0 (got {meta_conviction:.1f}). Trade blocked."
                     )
                     return False, -0.18, reasons
 

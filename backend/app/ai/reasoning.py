@@ -465,8 +465,9 @@ class AiReasoningEngine:
 
                         adapted_confidence = round(max(0.0, min(1.0, raw_confidence + adaptive_modifier)), 2)
                         
-                        # Ensure high conviction (>= 80.0) Meta-Reasoning approvals meet threshold floor (Only for healthy, non-penalized strategies)
-                        if meta_approved and meta_conviction_score >= 80.0 and not strat_penalized:
+                        is_probationary = candidate_setup.get("is_probationary_trade", False)
+                        # Ensure high conviction (>= 80.0) approvals or probationary trial approvals meet threshold floor
+                        if (meta_approved and meta_conviction_score >= 80.0 and not strat_penalized) or is_probationary:
                             adapted_confidence = round(max(adapted_confidence, dynamic_threshold), 2)
 
                         passed_filter = (adapted_confidence >= dynamic_threshold) and meta_approved
@@ -487,6 +488,7 @@ class AiReasoningEngine:
                             "adaptive_modifier": adaptive_modifier,
                             "confidence_threshold": dynamic_threshold,
                             "passed_filter": passed_filter,
+                            "is_probationary_trade": is_probationary,
                             "meta_reasoning": meta_transcript,
                             "conviction_score": meta_conviction_score,
                             "entry_reason": f"AI Engine evaluated ticker telemetry. Symbol {symbol} trading at ${price} with live update count {tally}. High conviction {strategy} trigger generated based on dynamic ATR of ${atr}. Applied dynamic confidence threshold: {dynamic_threshold}. Self-Adaptation: {adaptation_log_str}",
