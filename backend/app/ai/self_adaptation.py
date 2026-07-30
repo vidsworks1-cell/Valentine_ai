@@ -258,9 +258,15 @@ class SelfAdaptationEngine:
                     proposed_status = "ACTIVE"
 
                     if (total_recent >= 5 and win_rate <= 20.0) or losses >= 8 or consecutive_losses >= 5:
-                        if hours_since_last_trade >= 6.0:
+                        if 6.0 <= hours_since_last_trade <= 48.0:
                             target_modifier = -0.15
                             proposed_status = "PROBATION_RECOVERY"
+                        elif hours_since_last_trade > 48.0:
+                            target_modifier = -0.25
+                            proposed_status = "DISABLED"  # Probation state expired due to 48h+ inactivity decay
+                            insights.append(
+                                f"⏳ Strategy '{strat}' probation window EXPIRED after {hours_since_last_trade:.1f}h without trades. Reverted to DISABLED."
+                            )
                         else:
                             target_modifier = -0.25
                             proposed_status = "DISABLED"
@@ -504,11 +510,20 @@ class SelfAdaptationEngine:
             
             hours_since_last = s_stats.get("hours_since_last_trade", 999.0)
             if st_status in ["DISABLED", "PROBATION_RECOVERY"] or (recent_sample >= 5 and win_rate <= 20.0):
-                if meta_conviction >= 80.0 or hours_since_last >= 6.0:
+                if hours_since_last > 48.0 and st_status == "PROBATION_RECOVERY":
+                    # Decay mechanism: Probation recovery window expires after 48h of inactivity without trades
+                    is_allowed = False
+                    reasons.append(
+                        f"[SELF-ADAPTATION] Strategy '{strategy}' probation recovery window EXPIRED due to {hours_since_last:.1f}h of inactivity (> 48h). "
+                        f"Reverted to DISABLED state. Requires Meta Conviction >= 85.0 to re-evaluate."
+                    )
+                    return False, -0.25, reasons
+
+                if meta_conviction >= 80.0 or (6.0 <= hours_since_last <= 48.0):
                     setup["is_probationary_trade"] = True
                     probation_msg = (
-                        f"🧪 [PROBATIONARY STRATEGY TRIAL] Strategy '{strategy}' is quarantined (win rate {win_rate:.1f}%), "
-                        f"but Meta Conviction {meta_conviction:.1f} >= 80.0 permits a micro-sized (0.35x risk) trial trade to test updated filters."
+                        f"🧪 [PROBATIONARY STRATEGY TRIAL] Strategy '{strategy}' is quarantined (win rate {win_rate:.1f}%, idle {hours_since_last:.1f}h), "
+                        f"but Meta Conviction {meta_conviction:.1f} >= 80.0 permits a micro-sized (0.35x risk) trial trade."
                     )
                     logger.info(probation_msg)
                     reasons.append(probation_msg)
@@ -518,7 +533,7 @@ class SelfAdaptationEngine:
                     reasons.append(
                         f"[SELF-ADAPTATION] Strategy '{strategy}' is temporarily DISABLED due to severe underperformance "
                         f"({s_stats.get('losses', 0)} losses / win rate {win_rate:.1f}% over last {recent_sample} trades). "
-                        f"Requires Meta Conviction >= 80.0 or 6h+ cooldown for Probationary Trial."
+                        f"Requires Meta Conviction >= 80.0 or 6h-48h cooldown window for Probationary Trial."
                     )
                     return False, -0.25, reasons
             elif st_status in ["SEVERELY_PENALIZED", "PENALIZED"] or (recent_sample >= 5 and win_rate <= 30.0):
