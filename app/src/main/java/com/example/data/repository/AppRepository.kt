@@ -14,11 +14,7 @@ class AppRepository(private val db: AppDatabase) {
 
     // --- Contabo VPS FastAPI Integration ---
     private val contaboService: com.example.data.api.ContaboApiService by lazy {
-        val url = try {
-            com.example.BuildConfig.CONTABO_VPS_URL
-        } catch (e: Exception) {
-            "http://169.58.34.76:8000/api/v1/"
-        }
+        val url = "http://169.58.34.76:8000/api/v1/"
         com.example.data.api.ContaboRetrofitClient.buildService(url)
     }
 

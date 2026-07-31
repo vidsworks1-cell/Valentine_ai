@@ -61,15 +61,16 @@ class MTFConfirmationGuard:
         """
         if ctx is not None and hasattr(ctx, "eval_cache") and "mtf_alignment" in ctx.eval_cache:
             cached_passed, cached_pct, cached_details = ctx.eval_cache["mtf_alignment"]
-            if conviction_score and conviction_score >= 75.0 and cached_details.get("agree_count", 0) >= 2 and not cached_details.get("macro_contradiction"):
-                revised_req = 55.0
-                revised_passed = cached_pct >= revised_req and not cached_details.get("macro_contradiction")
-                cached_details["required_threshold_pct"] = revised_req
-                cached_details["relaxation_applied"] = True
-                res = (revised_passed, cached_pct, cached_details)
-                ctx.eval_cache["mtf_alignment"] = res
-                return res
-            return cached_passed, cached_pct, cached_details
+            if not strategy or cached_details.get("strategy") == strategy:
+                if conviction_score and conviction_score >= 75.0 and cached_details.get("agree_count", 0) >= 2 and not cached_details.get("macro_contradiction"):
+                    revised_req = 55.0
+                    revised_passed = cached_pct >= revised_req and not cached_details.get("macro_contradiction")
+                    cached_details["required_threshold_pct"] = revised_req
+                    cached_details["relaxation_applied"] = True
+                    res = (revised_passed, cached_pct, cached_details)
+                    ctx.eval_cache["mtf_alignment"] = res
+                    return res
+                return cached_passed, cached_pct, cached_details
 
         sym = symbol.upper()
         cache = await PriceCache.get_instance()
@@ -107,15 +108,25 @@ class MTFConfirmationGuard:
         # Hard Macro Contradiction Guard: Any trade where 1h opposes and overall agreement is < 2 TFs or weighted score < 50.0%
         macro_contradiction = (tf_1h != side and agree_count < 2) or (weighted_pct < 50.0)
 
-        # Dynamic Threshold Relaxation for High Conviction Signals (from Second Brain)
-        required_threshold = 66.0
+        # Dynamic Threshold Determination using Adaptive Guard Thresholds
+        regime = "NORMAL"
+        if ctx and hasattr(ctx, "eval_cache") and "macro_risk" in ctx.eval_cache:
+            regime = ctx.eval_cache["macro_risk"].get("risk_level", "NORMAL")
+
+        try:
+            from app.trading.adaptive_guard_thresholds import AdaptiveGuardThresholds
+            base_req = AdaptiveGuardThresholds.get_instance().get_effective_threshold("mtf_alignment_pct", regime)
+        except Exception:
+            base_req = 66.0
+
+        required_threshold = base_req
         relaxation_applied = False
         if conviction_score and conviction_score >= 75.0 and agree_count >= 2 and not macro_contradiction:
-            required_threshold = 55.0  # High conviction allows slight MTF divergence if micro/intermediate agree
+            required_threshold = max(50.0, base_req - 11.0)  # High conviction allows slight MTF divergence
             relaxation_applied = True
             logger.info(
                 f"⚡ [HIGH CONVICTION MTF RELAXATION] {sym} {side} ({strategy}): Conviction score {conviction_score:.1f} >= 75.0. "
-                f"Relaxed MTF threshold from 66.0% to 55.0%."
+                f"Relaxed MTF threshold from {base_req}% to {required_threshold}%."
             )
 
         # Final Pass Determination

@@ -112,11 +112,13 @@ class MetaReasoningEngine:
             from app.trading.mtf_confirmation import MTFConfirmationGuard
             price_val = candidate_setup.get("entry_price", 0.0)
             strat_val = candidate_setup.get("strategy_used") or candidate_setup.get("strategy")
+            ctx_obj = candidate_setup.get("decision_context")
             passed_mtf, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(
                 symbol=symbol,
                 side=side,
                 price=price_val,
-                strategy=strat_val
+                strategy=strat_val,
+                ctx=ctx_obj
             )
             if passed_mtf:
                 htf_score = min(95.0, max(75.0, mtf_align_pct * 1.1))

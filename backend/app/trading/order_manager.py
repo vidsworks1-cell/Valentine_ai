@@ -78,120 +78,25 @@ class OrderManager:
             # Extract DecisionContext if present
             ctx = opportunity.get("decision_context")
 
-            # 0c. Multi-Timeframe Confirmation Guard Check (5m, 15m, 1h alignment)
-            from app.trading.mtf_confirmation import MTFConfirmationGuard
-            conviction_val = (
-                opportunity.get("conviction_score") or
-                opportunity.get("meta_reasoning", {}).get("overall_conviction_score") or
-                (opportunity.get("confidence_score", 0.0) * 100.0)
-            )
-            passed_mtf, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(
-                symbol=symbol,
-                side=side,
-                price=opportunity.get("entry_price", 0.0),
-                strategy=opportunity.get("strategy_used"),
-                conviction_score=conviction_val,
-                ctx=ctx
-            )
-            if not passed_mtf:
-                mtf_reason = (
-                    f"[MTF GUARD]\n"
-                    f"Rejected {side} trade for {symbol}.\n"
-                    f"Reason: Multi-timeframe alignment insufficient ({mtf_align_pct:.1f}% vs threshold {mtf_details.get('required_threshold_pct', 66.0):.1f}%).\n"
-                    f"5m: {mtf_details['tf_5m_bias']} | 15m: {mtf_details['tf_15m_bias']} | 1h: {mtf_details['tf_1h_bias']} | Weight Model: {mtf_details.get('weight_type', 'UNWEIGHTED_EQUAL')}."
-                )
-                logger.warning(mtf_reason)
-                try:
-                    from app.ai.reasoning import AiReasoningEngine
-                    from app.trading.execution_analytics import ExecutionAnalyticsEngine
-                    from app.services.audit_service import AuditService
-                    from app.trading.portfolio_attribution import PortfolioAttributionEngine
-                    PortfolioAttributionEngine.get_instance().record_risk_prevention_event("mtf_guard", 150.0, mtf_reason)
-                    AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="MTF_DISAGREEMENT", reason=mtf_reason, price=opportunity.get("entry_price", 0.0))
-                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy_used", ""), mtf_reason, opportunity.get("entry_price", 0.0))
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="WARNING",
-                            category="RISK",
-                            message=f"[MTF GUARD] Rejected {side} trade for {symbol}",
-                            details=mtf_reason
-                        ))
-                except Exception as ae:
-                    logger.error(f"Failed to log MTF guard audit event: {ae}")
-                return
+            if ctx:
+                # 3. Pipeline Integrity Check Invariants
+                is_valid_pipeline, integrity_err = ctx.verify_pipeline_integrity()
+                if not is_valid_pipeline:
+                    logger.error(f"❌ [PIPELINE INTEGRITY VIOLATION] Aborting execution for {symbol}: {integrity_err}")
+                    ctx.record_rejection("PipelineIntegrity", integrity_err, category="PIPELINE_INTEGRITY_VIOLATION")
+                    return
+                ctx.add_trace("OrderManager", "PASS")
+                logger.info(f"🔒 [ORDER MANAGER EXECUTION ENGINE] Processing locked DecisionContext {ctx.signal_id} ({ctx.symbol} {ctx.side} via {ctx.active_strategy}) | Pipeline Ver: {ctx.pipeline_version}")
 
-            # 0d. Multi-Timeframe Volume & Liquidity Confluence Filter Check (5m, 15m, 1h RVOL, Order Flow Delta & Order Book Depth)
-            passed_vol, vol_confluence_score, vol_details = await MTFConfirmationGuard.get_instance().evaluate_volume_liquidity_confluence(
-                symbol, side, opportunity.get("entry_price", 0.0), ctx=ctx
-            )
-            if not passed_vol:
-                vol_rejection_reasons = "; ".join(vol_details.get("rejection_reasons", ["Confluence score below 70.0%"]))
-                vol_reason_summary = (
-                    f"Confluence score below required threshold ({vol_confluence_score:.1f}% < 70.0%)"
-                    if vol_confluence_score < 70.0
-                    else f"Volume/Liquidity risk guard triggered (Confluence Score: {vol_confluence_score:.1f}%)"
-                )
-                vol_reason = (
-                    f"[MTF VOLUME & LIQUIDITY GUARD]\n"
-                    f"Rejected {side} trade for {symbol}.\n"
-                    f"Reason: {vol_reason_summary}.\n"
-                    f"RVOL (5m: {vol_details['rvol_5m']}, 15m: {vol_details['rvol_15m']}, 1h: {vol_details['rvol_1h']}) | Directional Volume Delta: {vol_details['favorable_volume_delta']}%\n"
-                    f"Flags: {vol_rejection_reasons}"
-                )
-                logger.warning(vol_reason)
-                try:
-                    from app.ai.reasoning import AiReasoningEngine
-                    from app.trading.execution_analytics import ExecutionAnalyticsEngine
-                    from app.services.audit_service import AuditService
-                    AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="VOLUME_LIQUIDITY_INSUFFICIENT", reason=vol_reason, price=opportunity.get("entry_price", 0.0))
-                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy_used", ""), vol_reason, opportunity.get("entry_price", 0.0))
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="WARNING",
-                            category="RISK",
-                            message=f"[MTF VOLUME & LIQUIDITY GUARD] Rejected {side} trade for {symbol}",
-                            details=vol_reason
-                        ))
-                except Exception as ae:
-                    logger.error(f"Failed to log volume & liquidity guard audit event: {ae}")
-                return
-
-            # 0e. Macro & Institutional Risk Confluence Overlay Check
-            from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
-            macro_overlay = await MacroRiskOverlayEngine.get_instance().evaluate_macro_risk(symbol, side, ctx=ctx)
-            if not macro_overlay.get("trade_permitted", True):
-                macro_reason = (
-                    f"[MACRO RISK OVERLAY LOCKDOWN]\n"
-                    f"Rejected {side} trade for {symbol}.\n"
-                    f"Reason: Macro Risk Score {macro_overlay['macro_risk_score']:.1f}/100 ({macro_overlay['risk_level']}).\n"
-                    f"Summary: {macro_overlay['risk_summary']}"
-                )
-                logger.warning(macro_reason)
-                try:
-                    from app.ai.reasoning import AiReasoningEngine
-                    from app.trading.execution_analytics import ExecutionAnalyticsEngine
-                    from app.services.audit_service import AuditService
-                    AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="MACRO_RISK_LOCKDOWN", reason=macro_reason, price=opportunity.get("entry_price", 0.0))
-                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), macro_reason, opportunity.get("entry_price", 0.0))
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="WARNING",
-                            category="RISK",
-                            message=f"[MACRO RISK OVERLAY] Rejected {side} trade for {symbol}",
-                            details=macro_reason
-                        ))
-                except Exception as ae:
-                    logger.error(f"Failed to log macro risk overlay audit event: {ae}")
-                return
-
-            # Apply macro adaptive position size scaler if permitted (e.g., 0.70x or 0.35x)
+            # 0c. Macro Scaler Extraction (Read from DecisionContext eval_cache if present)
+            macro_overlay = (ctx.eval_cache.get("macro_risk") if ctx else None) or {}
             macro_scaler = macro_overlay.get("position_size_scaler", 1.0)
             if macro_scaler < 1.0 and macro_scaler > 0.0:
                 old_size = opportunity.get("position_size", 1.0)
                 opportunity["position_size"] = round(old_size * macro_scaler, 4)
-                logger.info(f"⚖️ [MACRO RISK SCALER] Position size for {symbol} scaled from {old_size} to {opportunity['position_size']} ({macro_scaler * 100:.0f}% allocation due to {macro_overlay['risk_level']}).")
+                logger.info(f"⚖️ [MACRO RISK SCALER] Position size for {symbol} scaled from {old_size} to {opportunity['position_size']} ({macro_scaler * 100:.0f}% allocation due to {macro_overlay.get('risk_level', 'ELEVATED')}).")
 
-            # 0f. Cross-Asset Correlation & Concentration Risk Check
+            # 0d. Cross-Asset Correlation & Concentration Risk Check
             from app.trading.cross_asset_correlation import CrossAssetCorrelationEngine
             from app.trading.position_manager import PositionManager
             active_pos = PositionManager.get_instance().get_active_positions()
