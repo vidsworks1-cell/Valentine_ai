@@ -35,6 +35,76 @@ class AgentPlannerCoordinator:
             "RiskGovernorAgent"
         ]
         self._audit_trail: List[Dict[str, Any]] = []
+        self._user_preference_profile: Dict[str, Any] = {
+            "risk_appetite": "BALANCED",
+            "detail_depth": "STANDARD",
+            "preferred_assets": set(),
+            "query_count": 0,
+            "syntactic_patterns": []
+        }
+
+    def analyze_query_syntax_and_preferences(self, query: str) -> Dict[str, Any]:
+        """
+        Analyzes query structure, syntactic markers, sentiment, and extracts user preference signals.
+        """
+        lower_q = query.lower().strip()
+        words = lower_q.split()
+        word_count = len(words)
+
+        # 1. Structural Syntax Analysis
+        is_question = lower_q.endswith("?") or lower_q.startswith(("what", "why", "how", "when", "is", "are", "can", "did", "does"))
+        is_command = lower_q.startswith(("execute", "buy", "sell", "set", "change", "optimize", "run", "switch", "enable", "disable", "stop"))
+        
+        complexity = "HIGH" if word_count > 15 else ("MEDIUM" if word_count > 6 else "LOW")
+        urgency = "HIGH" if any(u in lower_q for u in ["now", "urgent", "immediately", "quick", "fast", "right away"]) else "NORMAL"
+
+        # 2. Preference Signal Extraction
+        risk_signal = "BALANCED"
+        if any(r in lower_q for r in ["aggressive", "high risk", "max gain", "leverage", "degen", "yolo"]):
+            risk_signal = "AGGRESSIVE"
+        elif any(r in lower_q for r in ["conservative", "safe", "low risk", "preserve", "protect"]):
+            risk_signal = "CONSERVATIVE"
+
+        detail_signal = "HIGH" if any(d in lower_q for d in ["explain", "why", "breakdown", "details", "audit", "reason", "proof"]) else "CONCISE"
+
+        # Asset extraction
+        assets = []
+        for coin in ["btc", "eth", "sol", "bnb", "xrp", "ada"]:
+            if coin in lower_q:
+                assets.append(coin.upper())
+
+        # 3. Update User Preference Profile
+        self._user_preference_profile["query_count"] += 1
+        if risk_signal != "BALANCED":
+            self._user_preference_profile["risk_appetite"] = risk_signal
+        if detail_signal == "HIGH":
+            self._user_preference_profile["detail_depth"] = "DETAILED"
+        for a in assets:
+            self._user_preference_profile["preferred_assets"].add(a)
+
+        analysis = {
+            "query": query,
+            "syntax": {
+                "word_count": word_count,
+                "is_question": is_question,
+                "is_command": is_command,
+                "complexity": complexity,
+                "urgency": urgency
+            },
+            "inferred_preferences": {
+                "detected_risk_appetite": risk_signal,
+                "detected_detail_preference": detail_signal,
+                "target_assets": assets
+            },
+            "global_user_profile": {
+                "risk_appetite": self._user_preference_profile["risk_appetite"],
+                "detail_depth": self._user_preference_profile["detail_depth"],
+                "preferred_assets": list(self._user_preference_profile["preferred_assets"]),
+                "total_queries_analyzed": self._user_preference_profile["query_count"]
+            }
+        }
+        logger.info(f"🔬 [SYNTAX & PREFERENCE ANALYSIS] Query analyzed: '{query[:30]}...' -> Syntax: {complexity}/{urgency} | Risk Signal: {risk_signal}")
+        return analysis
 
     def dispatch_collaborative_task(self, task_description: str, task_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """

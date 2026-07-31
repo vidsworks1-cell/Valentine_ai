@@ -124,70 +124,58 @@ object NlgEngine {
         actionExecutedNotice: String
     ): String {
         val rand = Random(userInput.hashCode())
-        val prefStyle = context.relationshipProfile.preferredCommunicationStyle
-        val isConcise = prefStyle.lowercase().contains("concise") || prefStyle.lowercase().contains("brief")
-        val useMetaphors = context.relationshipProfile.preferredExplanations.lowercase().contains("metaphor") || context.relationshipProfile.preferredExplanations.lowercase().contains("layman")
+        val profile = context.relationshipProfile
+        val style = profile.investingStyle
+        val assets = profile.preferredAssets.joinToString(", ").ifEmpty { "BTC, ETH, SOL" }
+        val strats = profile.preferredStrategies.joinToString(", ").ifEmpty { "Breakout Momentum, Volatility Expansion" }
+        val cashStr = String.format(Locale.US, "%,.2f", context.portfolioCash)
 
-        val greeting = buildGreeting(emotionResult, context.relationshipProfile, rand)
-        val transition = ANALYTICAL_TRANSITIONS[rand.nextInt(ANALYTICAL_TRANSITIONS.size)]
-        
-        val bodyContent = when (intentResult.primaryIntent) {
-            IntentType.TRADING_ADVICE -> {
-                val btcHolding = context.holdings.find { it.symbol == "BTC" }
-                val extra = if (btcHolding != null) {
-                    "Your current portfolio exposure includes **${btcHolding.amountOwned} BTC**."
-                } else {
-                    "We are positioned completely in defensive fiat/cash nodes."
-                }
-                "$transition we are managing a central pool of **$${String.format(Locale.US, "%,.2f", context.portfolioCash)} USD** with a verified planning accuracy rate of **${context.planningAccuracy}%**. $extra"
+        val warmGreetings = listOf(
+            "I hear you! Let's take a look at where we stand and how we can best align with your targets.",
+            "Great to connect! I've been monitoring market structures closely through the lens of your strategy.",
+            "Absolutely. Let's touch base on your portfolio trajectory and active market setups.",
+            "I'm right here with you. Let's evaluate our latest positions and strategic opportunities."
+        )
+        val greeting = warmGreetings[rand.nextInt(warmGreetings.size)]
+
+        val tailoredGuidance = when (style.uppercase(Locale.US)) {
+            "AGGRESSIVE" -> {
+                "🚀 **Tailored Strategy (Aggressive Growth Profile)**\n" +
+                "Given your preference for high-momentum growth and focus on **$assets**, I am calibrating Lumina's scanner toward high-probability breakout setups and volatility expansion strategies (**$strats**). We're targeting expanded risk-reward ratios (1:2.5+) with dynamic trailing stops."
             }
-            IntentType.CONTENT_PLANNING -> {
-                "$transition we have **${context.contentQueueCount} drafts** cataloged in our Content Studio pipeline. Our audience tracking metrics are stable, and we're ready to index new script blueprints."
-            }
-            IntentType.FREELANCE_PLANNING -> {
-                "$transition our service scraper reports **${context.openGigsCount} open freelance listings** matching our professional profile. We can scale outbound proposals dynamically to expand our pipeline."
+            "CONSERVATIVE" -> {
+                "🛡️ **Tailored Strategy (Conservative Capital Protection)**\n" +
+                "In line with your conservative investment stance, Lumina is prioritizing strict capital preservation across **$assets**. We are applying tight 1.5x ATR stops, multi-timeframe confluence filtering, and hedged position sizing to keep drawdowns minimal."
             }
             else -> {
-                val primaryGoal = context.relationshipProfile.longTermGoals.firstOrNull() ?: "optimizing our autonomous processes"
-                "$transition we are continuing our focus on **\"$primaryGoal\"**. Active operations are running stably at **${context.systemUptime}% uptime** under full pilot synchronization."
+                "⚖️ **Tailored Strategy (Balanced Profile)**\n" +
+                "Matching your balanced investment approach, Lumina is deploying a mix of Breakout Momentum and Mean Reversion models on **$assets**. We maintain a disciplined 1.0% risk per trade budget with active profit-taking targets."
             }
         }
 
-        val contextTheme = when (intentResult.primaryIntent) {
-            IntentType.TRADING_ADVICE -> "FINANCIAL"
-            IntentType.CONTENT_PLANNING -> "CONTENT"
-            else -> "FINANCIAL"
-        }
-        val metaphor = if (useMetaphors) {
-            val list = METAPHORS[contextTheme] ?: METAPHORS["FINANCIAL"]!!
-            " Structurally, it is like " + list[rand.nextInt(list.size)] + "."
-        } else ""
+        val systemOverview = "Currently, our paper liquidity pool stands at **$$cashStr USD** with active daemon execution enabled."
 
         val actionBlock = if (actionExecutedNotice.isNotEmpty()) {
             "\n\n✨ **System Update:**\n$actionExecutedNotice"
         } else ""
 
-        val conclusion = CONCLUSIONS_NLG[rand.nextInt(CONCLUSIONS_NLG.size)]
+        val conversationalPrompts = listOf(
+            "How would you like us to tune our focus next? We can adjust asset weightings or strategy parameters anytime!",
+            "What asset or setup are you curious about right now? I'm ready to analyze it with you.",
+            "Let me know if you want to test new parameters or adjust our daily trading allocation!",
+            "Feel free to share any specific setups or market thoughts you'd like me to evaluate!"
+        )
+        val prompt = conversationalPrompts[rand.nextInt(conversationalPrompts.size)]
 
-        return if (isConcise) {
-            """
-                $bodyContent$metaphor$actionBlock
-                
-                $conclusion
-            """.trimIndent()
-        } else {
-            """
-                ### 💫 Lumina Briefing
-                
-                $greeting
-                
-                $bodyContent$metaphor$actionBlock
-                
-                *Detected User Affective State:* _${emotionResult.primaryEmotion}_
-                
-                $conclusion
-            """.trimIndent()
-        }
+        return """
+            $greeting
+            
+            $tailoredGuidance
+            
+            $systemOverview$actionBlock
+            
+            $prompt
+        """.trimIndent()
     }
 
     private fun buildSalutation(intent: IntentObject, tone: String, rand: Random): String {

@@ -17,6 +17,11 @@ data class RelationshipProfile(
     var formalityPreference: Double = 0.80,    // 0.0 (Casual/Friendly) -> 1.0 (Strict/Professional)
     var decisionControlPreference: Double = 0.50, // 0.0 (Manual/Approval-heavy) -> 1.0 (Autopilot/Autonomous)
     
+    // User Investing Style & Preferences
+    var investingStyle: String = "MODERATE",   // AGGRESSIVE, MODERATE, CONSERVATIVE
+    val preferredAssets: MutableSet<String> = mutableSetOf("BTC", "ETH", "SOL"),
+    val preferredStrategies: MutableSet<String> = mutableSetOf("Breakout Momentum", "Volatility Expansion", "Liquidity Sweep"),
+
     // Additional Calibration metrics
     var totalAdaptiveCycles: Int = 0,
     var lastCalibratedAt: Long = 0L
@@ -146,6 +151,36 @@ class ConversationMemory {
         autoCues.forEach { if (lower.contains(it)) decisionShift += 0.15 }
         relationshipProfile.decisionControlPreference = (relationshipProfile.decisionControlPreference + decisionShift).coerceIn(0.10, 1.0)
         
+        // --- 5. Investing Style & Preference Calibration ---
+        val aggCues = listOf("aggressive", "high risk", "leverage", "max gain", "degen", "scalp", "high beta", "momentum")
+        val consCues = listOf("conservative", "safe", "low risk", "preserve capital", "hedged", "protect", "defensive")
+        if (aggCues.any { lower.contains(it) }) {
+            relationshipProfile.investingStyle = "AGGRESSIVE"
+        } else if (consCues.any { lower.contains(it) }) {
+            relationshipProfile.investingStyle = "CONSERVATIVE"
+        }
+
+        // Asset preference cues
+        val coinMap = mapOf(
+            "btc" to "BTC", "bitcoin" to "BTC",
+            "eth" to "ETH", "ethereum" to "ETH",
+            "sol" to "SOL", "solana" to "SOL",
+            "bnb" to "BNB", "binance" to "BNB",
+            "xrp" to "XRP", "ripple" to "XRP",
+            "ada" to "ADA", "cardano" to "ADA"
+        )
+        coinMap.forEach { (keyword, symbol) ->
+            if (lower.contains(keyword)) {
+                relationshipProfile.preferredAssets.add(symbol)
+            }
+        }
+
+        // Strategy cues
+        if (lower.contains("breakout")) relationshipProfile.preferredStrategies.add("Breakout Momentum")
+        if (lower.contains("volatility") || lower.contains("expansion")) relationshipProfile.preferredStrategies.add("Volatility Expansion")
+        if (lower.contains("sweep") || lower.contains("liquidity")) relationshipProfile.preferredStrategies.add("Liquidity Sweep")
+        if (lower.contains("mean reversion") || lower.contains("reversion")) relationshipProfile.preferredStrategies.add("Mean Reversion")
+
         relationshipProfile.totalAdaptiveCycles++
         relationshipProfile.lastCalibratedAt = System.currentTimeMillis()
         

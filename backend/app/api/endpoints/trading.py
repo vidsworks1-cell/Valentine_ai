@@ -2088,6 +2088,20 @@ async def get_subsystem_evidence_report():
         "confidence_calibration_evidence": calib
     }
 
+@router.post("/query-syntax/analyze")
+async def analyze_query_syntax(query: str):
+    """Analyzes query structure, syntactic markers, sentiment, and updates global user preference profile."""
+    from app.ai.agent_planner_coordinator import AgentPlannerCoordinator
+    return AgentPlannerCoordinator.get_instance().analyze_query_syntax_and_preferences(query)
+
+@router.get("/user-preferences/profile")
+async def get_user_preference_profile():
+    """Returns stored user preferences derived from query syntax and interaction analysis."""
+    from app.ai.agent_planner_coordinator import AgentPlannerCoordinator
+    coordinator = AgentPlannerCoordinator.get_instance()
+    return coordinator._user_preference_profile
+
+
 
 
 
