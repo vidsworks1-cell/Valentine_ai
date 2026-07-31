@@ -18,6 +18,7 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    buildConfigField("String", "CONTABO_VPS_URL", "\"http://169.58.34.76:8000/\"")
   }
 
   signingConfigs {
