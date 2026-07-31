@@ -1999,6 +1999,96 @@ async def trigger_replay_self_calibration():
     from app.ai.self_adaptation import SelfAdaptationEngine
     return SelfAdaptationEngine.get_instance().auto_calibrate_from_replay()
 
+# ==========================================
+# Operational Dashboard & Resilience APIs
+# ==========================================
+
+@router.get("/ops-dashboard")
+async def get_operational_dashboard():
+    """
+    Consolidated Operational Resilience Dashboard:
+    Presents system health, portfolio state, decision latency, guard activity,
+    active risk controls, exchange reconciliation status, and state recovery metrics.
+    """
+    from app.trading.production_monitoring import ProductionMonitoringEngine
+    from app.trading.portfolio_guard import PortfolioGuard
+    from app.trading.position_manager import PositionManager
+    from app.trading.state_recovery import StateRecoveryEngine
+    from app.trading.exchange_reconciliation import ExchangeReconciliationEngine
+    from app.trading.chaos_engine import ChaosEngine
+    from app.trading.portfolio_attribution import PortfolioAttributionEngine
+
+    monitoring = await ProductionMonitoringEngine.get_instance().collect_health_metrics()
+    positions = PositionManager.get_instance().get_active_positions()
+    portfolio_guard_stats = PortfolioGuard.get_instance().get_portfolio_guard_summary()
+    state_recovery_telemetry = StateRecoveryEngine.get_instance().get_telemetry()
+    recon_telemetry = ExchangeReconciliationEngine.get_instance().get_telemetry()
+    chaos_telemetry = ChaosEngine.get_instance().get_telemetry()
+    attribution_telemetry = PortfolioAttributionEngine.get_instance().get_attribution_summary()
+
+    return {
+        "dashboard_timestamp": datetime.now(timezone.utc).isoformat(),
+        "system_health": monitoring,
+        "portfolio_state": {
+            "active_positions_count": len(positions),
+            "active_positions": positions,
+            "portfolio_guard_controls": portfolio_guard_stats
+        },
+        "resilience_and_reconciliation": {
+            "state_recovery": state_recovery_telemetry,
+            "exchange_reconciliation": recon_telemetry,
+            "chaos_engine": chaos_telemetry
+        },
+        "evidence_and_attribution": attribution_telemetry
+    }
+
+@router.post("/state-recovery/checkpoint")
+async def save_state_recovery_checkpoint():
+    """Saves complete in-memory system state (positions, cooldowns, strategy stats) to disk checkpoint."""
+    from app.trading.state_recovery import StateRecoveryEngine
+    success = StateRecoveryEngine.get_instance().save_checkpoint()
+    return {"success": success, "telemetry": StateRecoveryEngine.get_instance().get_telemetry()}
+
+@router.post("/state-recovery/restore")
+async def restore_state_recovery_checkpoint():
+    """Restores system state from latest disk checkpoint file."""
+    from app.trading.state_recovery import StateRecoveryEngine
+    return StateRecoveryEngine.get_instance().restore_system_state()
+
+@router.post("/reconcile")
+async def run_exchange_reconciliation(simulated_positions: Optional[List[Dict[str, Any]]] = None):
+    """Runs on-demand exchange vs internal state reconciliation audit and resolves discrepancies."""
+    from app.trading.exchange_reconciliation import ExchangeReconciliationEngine
+    return await ExchangeReconciliationEngine.get_instance().reconcile_state(simulated_exchange_positions=simulated_positions)
+
+@router.post("/chaos/suite")
+async def run_failure_injection_suite():
+    """Executes full failure injection test suite simulating API outages, WS drops, delayed fills, DB errors, and state skews."""
+    from app.trading.chaos_engine import ChaosEngine
+    return await ChaosEngine.get_instance().run_failure_injection_suite()
+
+@router.get("/evidence-report")
+async def get_subsystem_evidence_report():
+    """Returns continuous evidence collection measuring each subsystem's contribution to overall performance."""
+    from app.ai.weekly_review import AutonomousWeeklyReviewEngine
+    from app.trading.portfolio_attribution import PortfolioAttributionEngine
+    from app.trading.capital_allocation import CapitalAllocationEngine
+    from app.ai.self_adaptation import SelfAdaptationEngine
+
+    review = await AutonomousWeeklyReviewEngine.get_instance().generate_weekly_review()
+    attr = PortfolioAttributionEngine.get_instance().get_attribution_summary()
+    cap_table = CapitalAllocationEngine.get_instance().get_strategy_competition_table()
+    calib = SelfAdaptationEngine.get_instance().generate_confidence_calibration_report()
+
+    return {
+        "report_generated_at": datetime.now(timezone.utc).isoformat(),
+        "subsystem_attributions": attr,
+        "weekly_self_evaluation": review.get("continuous_self_evaluation", {}),
+        "strategy_competition_rankings": cap_table,
+        "confidence_calibration_evidence": calib
+    }
+
+
 
 
 

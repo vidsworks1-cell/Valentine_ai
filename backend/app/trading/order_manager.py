@@ -75,6 +75,9 @@ class OrderManager:
             # Delegated directly to Layer 4 PortfolioGuard (evaluate_portfolio_action) in Step 2b downstream.
             # PortfolioGuard dynamically determines Pyramid Scale-In, Opposite Signal Partial Rebalance, Alpha Swaps, or Rejection.
 
+            # Extract DecisionContext if present
+            ctx = opportunity.get("decision_context")
+
             # 0c. Multi-Timeframe Confirmation Guard Check (5m, 15m, 1h alignment)
             from app.trading.mtf_confirmation import MTFConfirmationGuard
             conviction_val = (
@@ -87,7 +90,8 @@ class OrderManager:
                 side=side,
                 price=opportunity.get("entry_price", 0.0),
                 strategy=opportunity.get("strategy_used"),
-                conviction_score=conviction_val
+                conviction_score=conviction_val,
+                ctx=ctx
             )
             if not passed_mtf:
                 mtf_reason = (
@@ -104,7 +108,7 @@ class OrderManager:
                     from app.trading.portfolio_attribution import PortfolioAttributionEngine
                     PortfolioAttributionEngine.get_instance().record_risk_prevention_event("mtf_guard", 150.0, mtf_reason)
                     AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="MTF_DISAGREEMENT", reason=mtf_reason, price=opportunity.get("entry_price", 0.0))
-                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), mtf_reason, opportunity.get("entry_price", 0.0))
+                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy_used", ""), mtf_reason, opportunity.get("entry_price", 0.0))
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
@@ -117,7 +121,9 @@ class OrderManager:
                 return
 
             # 0d. Multi-Timeframe Volume & Liquidity Confluence Filter Check (5m, 15m, 1h RVOL, Order Flow Delta & Order Book Depth)
-            passed_vol, vol_confluence_score, vol_details = await MTFConfirmationGuard.get_instance().evaluate_volume_liquidity_confluence(symbol, side, opportunity.get("entry_price", 0.0))
+            passed_vol, vol_confluence_score, vol_details = await MTFConfirmationGuard.get_instance().evaluate_volume_liquidity_confluence(
+                symbol, side, opportunity.get("entry_price", 0.0), ctx=ctx
+            )
             if not passed_vol:
                 vol_rejection_reasons = "; ".join(vol_details.get("rejection_reasons", ["Confluence score below 70.0%"]))
                 vol_reason_summary = (
@@ -138,7 +144,7 @@ class OrderManager:
                     from app.trading.execution_analytics import ExecutionAnalyticsEngine
                     from app.services.audit_service import AuditService
                     AiReasoningEngine.get_instance().set_cooldown(symbol, side, category="VOLUME_LIQUIDITY_INSUFFICIENT", reason=vol_reason, price=opportunity.get("entry_price", 0.0))
-                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy", ""), vol_reason, opportunity.get("entry_price", 0.0))
+                    ExecutionAnalyticsEngine.get_instance().record_missed_fill(symbol, side, opportunity.get("strategy_used", ""), vol_reason, opportunity.get("entry_price", 0.0))
                     async with AsyncSessionLocal() as db:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
@@ -152,7 +158,7 @@ class OrderManager:
 
             # 0e. Macro & Institutional Risk Confluence Overlay Check
             from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
-            macro_overlay = await MacroRiskOverlayEngine.get_instance().evaluate_macro_risk(symbol, side)
+            macro_overlay = await MacroRiskOverlayEngine.get_instance().evaluate_macro_risk(symbol, side, ctx=ctx)
             if not macro_overlay.get("trade_permitted", True):
                 macro_reason = (
                     f"[MACRO RISK OVERLAY LOCKDOWN]\n"

@@ -51,22 +51,26 @@ class MTFConfirmationGuard:
         side: str,
         price: float,
         strategy: Optional[str] = None,
-        conviction_score: Optional[float] = None
+        conviction_score: Optional[float] = None,
+        ctx: Optional[Any] = None
     ) -> Tuple[bool, float, Dict[str, Any]]:
         """
         Evaluates multi-timeframe alignment for a given trade setup.
-        Supports Strategy-Weighted TF Alignment & Dynamic Conviction Threshold Tuning.
-
-        Timeframe Weights:
-        - Mean Reversion: 5m (35%), 15m (45%), 1h (20%) -> Focuses on micro/intermediate exhaustion.
-        - Trend / Volatility Breakout: 5m (20%), 15m (35%), 1h (45%) -> Focuses on macro trend confluence.
-        - Default: Unweighted equal (33.3% each).
-
-        Returns:
-            - passed (bool): True if alignment meets standard/weighted threshold without hard macro contradiction.
-            - alignment_pct (float): Dynamic weighted or unweighted alignment score percentage.
-            - detail_dict (dict): Comprehensive breakdown per timeframe (5m, 15m, 1h), weights used, and counterfactuals.
+        Supports Strategy-Weighted TF Alignment, Dynamic Conviction Threshold Tuning,
+        and DecisionContext evaluation memoization.
         """
+        if ctx is not None and hasattr(ctx, "eval_cache") and "mtf_alignment" in ctx.eval_cache:
+            cached_passed, cached_pct, cached_details = ctx.eval_cache["mtf_alignment"]
+            if conviction_score and conviction_score >= 75.0 and cached_details.get("agree_count", 0) >= 2 and not cached_details.get("macro_contradiction"):
+                revised_req = 55.0
+                revised_passed = cached_pct >= revised_req and not cached_details.get("macro_contradiction")
+                cached_details["required_threshold_pct"] = revised_req
+                cached_details["relaxation_applied"] = True
+                res = (revised_passed, cached_pct, cached_details)
+                ctx.eval_cache["mtf_alignment"] = res
+                return res
+            return cached_passed, cached_pct, cached_details
+
         sym = symbol.upper()
         cache = await PriceCache.get_instance()
         tally = cache.get_update_tally(sym)
@@ -152,6 +156,24 @@ class MTFConfirmationGuard:
             "telemetry": telemetry
         }
 
+        res = (passed, weighted_pct, details)
+        if ctx is not None and hasattr(ctx, "eval_cache"):
+            ctx.eval_cache["mtf_alignment"] = res
+
+        if not passed:
+            try:
+                from app.ai.self_adaptation import SelfAdaptationEngine
+                SelfAdaptationEngine.get_instance().record_mtf_near_miss_audit(
+                    symbol=sym,
+                    side=side,
+                    strategy=strategy or "GENERIC",
+                    weighted_score=weighted_pct,
+                    threshold=required_threshold,
+                    timeframes_summary={"5m": tf_5m, "15m": tf_15m, "1h": tf_1h}
+                )
+            except Exception:
+                pass
+
         if macro_contradiction:
             logger.info(f"🛡️ [MTF GUARD REJECT] {sym} {side} blocked by hard 1h macro contradiction (Weighted: {weighted_pct}%)")
             return False, weighted_pct, details
@@ -161,9 +183,16 @@ class MTFConfirmationGuard:
 
         return passed, weighted_pct, details
 
-    async def evaluate_volume_liquidity_confluence(self, symbol: str, side: str, price: float) -> Tuple[bool, float, Dict[str, Any]]:
+    async def evaluate_volume_liquidity_confluence(
+        self,
+        symbol: str,
+        side: str,
+        price: float,
+        ctx: Optional[Any] = None
+    ) -> Tuple[bool, float, Dict[str, Any]]:
         """
         Evaluates Multi-Timeframe Volume Expansion & Order Book Liquidity Depth Confluence.
+        Supports DecisionContext evaluation caching.
         
         Metrics Analyzed across 5m, 15m, 1h:
         - 5m RVOL (Relative Volume vs 20-period micro average)
@@ -179,6 +208,8 @@ class MTFConfirmationGuard:
             - details (dict): Detailed metric breakdown
         """
         sym = symbol.upper()
+        if ctx is not None and hasattr(ctx, "eval_cache") and "volume_liquidity" in ctx.eval_cache:
+            return ctx.eval_cache["volume_liquidity"]
         cache = await PriceCache.get_instance()
         tally = cache.get_update_tally(sym)
         vol_data = cache.get_volume_and_depth(sym)
@@ -265,7 +296,10 @@ class MTFConfirmationGuard:
             "rejection_reasons": rejection_reasons
         }
 
-        return passed, confluence_score, details
+        res = (passed, confluence_score, details)
+        if ctx is not None and hasattr(ctx, "eval_cache"):
+            ctx.eval_cache["volume_liquidity"] = res
+        return res
 
     async def evaluate_weighted_mtf_invalidation(self, symbol: str, side: str, price: float) -> Tuple[float, Dict[str, Any]]:
         """

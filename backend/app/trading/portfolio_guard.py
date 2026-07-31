@@ -5,13 +5,19 @@ from typing import Dict, Any, Tuple, Optional, List
 try:
     from sqlalchemy.future import select
     from sqlalchemy import func
+    from app.database.session import AsyncSessionLocal
+    from app.models.trading import Trade
 except ImportError:
     select = None
     func = None
-from app.database.session import AsyncSessionLocal
-from app.models.trading import Trade
-from app.api.schemas import AuditLogCreate
-from app.services.audit_service import AuditService
+    AsyncSessionLocal = None
+    Trade = None
+try:
+    from app.api.schemas import AuditLogCreate
+    from app.services.audit_service import AuditService
+except ImportError:
+    AuditLogCreate = None
+    AuditService = None
 
 logger = logging.getLogger("lumina.trading.portfolio_guard")
 
@@ -179,9 +185,9 @@ class PortfolioGuard:
             today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
             daily_realized_pnl = 0.0
             
-            async with AsyncSessionLocal() as db:
+            if AsyncSessionLocal and select:
                 try:
-                    if select:
+                    async with AsyncSessionLocal() as db:
                         query = select(func.sum(Trade.profit_loss)).where(
                             Trade.exit_price.isnot(None),
                             Trade.exit_time >= today_start
@@ -203,10 +209,56 @@ class PortfolioGuard:
                 self._record_rejected_opportunity(opportunity, log_msg, incoming_conf)
                 return PortfolioDecision(approved=False, action_type="REJECT", reason=log_msg)
 
+            # 1b. Daily Loss Budget Exhaustion Soft Guard (80% of daily loss budget used)
+            if daily_realized_pnl_pct <= -4.0 and proposed_side in ["BUY", "SELL"]:
+                log_msg = f"[DAILY LOSS BUDGET PAUSE] Daily loss budget nearly exhausted ({daily_realized_pnl_pct:.1f}% of -5.0% cap). Pausing new entries."
+                logger.warning(log_msg)
+                self._record_rejected_opportunity(opportunity, log_msg, incoming_conf)
+                return PortfolioDecision(approved=False, action_type="REJECT", reason=log_msg)
+
             # Retrieve active positions
             from app.trading.position_manager import PositionManager
             active_positions = PositionManager.get_instance().get_active_positions()
             open_count = len(active_positions)
+
+            # 1c. Crypto Beta Exposure Cap Guard (Don't open another long if portfolio is already 80%+ crypto beta)
+            if proposed_side == "BUY" and open_count > 0:
+                long_crypto_count = sum(
+                    1 for p in active_positions 
+                    if p.get("side", "BUY").upper() == "BUY" and self.get_symbol_sector_cluster(p.get("symbol", "")) in ["LAYER_1", "DEFI", "MEMES", "AI_TOKENS", "GENERAL_ALT"]
+                )
+                beta_ratio = long_crypto_count / float(max(1, open_count))
+                if (long_crypto_count >= 4 or beta_ratio >= 0.80) and not opportunity.get("is_hedge", False):
+                    msg = f"🛡️ [PORTFOLIO BETA GUARD] Don't open another long: portfolio is already {beta_ratio*100:.0f}% crypto beta ({long_crypto_count}/{open_count} active positions are long)."
+                    logger.warning(msg)
+                    self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                    return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
+            # 1d. Dynamic Portfolio Volatility Risk Scaling
+            market_regime = opportunity.get("market_regime", "NORMAL")
+            atr_val = opportunity.get("atr", 0.0)
+            entry_p = opportunity.get("entry_price", opportunity.get("price", 1.0))
+            atr_pct = (atr_val / max(0.0001, entry_p)) if entry_p > 0 else 0.0
+            
+            # If overall portfolio/market volatility has doubled (ATR > 3.0% or VOLATILE regime with high ATR)
+            if atr_pct > 0.030 or market_regime == "VOLATILE":
+                vol_scale_factor = 0.5
+                incoming_risk_pct = round(incoming_risk_pct * vol_scale_factor, 4)
+                logger.info(f"⚡ [PORTFOLIO VOLATILITY SCALING] Overall portfolio volatility has doubled (ATR: {atr_pct*100:.2f}%). Scaled down risk by 50% to {incoming_risk_pct*100:.2f}%.")
+
+            # 1e. Cross-Strategy Drawdown Risk Balancing
+            strategy_used = opportunity.get("strategy_used", opportunity.get("strategy", ""))
+            try:
+                from app.ai.self_adaptation import SelfAdaptationEngine
+                stats = SelfAdaptationEngine.get_instance()._strategy_stats.get(strategy_used, {})
+                strat_win_rate = stats.get("win_rate_pct", 50.0)
+                if strat_win_rate < 40.0 and stats.get("trades_count", 0) >= 3:
+                    incoming_risk_pct = round(incoming_risk_pct * 0.5, 4)
+                    logger.info(f"⚖️ [CROSS-STRATEGY DRAWDOWN BALANCING] Strategy '{strategy_used}' is in drawdown (WinRate: {strat_win_rate:.1f}%). Reduced risk allowance to {incoming_risk_pct*100:.2f}%.")
+                elif strat_win_rate >= 65.0:
+                    incoming_risk_pct = round(min(self.MAX_SYMBOL_EXPOSURE, incoming_risk_pct * 1.25), 4)
+            except Exception:
+                pass
 
             # 2. Check for Pyramid Scale-In or Opposite Direction Partial Rebalance
             existing_pos = next((p for p in active_positions if p.get("symbol") == symbol), None)

@@ -38,17 +38,19 @@ class MacroRiskOverlayEngine:
         self._lockdown_reason = reason if active else None
         logger.warning(f"🚨 [MACRO RISK OVERLAY] Manual Lockdown state updated: {active} ({reason})")
 
-    async def evaluate_macro_risk(self, symbol: str = "BTCUSDT", proposed_side: str = "BUY") -> Dict[str, Any]:
+    async def evaluate_macro_risk(
+        self,
+        symbol: str = "BTCUSDT",
+        proposed_side: str = "BUY",
+        ctx: Optional[Any] = None
+    ) -> Dict[str, Any]:
         """
         Evaluates current macro market risk score and institutional metrics.
-        
-        Evaluated Components:
-        1. BTC Dominance & Trend (e.g., 54.2%, +0.8% 24h)
-        2. Institutional Perpetual Funding Rate Skew (e.g., +0.035% per 8h = 38% APY)
-        3. Open Interest (OI) Liquidation Cascade Risk
-        4. Macro Calendar Event Proximity (FOMC, CPI, NFP window)
-        5. DXY Dollar Index & Global Liquidity Sentiment
+        Supports DecisionContext evaluation memoization.
         """
+        if ctx is not None and hasattr(ctx, "eval_cache") and "macro_risk" in ctx.eval_cache:
+            return ctx.eval_cache["macro_risk"]
+
         sym = symbol.upper()
         cache = await PriceCache.get_instance()
         tally = cache.get_update_tally(sym)
@@ -153,7 +155,7 @@ class MacroRiskOverlayEngine:
             trade_permitted = True
             risk_summary = f"Optimal Macro Regime. Full position sizing permitted at 100%. (Score: {composite_risk_score}/100)"
 
-        return {
+        res = {
             "symbol": sym,
             "proposed_side": proposed_side,
             "macro_risk_score": composite_risk_score,
@@ -184,3 +186,6 @@ class MacroRiskOverlayEngine:
             },
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+        if ctx is not None and hasattr(ctx, "eval_cache"):
+            ctx.eval_cache["macro_risk"] = res
+        return res

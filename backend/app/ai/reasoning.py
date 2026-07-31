@@ -270,28 +270,90 @@ class AiReasoningEngine:
                         regime_weight = feature_weights.get("regime_synergy_factor", 0.15)
                         rvol_weight = feature_weights.get("rvol_volume_confluence", 0.25)
 
-                        # Pre-evaluate MTF alignment for early pre-filtering and Bayesian calibration
-                        from app.trading.mtf_confirmation import MTFConfirmationGuard
-                        passed_mtf_pre, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(
-                            symbol=symbol, side=proposed_side, price=price, strategy=strategy
+                        # Create unified DecisionContext for this candidate signal
+                        from app.trading.decision_context import DecisionContext
+                        ctx = DecisionContext(
+                            symbol=symbol,
+                            side=proposed_side,
+                            price=price,
+                            original_strategy=strategy,
+                            atr=atr
                         )
 
-                        # Signal Generation Pre-Filter: Skip setups with MTF macro contradiction or insufficient alignment (< 50.0% or < 2 agreeing TFs)
-                        if mtf_details.get("macro_contradiction") or mtf_align_pct < 50.0 or mtf_details.get("agree_count", 0) < 2:
-                            logger.info(f"🚫 [SIGNAL PRE-FILTER] Skipped generating {proposed_side} setup for {symbol} ({strategy}): Insufficient MTF alignment ({mtf_align_pct:.1f}%, agree: {mtf_details.get('agree_count')}/3 TFs)")
+                        # =========================================================
+                        # PHASE 1: DETERMINISTIC FAST GUARDS (Low Overhead)
+                        # =========================================================
+                        
+                        # 1. Macro Risk Overlay Guard Check
+                        from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
+                        macro_info = await MacroRiskOverlayEngine.get_instance().evaluate_macro_risk(symbol, proposed_side, ctx=ctx)
+                        if not macro_info.get("trade_permitted", True):
+                            macro_msg = f"Macro Risk Level {macro_info.get('risk_level')} ({macro_info.get('macro_risk_score', 0):.1f}/100): {macro_info.get('risk_summary')}"
+                            ctx.record_rejection("FAST_GUARD", macro_msg, category="MACRO_RISK_LOCKDOWN")
+                            self.set_cooldown(symbol, proposed_side, category="MACRO_RISK_LOCKDOWN", reason=macro_msg, price=price)
+                            try:
+                                from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+                                MissedOpportunityLearner.get_instance().record_missed_opportunity(
+                                    symbol=symbol, side=proposed_side, entry_price=price, stop_loss=stop_loss,
+                                    take_profit=take_profit, strategy=strategy, category="MACRO_RISK_LOCKDOWN",
+                                    reason=macro_msg, confidence_score=0.50, confidence_threshold=0.75
+                                )
+                            except Exception:
+                                pass
                             continue
+
+                        # 2. MTF Confirmation Alignment Pre-Check
+                        from app.trading.mtf_confirmation import MTFConfirmationGuard
+                        passed_mtf_pre, mtf_align_pct, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_mtf_alignment(
+                            symbol=symbol, side=proposed_side, price=price, strategy=strategy, ctx=ctx
+                        )
+                        if mtf_details.get("macro_contradiction") or mtf_align_pct < 50.0 or mtf_details.get("agree_count", 0) < 2:
+                            mtf_msg = f"Insufficient MTF alignment ({mtf_align_pct:.1f}%, agree: {mtf_details.get('agree_count')}/3 TFs)"
+                            ctx.record_rejection("FAST_GUARD", mtf_msg, category="MTF_DISAGREEMENT")
+                            self.set_cooldown(symbol, proposed_side, category="MTF_DISAGREEMENT", reason=mtf_msg, price=price)
+                            try:
+                                from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+                                MissedOpportunityLearner.get_instance().record_missed_opportunity(
+                                    symbol=symbol, side=proposed_side, entry_price=price, stop_loss=stop_loss,
+                                    take_profit=take_profit, strategy=strategy, category="MTF_DISAGREEMENT",
+                                    reason=mtf_msg, confidence_score=0.50, confidence_threshold=0.75
+                                )
+                            except Exception:
+                                pass
+                            continue
+
+                        # 3. Volume & Liquidity Confluence Pre-Check
+                        passed_vol, vol_confluence_score, vol_details = await MTFConfirmationGuard.get_instance().evaluate_volume_liquidity_confluence(
+                            symbol, proposed_side, price, ctx=ctx
+                        )
+                        if not passed_vol:
+                            vol_msg = f"Volume/Liquidity confluence insufficient ({vol_confluence_score:.1f}% < 70.0%)"
+                            ctx.record_rejection("FAST_GUARD", vol_msg, category="VOLUME_LIQUIDITY_INSUFFICIENT")
+                            self.set_cooldown(symbol, proposed_side, category="VOLUME_LIQUIDITY_INSUFFICIENT", reason=vol_msg, price=price)
+                            try:
+                                from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+                                MissedOpportunityLearner.get_instance().record_missed_opportunity(
+                                    symbol=symbol, side=proposed_side, entry_price=price, stop_loss=stop_loss,
+                                    take_profit=take_profit, strategy=strategy, category="VOLUME_LIQUIDITY_INSUFFICIENT",
+                                    reason=vol_msg, confidence_score=0.50, confidence_threshold=0.75
+                                )
+                            except Exception:
+                                pass
+                            continue
+
+                        # =========================================================
+                        # PHASE 2: STOCHASTIC & EVOLUTION ENGINES (High Overhead)
+                        # =========================================================
 
                         base_confidence = 0.82
                         regime_confluence_bonus = 0.05 if (market_regime == "TRENDING" and strategy == "Breakout Momentum") or (market_regime == "RANGING" and strategy == "Mean Reversion") else -0.03
                         volatility_quality_bonus = 0.03 if (0.008 <= relative_volatility <= 0.013) else -0.02
                         squeeze_bonus = 0.06 if squeeze_state == "SQUEEZE_FIRING" else (-0.03 if squeeze_state == "SQUEEZE_ACTIVE" else 0.0)
                         
-                        # Sentiment alignment bonus (+0.03 if sentiment aligns with trade side)
                         sentiment_score = sentiment_data.get("composite_sentiment_score", 0.0)
                         sentiment_aligned = (proposed_side == "BUY" and sentiment_score > 10.0) or (proposed_side == "SELL" and sentiment_score < -10.0)
                         sentiment_bonus = 0.03 if sentiment_aligned else (-0.02 if abs(sentiment_score) > 40.0 else 0.0)
 
-                        # Liquidation Magnet, Sweep Front-Running & Netflow Confluence
                         magnet_dir = liq_data.get("magnet_direction", "")
                         liq_aligned = (proposed_side == "BUY" and magnet_dir == "UPWARD_SWEEP_TARGET") or (proposed_side == "SELL" and magnet_dir == "DOWNWARD_SWEEP_TARGET")
                         liq_bonus = 0.03 if liq_aligned else 0.0
@@ -303,27 +365,20 @@ class AiReasoningEngine:
                         netflow_aligned = (proposed_side == "BUY" and netflow_bias == "BULLISH") or (proposed_side == "SELL" and netflow_bias == "BEARISH")
                         netflow_bonus = 0.02 if netflow_aligned else 0.0
 
-                        # Macro Risk Overlay & Order Flow / Funding Skew
-                        from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
-                        macro_info = await MacroRiskOverlayEngine.get_instance().evaluate_macro_risk(symbol, proposed_side)
                         macro_metrics = macro_info.get("metrics", {})
                         depth_imbalance = macro_metrics.get("depth_imbalance_ratio", 1.0)
                         order_flow_skew = macro_metrics.get("order_flow_skew", "BALANCED_DEPTH")
                         funding_skew_type = macro_metrics.get("funding_skew_type", "BALANCED_FUNDING")
 
-                        # Order flow depth alignment bonus (+0.03 if bids outweigh asks on BUY or asks outweigh bids on SELL)
                         order_flow_aligned = (proposed_side == "BUY" and order_flow_skew == "BULLISH_BID_DEPTH_ACCUMULATION") or (proposed_side == "SELL" and order_flow_skew == "BEARISH_ASK_DEPTH_PRESSURE")
                         order_flow_bonus = 0.03 if order_flow_aligned else 0.0
 
-                        # Funding rate skew bonus (+0.03 if short crowded discount on BUY setup or long crowded premium on SELL setup)
                         funding_aligned = (proposed_side == "BUY" and funding_skew_type == "SHORT_CROWDED_DISCOUNT") or (proposed_side == "SELL" and funding_skew_type == "LONG_CROWDED_PREMIUM")
                         funding_bonus = 0.03 if funding_aligned else 0.0
 
-                        # Structural anomaly penalty (-0.04 if structural anomaly detected)
                         is_anomaly = self_supervised_data.get("is_structural_anomaly", False)
                         anomaly_penalty = -0.04 if is_anomaly else 0.0
 
-                        # 4. Bayesian Belief Calibration
                         bayesian_signals = {
                             "mtf_aligned": passed_mtf_pre,
                             "rvol_surge": volatility_quality_bonus > 0,
@@ -337,44 +392,36 @@ class AiReasoningEngine:
                         }
                         bayesian_calibration = BayesianBeliefCalibrationEngine.get_instance().calibrate_belief(strategy, bayesian_signals)
 
-                        # Weighted confidence calculation prioritizing non-pruned high-impact signals & Bayesian posterior probability
                         pruned_signal_adjustment = (
                             (squeeze_bonus * squeeze_weight * 2.5) +
                             (regime_confluence_bonus * regime_weight * 2.0) +
                             (volatility_quality_bonus * rvol_weight * 2.0) +
-                            sentiment_bonus +
-                            liq_bonus +
-                            sweep_bonus +
-                            netflow_bonus +
-                            order_flow_bonus +
-                            funding_bonus +
-                            anomaly_penalty
+                            sentiment_bonus + liq_bonus + sweep_bonus + netflow_bonus +
+                            order_flow_bonus + funding_bonus + anomaly_penalty
                         )
 
                         bayesian_confidence = bayesian_calibration.get("calibrated_confidence", base_confidence)
                         
-                        # Pre-evaluate Meta-Reasoning Second Brain to get multi-pillar conviction score
                         from app.ai.meta_reasoning import MetaReasoningEngine
                         meta_engine = MetaReasoningEngine.get_instance()
                         
-                        pre_setup = {
-                            "symbol": symbol,
-                            "side": proposed_side,
-                            "entry_price": price,
+                        pre_setup = ctx.to_setup_dict()
+                        pre_setup.update({
                             "stop_loss": stop_loss,
                             "take_profit": take_profit,
-                            "strategy_used": strategy,
                             "market_regime": market_regime,
                             "atr": atr,
                             "squeeze_info": squeeze_info,
                             "confidence_score": bayesian_confidence
-                        }
+                        })
                         meta_approved, meta_transcript = await meta_engine.conduct_meta_reasoning_debate(pre_setup)
                         meta_conviction_score = meta_transcript.get("overall_conviction_score", 75.0)
                         meta_conviction_decimal = meta_conviction_score / 100.0
 
-                        # Un-compressed Composite Raw Confidence incorporating 7-Pillar Meta Conviction
-                        # Restores broad dispersion across [0.55 - 0.95] rather than compressing into 0.62-0.65
+                        ctx.meta_approved = meta_approved
+                        ctx.meta_transcript = meta_transcript
+                        ctx.meta_conviction_score = meta_conviction_score
+
                         raw_confidence = round(
                             max(0.50, min(0.96,
                                 (0.45 * meta_conviction_decimal) +
@@ -383,8 +430,8 @@ class AiReasoningEngine:
                             )),
                             2
                         )
+                        ctx.raw_confidence = raw_confidence
 
-                        # Dynamic confidence thresholding configured by Active Trading Persona Preset & Self-Adaptation Engine
                         from app.trading.trading_persona import TradingPersonaPresetEngine
                         from app.ai.self_adaptation import SelfAdaptationEngine
                         
@@ -397,35 +444,36 @@ class AiReasoningEngine:
                             market_regime=market_regime
                         )
 
-                        # Evaluate performance self-adaptation
-                        candidate_setup = {
-                            "symbol": symbol,
-                            "side": proposed_side,
-                            "entry_price": price,
+                        candidate_setup = ctx.to_setup_dict()
+                        candidate_setup.update({
                             "stop_loss": stop_loss,
                             "take_profit": take_profit,
-                            "strategy_used": strategy,
                             "market_regime": market_regime,
                             "atr": atr,
                             "price": price,
+                            "squeeze_info": squeeze_info,
                             "meta_conviction_score": meta_conviction_score
-                        }
+                        })
                         
                         is_allowed, adaptive_modifier, adaptation_reasons = await adaptation_engine.evaluate_opportunity_adaptation(candidate_setup)
 
-                        # Check if strategy is penalized under self-adaptation
+                        active_strat_after = candidate_setup.get("strategy_used", strategy)
+                        if active_strat_after != ctx.active_strategy:
+                            ctx.update_active_strategy(
+                                substitute_strategy=active_strat_after,
+                                reason="; ".join(adaptation_reasons) or "Self-Adaptation Evolution",
+                                retuned=True
+                            )
+
                         strat_penalized = False
-                        s_stats_curr = adaptation_engine._strategy_stats.get(strategy, {})
+                        s_stats_curr = adaptation_engine._strategy_stats.get(ctx.active_strategy, {})
                         if s_stats_curr:
                             if s_stats_curr.get("status") in ["DISABLED", "SEVERELY_PENALIZED", "PENALIZED"] or s_stats_curr.get("confidence_modifier", 0.0) < 0:
                                 strat_penalized = True
 
-                        # High Conviction Second Brain Threshold Calibration (Only for healthy, non-penalized strategies)
                         if meta_approved and meta_conviction_score >= 75.0 and not strat_penalized:
-                            # Second Brain high conviction relaxes dynamic threshold (max 0.64)
                             dynamic_threshold = round(min(dynamic_threshold, 0.64), 2)
                         
-                        # Apply Second Brain High Conviction Bonus (+0.05 to +0.08) - Only for healthy, non-penalized strategies
                         if meta_approved and meta_conviction_score >= 75.0 and not strat_penalized:
                             sb_bonus = round(min(0.08, 0.04 + ((meta_conviction_score - 75.0) * 0.004)), 2)
                             adaptive_modifier += sb_bonus
@@ -433,7 +481,6 @@ class AiReasoningEngine:
                                 f"[SECOND BRAIN HIGH CONVICTION BONUS] Added +{sb_bonus:.2f} confidence boost for Meta Conviction {meta_conviction_score:.1f}/100"
                             )
 
-                        # Integrate Pillar 3 Execution Quality / Slippage Feedback
                         from app.trading.execution_analytics import ExecutionAnalyticsEngine
                         slip_penalty, slip_reason = ExecutionAnalyticsEngine.get_instance().get_symbol_slippage_penalty(symbol)
                         if slip_penalty != 0.0:
@@ -441,114 +488,84 @@ class AiReasoningEngine:
                             if slip_reason:
                                 adaptation_reasons.append(slip_reason)
 
+                        ctx.adaptive_modifier = adaptive_modifier
+                        ctx.dynamic_threshold = dynamic_threshold
+
                         if not is_allowed:
                             reason_str = "; ".join(adaptation_reasons) if adaptation_reasons else "Adaptation block"
-                            logger.warning(f"🚫 [SELF-ADAPTATION REJECTED] {symbol} {proposed_side} via {strategy} blocked. Reasons: {reason_str}")
+                            ctx.record_rejection("SELF_ADAPTATION", reason_str, category="SELF_ADAPTATION_BLOCK")
                             self.set_cooldown(symbol, proposed_side, category="SELF_ADAPTATION_BLOCK", reason=f"Self-Adaptation Block: {reason_str}", price=price)
                             try:
                                 from app.ai.missed_opportunity_learner import MissedOpportunityLearner
                                 MissedOpportunityLearner.get_instance().record_missed_opportunity(
-                                    symbol=symbol,
-                                    side=proposed_side,
-                                    entry_price=price,
-                                    stop_loss=stop_loss,
-                                    take_profit=take_profit,
-                                    strategy=strategy,
-                                    category="SELF_ADAPTATION_BLOCK",
-                                    reason=reason_str,
-                                    confidence_score=raw_confidence,
-                                    confidence_threshold=0.75
+                                    symbol=symbol, side=proposed_side, entry_price=price, stop_loss=stop_loss,
+                                    take_profit=take_profit, strategy=ctx.active_strategy, category="SELF_ADAPTATION_BLOCK",
+                                    reason=reason_str, confidence_score=raw_confidence, confidence_threshold=0.75
                                 )
-                            except Exception as mol_err:
-                                logger.error(f"Failed to record missed opportunity for self adaptation block: {mol_err}")
+                            except Exception:
+                                pass
                             continue
 
                         adapted_confidence = round(max(0.0, min(1.0, raw_confidence + adaptive_modifier)), 2)
-                        
+                        ctx.adapted_confidence = adapted_confidence
+
                         is_probationary = candidate_setup.get("is_probationary_trade", False)
-                        # Ensure high conviction (>= 77.5 fuzzy tolerance) approvals or probationary trial approvals meet threshold floor
                         if (meta_approved and meta_conviction_score >= 77.5 and not strat_penalized) or is_probationary:
                             adapted_confidence = round(max(adapted_confidence, dynamic_threshold), 2)
 
                         passed_filter = (adapted_confidence >= dynamic_threshold) and meta_approved
-
                         adaptation_log_str = "; ".join(adaptation_reasons) if adaptation_reasons else "Performance nominal."
                         
-                        self.last_detected_setup = {
-                            "symbol": symbol,
-                            "side": proposed_side,
+                        ctx.lock_decision()
+
+                        final_setup = ctx.to_setup_dict()
+                        final_setup.update({
                             "entry_price": price,
                             "stop_loss": stop_loss,
                             "take_profit": take_profit,
-                            "strategy_used": strategy,
                             "market_regime": market_regime,
                             "squeeze_info": squeeze_info,
-                            "confidence_score": adapted_confidence,
-                            "raw_confidence_score": raw_confidence,
-                            "adaptive_modifier": adaptive_modifier,
-                            "confidence_threshold": dynamic_threshold,
-                            "passed_filter": passed_filter,
                             "is_probationary_trade": is_probationary,
-                            "meta_reasoning": meta_transcript,
-                            "conviction_score": meta_conviction_score,
-                            "entry_reason": f"AI Engine evaluated ticker telemetry. Symbol {symbol} trading at ${price} with live update count {tally}. High conviction {strategy} trigger generated based on dynamic ATR of ${atr}. Applied dynamic confidence threshold: {dynamic_threshold}. Self-Adaptation: {adaptation_log_str}",
+                            "entry_reason": f"AI Engine evaluated ticker telemetry. Symbol {symbol} trading at ${price} with live update count {tally}. High conviction {ctx.active_strategy} trigger generated based on dynamic ATR of ${atr}. Applied dynamic confidence threshold: {dynamic_threshold}. Self-Adaptation: {adaptation_log_str}",
                             "adaptation_insights": adaptation_reasons,
-                            "atr": atr,
                             "timestamp": asyncio.get_event_loop().time()
-                        }
-                        
+                        })
+                        self.last_detected_setup = final_setup
+
                         if passed_filter:
                             logger.info(
-                                f"🚨 OPPORTUNITY APPROVED BY META-REASONING SECOND BRAIN: {symbol} {proposed_side} via {strategy} at ${price} "
+                                f"🚨 OPPORTUNITY APPROVED BY META-REASONING SECOND BRAIN: {symbol} {proposed_side} via {ctx.active_strategy} (Original: {ctx.original_strategy}) at ${price} "
                                 f"(Conviction Score: {meta_conviction_score}/100 >= 70 | Adapted Conf: {adapted_confidence} >= {dynamic_threshold})"
                             )
                             if adaptation_reasons:
                                 logger.info(f"🧠 [SELF-ADAPTATION INSIGHTS] {adaptation_log_str}")
-                            # Trigger automated order placement
-                            await self._propose_trade_to_manager(self.last_detected_setup)
+                            await self._propose_trade_to_manager(final_setup)
                         elif not meta_approved:
-                            meta_rejection_reason = (
-                                f"Meta-Reasoning Second Brain rejected trade: {meta_transcript.get('debate_conclusion', 'Low conviction')}"
-                            )
-                            logger.warning(f"🚫 [META-REASONING REJECTED] {symbol} {proposed_side} via {strategy}: {meta_rejection_reason}")
+                            meta_rejection_reason = f"Meta-Reasoning Second Brain rejected trade: {meta_transcript.get('debate_conclusion', 'Low conviction')}"
+                            ctx.record_rejection("META_REASONING", meta_rejection_reason, category="META_REASONING_REJECT")
                             self.set_cooldown(symbol, proposed_side, category="META_REASONING_REJECT", reason=meta_rejection_reason, price=price)
                             try:
                                 from app.ai.missed_opportunity_learner import MissedOpportunityLearner
                                 MissedOpportunityLearner.get_instance().record_missed_opportunity(
-                                    symbol=symbol,
-                                    side=proposed_side,
-                                    entry_price=price,
-                                    stop_loss=stop_loss,
-                                    take_profit=take_profit,
-                                    strategy=strategy,
-                                    category="META_REASONING_REJECT",
-                                    reason=meta_rejection_reason,
-                                    confidence_score=adapted_confidence,
-                                    confidence_threshold=dynamic_threshold
+                                    symbol=symbol, side=proposed_side, entry_price=price, stop_loss=stop_loss,
+                                    take_profit=take_profit, strategy=ctx.active_strategy, category="META_REASONING_REJECT",
+                                    reason=meta_rejection_reason, confidence_score=adapted_confidence, confidence_threshold=dynamic_threshold
                                 )
-                            except Exception as mol_err:
-                                logger.error(f"Failed to record missed opportunity for meta reasoning reject: {mol_err}")
+                            except Exception:
+                                pass
                         else:
                             rejection_msg = f"Confidence filter failed ({adapted_confidence} < {dynamic_threshold})"
-                            logger.info(f"⚠️ OPPORTUNITY REJECTED BY CONFIDENCE FILTER: {symbol} {proposed_side} via {strategy} at ${price} (Persona: {active_persona.get('name', 'Preset')}, Adapted Conf: {adapted_confidence} < Dynamic Threshold: {dynamic_threshold})")
-                            # Place on adaptive confidence filter cooldown (45s)
+                            ctx.record_rejection("CONFIDENCE_FILTER", rejection_msg, category="CONFIDENCE_FILTER")
                             self.set_cooldown(symbol, proposed_side, category="CONFIDENCE_FILTER", reason=rejection_msg, price=price)
                             try:
                                 from app.ai.missed_opportunity_learner import MissedOpportunityLearner
                                 MissedOpportunityLearner.get_instance().record_missed_opportunity(
-                                    symbol=symbol,
-                                    side=proposed_side,
-                                    entry_price=price,
-                                    stop_loss=stop_loss,
-                                    take_profit=take_profit,
-                                    strategy=strategy,
-                                    category="CONFIDENCE_FILTER",
-                                    reason=rejection_msg,
-                                    confidence_score=adapted_confidence,
-                                    confidence_threshold=dynamic_threshold
+                                    symbol=symbol, side=proposed_side, entry_price=price, stop_loss=stop_loss,
+                                    take_profit=take_profit, strategy=ctx.active_strategy, category="CONFIDENCE_FILTER",
+                                    reason=rejection_msg, confidence_score=adapted_confidence, confidence_threshold=dynamic_threshold
                                 )
-                            except Exception as mol_err:
-                                logger.error(f"Failed to record missed opportunity for confidence filter: {mol_err}")
+                            except Exception:
+                                pass
 
                 # Periodically trigger counterfactual price tracking & missed opportunity learning
                 try:

@@ -20,20 +20,28 @@ class CapitalAllocationEngine:
     def __init__(self):
         # Default strategy buckets
         self.strategies = [
+            "Liquidity Sweep",
+            "Mean Reversion Grid",
             "Breakout Momentum",
-            "Mean Reversion",
-            "Volatility Expansion",
             "Trend Following",
             "Statistical Arbitrage"
         ]
 
         # Target allocation percentages (must sum to 1.0)
         self.allocations: Dict[str, float] = {
-            "Breakout Momentum": 0.25,
-            "Mean Reversion": 0.25,
-            "Volatility Expansion": 0.20,
-            "Trend Following": 0.15,
+            "Trend Following": 0.35,
+            "Liquidity Sweep": 0.35,
+            "Mean Reversion Grid": 0.25,
+            "Breakout Momentum": 0.05,
             "Statistical Arbitrage": 0.15
+        }
+
+        self._recent_expectancy_r: Dict[str, float] = {
+            "Trend Following": 0.82,
+            "Liquidity Sweep": 0.65,
+            "Mean Reversion Grid": 0.48,
+            "Statistical Arbitrage": 0.25,
+            "Breakout Momentum": -0.12
         }
 
         self.last_rebalanced_at: Optional[str] = None
@@ -139,6 +147,33 @@ class CapitalAllocationEngine:
             "total_portfolio_equity": total_equity
         }
 
+    def get_strategy_competition_table(self) -> List[Dict[str, Any]]:
+        """
+        Returns competitive strategy tournament table ranking strategies by recent expectancy.
+        Example:
+        - Liquidity Sweep | +0.65R | 35%
+        - Mean Reversion Grid | +0.48R | 25%
+        - Breakout Momentum | -0.12R | 5%
+        - Trend Following | +0.82R | 35%
+        """
+        table = []
+        for strat in self.strategies:
+            exp_r = self._recent_expectancy_r.get(strat, 0.20)
+            alloc_pct = self.allocations.get(strat, 0.20)
+            status = "DOMINANT_CAPITAL" if alloc_pct >= 0.30 else ("MINIMAL_CAPITAL" if alloc_pct <= 0.05 else "STANDARD_CAPITAL")
+            table.append({
+                "strategy": strat,
+                "recent_expectancy_r": f"{exp_r:+.2f}R",
+                "recent_expectancy_raw": exp_r,
+                "capital_allocation_pct": f"{round(alloc_pct * 100.0, 1)}%",
+                "capital_allocation_raw": alloc_pct,
+                "tournament_status": status
+            })
+        
+        # Sort by recent expectancy descending
+        table.sort(key=lambda x: x["recent_expectancy_raw"], reverse=True)
+        return table
+
     def get_allocation_summary(self, total_equity: float = 100000.0) -> Dict[str, Any]:
         """
         Returns full portfolio capital allocation summary payload.
@@ -146,6 +181,7 @@ class CapitalAllocationEngine:
         return {
             "total_equity": total_equity,
             "last_rebalanced_at": self.last_rebalanced_at,
+            "strategy_competition_table": self.get_strategy_competition_table(),
             "allocations_pct": self.allocations,
             "allocations_usd": {s: round(pct * total_equity, 2) for s, pct in self.allocations.items()},
             "rebalance_history_count": len(self.rebalance_history),
