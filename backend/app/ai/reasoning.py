@@ -488,11 +488,11 @@ class AiReasoningEngine:
                         ctx.dynamic_threshold = dynamic_threshold
 
                         adapted_confidence = round(max(0.0, min(1.0, raw_confidence + adaptive_modifier)), 2)
-                        ctx.adapted_confidence = adapted_confidence
-
                         is_probationary = candidate_setup.get("is_probationary_trade", False)
                         if (meta_approved and meta_conviction_score >= 77.5 and not strat_penalized) or is_probationary:
                             adapted_confidence = round(max(adapted_confidence, dynamic_threshold), 2)
+
+                        ctx.adapted_confidence = adapted_confidence
 
                         passed_filter = (adapted_confidence >= dynamic_threshold) and meta_approved
                         if not passed_filter:
