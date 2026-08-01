@@ -408,6 +408,10 @@ class AppRepository(private val db: AppDatabase) {
         strategyDao.insertTradeAuditLog(log)
     }
 
+    suspend fun getAllTradeAuditLogsDirect(): List<TradeAuditLog> = withContext(Dispatchers.IO) {
+        strategyDao.getAllTradeAuditLogsDirect()
+    }
+
     suspend fun clearAllTradeAuditLogs() = withContext(Dispatchers.IO) {
         strategyDao.clearAllTradeAuditLogs()
     }

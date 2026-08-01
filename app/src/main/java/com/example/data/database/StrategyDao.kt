@@ -71,6 +71,9 @@ interface StrategyDao {
     @Query("SELECT * FROM trade_audit_logs ORDER BY timestamp DESC")
     fun getAllTradeAuditLogsFlow(): Flow<List<TradeAuditLog>>
 
+    @Query("SELECT * FROM trade_audit_logs ORDER BY timestamp DESC")
+    suspend fun getAllTradeAuditLogsDirect(): List<TradeAuditLog>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTradeAuditLog(log: TradeAuditLog)
 

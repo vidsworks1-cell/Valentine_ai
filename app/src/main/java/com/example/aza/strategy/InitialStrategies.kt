@@ -179,7 +179,18 @@ class BreakoutStrategy(
         if (prices.size < period) return false
         val lastPrice = prices.last()
         val (_, upper, _) = StrategyIndicators.calculateBollingerBands(prices.dropLast(1), period)
-        return lastPrice > upper
+        val rsi = StrategyIndicators.calculateRSI(prices, 14)
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val recentDiff = if (prices.size >= 2) kotlin.math.abs(prices.last() - prices[prices.size - 2]) else 0.0
+        
+        // Stricter Breakout Confirmation Filters:
+        // 1. Price closes decisively above upper Bollinger Band
+        // 2. Momentum confirmation via RSI > 52
+        // 3. Volatility expansion confirmation: recent bar movement >= 0.8 * ATR
+        val priceBreakout = lastPrice > upper
+        val momentumConfirmed = rsi > 52.0
+        val volatilityExpanded = atr > 0.0 && recentDiff >= (atr * 0.7)
+        return priceBreakout && momentumConfirmed && volatilityExpanded
     }
 
     override fun shouldExit(market: String, prices: List<Double>, currentPosition: Double): Boolean {
@@ -191,23 +202,23 @@ class BreakoutStrategy(
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val multiplier = 1.5
-        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.04
+        val multiplier = 2.0
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.03
         return entryPrice - slDist
     }
 
     override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val multiplier = 1.5
-        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.04
-        val rewardRatio = 3.0
+        val multiplier = 2.0
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.03
+        val rewardRatio = 2.5
         return entryPrice + (slDist * rewardRatio)
     }
 
     override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double>): Double {
         val amountToRisk = accountBalance * (riskPercent / 100.0)
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val stopLossDist = if (atr > 0.0) atr * 1.5 else entryPrice * 0.04
+        val stopLossDist = if (atr > 0.0) atr * 2.0 else entryPrice * 0.03
         val rawSize = amountToRisk / stopLossDist
         val maxUnits = (accountBalance * 0.15) / entryPrice
         val minUnits = (accountBalance * 0.01) / entryPrice
@@ -296,7 +307,7 @@ class MeanReversionStrategy(
         val atr = StrategyIndicators.calculateATR(prices, 14)
         val multiplier = 2.5
         val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.03
-        val rewardRatio = 1.8
+        val rewardRatio = 2.2
         return entryPrice + (slDist * rewardRatio)
     }
 

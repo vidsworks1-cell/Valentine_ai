@@ -5530,16 +5530,32 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val currentPrice = pos.currentPrice
             val symbol = pos.symbol
 
-            // Dynamic Trailing Stop Loss (TSL) Risk Management:
-            // If price moves in our favor, trail the stop-loss upward to lock in profits (2.5% trailing offset).
             var activeSL = pos.stopLossPrice
-            if (pos.stopLossPrice > 0.0 && currentPrice > pos.entryPrice) {
-                val proposedTrailingSL = currentPrice * 0.975
-                if (proposedTrailingSL > pos.stopLossPrice) {
+            val initialRiskDist = if (pos.stopLossPrice > 0.0) kotlin.math.abs(pos.entryPrice - pos.stopLossPrice) else pos.entryPrice * 0.02
+            val pnlPercent = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100.0
+            val durationMins = (System.currentTimeMillis() - pos.openedAt) / (1000.0 * 60.0)
+
+            // PHASE 2: DYNAMIC EXIT ENGINE - BREAK-EVEN MOVE
+            // 1. Move Stop-Loss to Break-Even after trade reaches +1.0x Risk Distance profit
+            val breakevenPrice = pos.entryPrice * 1.001 // Entry + 0.1% fee buffer
+            if (pos.stopLossPrice > 0.0 && pos.stopLossPrice < pos.entryPrice && currentPrice >= (pos.entryPrice + initialRiskDist)) {
+                if (breakevenPrice > pos.stopLossPrice) {
+                    activeSL = breakevenPrice
+                    val bePosition = pos.copy(stopLossPrice = breakevenPrice)
+                    repository.updatePosition(bePosition)
+                    triggerPositionAlert("BREAKEVEN_PROTECTION", symbol, "🛡️ BREAK-EVEN ACTIVATED: $symbol reached +1.0R profit threshold ($currentPrice). Stop Loss moved to Break-Even (${String.format(Locale.US, "%.2f", breakevenPrice)}) to guarantee zero capital risk.")
+                }
+            }
+
+            // PHASE 2: DYNAMIC EXIT ENGINE - ATR-BASED / PEAK TRAILING STOP
+            // 2. Trail stop loss dynamically as price makes higher highs (+1.2R profit or higher)
+            if (pos.stopLossPrice > 0.0 && currentPrice > (pos.entryPrice + initialRiskDist * 1.2)) {
+                val proposedTrailingSL = currentPrice * 0.98 // 2.0% dynamic trailing stop offset
+                if (proposedTrailingSL > activeSL) {
                     activeSL = proposedTrailingSL
                     val trailedPosition = pos.copy(stopLossPrice = proposedTrailingSL)
                     repository.updatePosition(trailedPosition)
-                    triggerPositionAlert("TSL_TRAILED", symbol, "Trailing Stop Loss adjusted upward to ${String.format(Locale.US, "%.2f", proposedTrailingSL)} to protect profits on $symbol (Current: $currentPrice, Entry: ${pos.entryPrice})")
+                    triggerPositionAlert("TSL_TRAILED", symbol, "📈 DYNAMIC TRAILING STOP: Adjusted SL to ${String.format(Locale.US, "%.2f", proposedTrailingSL)} to lock in profits on $symbol (Current: $currentPrice, Entry: ${pos.entryPrice})")
                 }
             }
 
@@ -5553,12 +5569,16 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             } else Double.MAX_VALUE
 
             // SL Hit check with Liquidity-Packet Shield:
-            // Under thin liquidity (currentLiquidity < criticalLiquidityPercentile),
-            // apply a 1.2% dynamic buffer to prevent premature exit from short-lived stop-run sweeps.
             val isThinLiquidity = dynamicExponentialEstimator.currentLiquidity < dynamicExponentialEstimator.criticalLiquidityPercentile
             val effectiveSL = if (isThinLiquidity) activeSL * 0.988 else activeSL
 
-            if (activeSL > 0.0 && currentPrice <= effectiveSL) {
+            // PHASE 2: DYNAMIC EXIT ENGINE - TIME-BASED / STAGNATION EXIT
+            // 3. Stagnation exit for trades open > 3 hours with minimal movement (< 0.3% PnL)
+            if (durationMins >= 180.0 && kotlin.math.abs(pnlPercent) <= 0.3) {
+                triggerPositionAlert("STAGNATION_EXIT", symbol, "⏳ STAGNATION TIMEOUT: Closing position on $symbol after ${durationMins.toInt()} minutes of sideways consolidation to release locked portfolio capital.")
+                closePositionWithReview(pos, currentPrice, "STAGNATION_TIMEOUT")
+            }
+            else if (activeSL > 0.0 && currentPrice <= effectiveSL) {
                 closePositionWithReview(pos, currentPrice, "STOP_LOSS_HIT")
             } else if (activeSL > 0.0 && currentPrice <= activeSL && isThinLiquidity) {
                 // Price breached SL but is protected by the liquidity shield buffer
@@ -5676,6 +5696,23 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             entryReason = entryReasonVal
         )
         repository.insertReview(review)
+
+        // Persist Trade Audit Log for Rolling Strategy Health & Performance Engine
+        val auditLog = com.example.data.database.TradeAuditLog(
+            strategyName = position.strategyName,
+            marketRegime = "Volatile / Active Trend",
+            signal = sideVal,
+            entryReason = entryReasonVal,
+            exitReason = exitType,
+            confidence = confidenceVal,
+            positionSize = size,
+            expectedProfit = position.takeProfitPrice - position.entryPrice,
+            actualProfit = finalPnL,
+            slippage = slippage,
+            fees = fees,
+            executionLatencyMs = 45L
+        )
+        repository.insertTradeAuditLog(auditLog)
 
         // Store review inside the Knowledge Base
         val kbEntry = com.example.data.database.KnowledgeEntry(

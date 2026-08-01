@@ -369,11 +369,8 @@ class MarketIntelligenceEngine(
                 // 1. Regime confirmation
                 val regimeConfirmed = topOp.currentRegime.isNotEmpty()
                 
-                // 2. Strategy compatibility check: does the strategy support the active regime?
-                val strategyObj = com.example.aza.strategy.StrategyRegistry.getStrategy(topOp.strategy)
-                val strategyCompatible = strategyObj?.designedRegimes?.any { 
-                    it.equals(topOp.currentRegime, ignoreCase = true) || topOp.currentRegime.contains(it, ignoreCase = true)
-                } ?: false
+                // 2. PHASE 1: HARD PASS/FAIL REGIME COMPATIBILITY GATE
+                val strategyCompatible = isStrategyStrictlyCompatibleWithRegime(topOp.strategy, topOp.currentRegime)
                 
                 // 3. ATR Risk Valid
                 val atrRiskValid = topOp.risk > 0.0
@@ -381,13 +378,19 @@ class MarketIntelligenceEngine(
                 // 4. Position Size Valid
                 val positionSizeValid = topOp.expectedReward > 0.0
                 
-                // 5. Portfolio exposure check (e.g. max active positions < 3)
+                // 5. PHASE 3: PORTFOLIO BETA GUARD (Limit correlated exposure across assets)
                 val activePositions = repository.getAllPositionsDirect()
-                val portfolioExposureAcceptable = activePositions.count { it.status == "OPEN" } < 3
+                val cryptoSymbols = listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT")
+                val isCrypto = cryptoSymbols.contains(topOp.symbol)
+                val activeCryptoPositions = activePositions.filter { it.status == "OPEN" && cryptoSymbols.contains(it.symbol) }
                 
-                // 6. Recent strategy performance acceptable
-                val dbStr = repository.getStrategyByNameDirect(topOp.strategy)
-                val recentPerformanceAcceptable = dbStr == null || dbStr.paperWinRate >= 45.0
+                // Hard Gate: Max 2 active positions total, max 1 correlated crypto position if existing trade present
+                val portfolioExposureAcceptable = activePositions.count { it.status == "OPEN" } < 3 && 
+                        (!isCrypto || activeCryptoPositions.size < 2)
+                
+                // 6. PHASE 1 & ROLLING HEALTH FEATURE: STRICT EXPECTANCY & HEALTH GATE (NO HIGH CONVICTION OVERRIDES FOR FAILING STRATEGIES)
+                val healthScore = calculateRollingStrategyHealth(topOp.strategy)
+                val recentPerformanceAcceptable = healthScore.isHealthy
                 
                 // 7. No conflicting knowledge base lessons
                 val kbEntries = repository.getAllKnowledgeDirect()
@@ -400,11 +403,12 @@ class MarketIntelligenceEngine(
                 if (!safetyGatePassed) {
                     addThought("🚨 SAFETY GATE FAILED for ${topOp.symbol}:" +
                         "\n  - Regime Confirmed: $regimeConfirmed" +
-                        "\n  - Strategy Compatible: $strategyCompatible" +
+                        "\n  - Strict Regime Compatibility Gate (Passed: $strategyCompatible): Strategy '${topOp.strategy}' compatible with '${topOp.currentRegime}'" +
                         "\n  - ATR Risk Valid: $atrRiskValid" +
                         "\n  - Position Size Valid: $positionSizeValid" +
-                        "\n  - Exposure Acceptable: $portfolioExposureAcceptable" +
-                        "\n  - Recent Performance Acceptable: $recentPerformanceAcceptable" +
+                        "\n  - Portfolio Beta Guard (Passed: $portfolioExposureAcceptable): Active crypto positions: ${activeCryptoPositions.size}" +
+                        "\n  - Rolling Strategy Health (Passed: $recentPerformanceAcceptable): Strategy '${topOp.strategy}' Status=[${healthScore.status}], PF=${String.format(Locale.US, "%.2f", healthScore.rollingProfitFactor)}, WR=${String.format(Locale.US, "%.1f", healthScore.rollingWinRate)}%" +
+                        "\n  - High Conviction Override Status: DISABLED (High conviction cannot override failing strategy)" +
                         "\n  - No Conflicting Lessons: ${!hasConflictingLessons}")
                     return@withContext
                 }
@@ -423,6 +427,87 @@ class MarketIntelligenceEngine(
                 addThought("No opportunities met the minimum 75% confidence threshold for proposal creation.")
             }
         }
+    }
+
+    fun isStrategyStrictlyCompatibleWithRegime(strategyName: String, regime: String): Boolean {
+        val cleanRegime = regime.uppercase(Locale.US)
+        return when (strategyName) {
+            "Mean Reversion" -> {
+                // Hard Gate: ONLY allowed in ranging / accumulation / distribution regimes
+                cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || 
+                cleanRegime == "ACCUMULATION" || cleanRegime == "DISTRIBUTION" || 
+                cleanRegime == "LOW_VOLATILITY"
+            }
+            "Breakout", "Volatility Expansion Breakout" -> {
+                // Hard Gate: ONLY allowed in trending / volatile expansion regimes
+                cleanRegime.contains("TREND") || cleanRegime.contains("VOLATILE") || 
+                cleanRegime == "HIGH_VOLATILITY_TRENDING" || cleanRegime.startsWith("STRONG_")
+            }
+            "Trend Following", "Breakout Momentum" -> {
+                // Hard Gate: ONLY allowed in confirmed trends
+                cleanRegime.contains("TREND") || cleanRegime.startsWith("STRONG_")
+            }
+            else -> true
+        }
+    }
+
+    data class StrategyHealthScore(
+        val strategyName: String,
+        val rollingWinRate: Double,
+        val rollingProfitFactor: Double,
+        val rollingExpectancy: Double,
+        val sampleSize: Int,
+        val isHealthy: Boolean,
+        val status: String // "HEALTHY", "PROBATION", "DISABLED"
+    )
+
+    suspend fun calculateRollingStrategyHealth(strategyName: String): StrategyHealthScore {
+        val dbStr = repository.getStrategyByNameDirect(strategyName)
+        val auditLogs = repository.getAllTradeAuditLogsDirect()
+        val stratLogs = auditLogs.filter { it.strategyName == strategyName }.take(50)
+
+        if (stratLogs.size < 3) {
+            val winRate = dbStr?.paperWinRate ?: 50.0
+            val pf = dbStr?.profitFactor ?: 1.2
+            val healthy = pf >= 1.0 && winRate >= 45.0
+            return StrategyHealthScore(
+                strategyName = strategyName,
+                rollingWinRate = winRate,
+                rollingProfitFactor = pf,
+                rollingExpectancy = if (healthy) 0.1 else -0.1,
+                sampleSize = stratLogs.size,
+                isHealthy = healthy,
+                status = if (healthy) "HEALTHY" else "PROBATION"
+            )
+        }
+
+        val wins = stratLogs.filter { it.actualProfit > 0.0 }
+        val losses = stratLogs.filter { it.actualProfit < 0.0 }
+        val winRate = (wins.size.toDouble() / stratLogs.size) * 100.0
+        val grossProfit = wins.sumOf { it.actualProfit }
+        val grossLoss = Math.abs(losses.sumOf { it.actualProfit })
+        val profitFactor = if (grossLoss > 0.0) grossProfit / grossLoss else if (grossProfit > 0.0) 2.0 else 0.5
+
+        val avgWin = if (wins.isNotEmpty()) wins.map { it.actualProfit }.average() else 0.0
+        val avgLoss = if (losses.isNotEmpty()) Math.abs(losses.map { it.actualProfit }.average()) else 1.0
+        val wrDec = winRate / 100.0
+        val expectancy = (wrDec * avgWin) - ((1.0 - wrDec) * avgLoss)
+
+        val status = when {
+            profitFactor < 0.85 || winRate < 42.0 || expectancy < 0.0 -> "PROBATION"
+            profitFactor < 0.60 || winRate < 35.0 -> "DISABLED"
+            else -> "HEALTHY"
+        }
+
+        return StrategyHealthScore(
+            strategyName = strategyName,
+            rollingWinRate = winRate,
+            rollingProfitFactor = profitFactor,
+            rollingExpectancy = expectancy,
+            sampleSize = stratLogs.size,
+            isHealthy = status == "HEALTHY",
+            status = status
+        )
     }
 
     private fun detectMarketRegime(trendScore: Double, volatilityScore: Double): String {
@@ -605,18 +690,23 @@ class MarketIntelligenceEngine(
         val stopLoss = entryPrice - (stopLossDistance * slMultiplier)
         
         // Multi-Source Sentiment Synthesis Take-Profit Optimization:
-        // Under strong fundamental tailwinds (newsImpact > 0.3 and macroEconomic > 0.2), 
-        // expand profit capture from standard 2.5x to 3.2x to ride structural trends.
-        // Conversely, under speculative social bubbles (socialBuzz > 0.4 and macroEconomic < 0.0),
-        // scale take-profit back to 1.8x to lock in quick spike gains before retail capitulation.
+        // Enforce minimum Risk-to-Reward ratio (RRR) >= 2.0x target, min 1.5:1 floor gate
         var tpMultiplier = 2.5
         if (newsImpact > 0.3 && macroEconomic > 0.2) {
             tpMultiplier = 3.2
         } else if (socialBuzz > 0.4 && macroEconomic < 0.0) {
-            tpMultiplier = 1.8
+            tpMultiplier = 2.0
         }
+        tpMultiplier = maxOf(tpMultiplier, 2.0)
+
         val takeProfit = entryPrice + ((entryPrice - stopLoss) * tpMultiplier)
         val riskReward = (takeProfit - entryPrice) / kotlin.math.abs(entryPrice - stopLoss)
+
+        // Hard Gate Check: Enforce minimum 1.5:1 Risk-to-Reward Ratio (RRR)
+        if (riskReward < 1.5) {
+            addThought("🚨 TRADE PROPOSAL REJECTED: Risk-to-Reward ratio (${String.format(Locale.US, "%.2f", riskReward)}) is below mandatory 1.5:1 minimum floor limit.")
+            return@withContext
+        }
 
         val account = repository.getAccountInfoDirect()
         val accountBalance = account?.totalBalance ?: 5000.0
