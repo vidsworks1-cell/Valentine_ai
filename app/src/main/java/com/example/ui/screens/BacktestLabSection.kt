@@ -70,6 +70,16 @@ fun BacktestLabSection(
     val dailyDigestReport by viewModel.dailyDigestReport.collectAsState()
     val ethBnbHybridLiveState by viewModel.ethBnbHybridLiveState.collectAsState()
     val ethBnbHybridSimulation by viewModel.ethBnbHybridSimulation.collectAsState()
+    val decisionQualityReport by viewModel.decisionQualityReport.collectAsState()
+    val bayesianAdaptationState by viewModel.bayesianAdaptationState.collectAsState()
+    val missedOpportunityAnalysis by viewModel.missedOpportunityAnalysis.collectAsState()
+    val subsystemChampionChallenger by viewModel.subsystemChampionChallenger.collectAsState()
+    val portfolioIntelligenceMetrics by viewModel.portfolioIntelligenceMetrics.collectAsState()
+    val institutionalRecoveryState by viewModel.institutionalRecoveryState.collectAsState()
+    val executionIntelligenceRouting by viewModel.executionIntelligenceRouting.collectAsState()
+    val metaReasoningValidation by viewModel.metaReasoningValidation.collectAsState()
+    val systemHarmonyGlobalUtility by viewModel.systemHarmonyGlobalUtility.collectAsState()
+    val autonomousExperimentState by viewModel.autonomousExperimentState.collectAsState()
 
     val availableStrategies = remember {
         listOf(
@@ -218,6 +228,11 @@ fun BacktestLabSection(
                             selected = activeSubTab == 9,
                             onClick = { activeSubTab = 9 },
                             text = { Text("Pair Matrix & Vol Calibration", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        )
+                        Tab(
+                            selected = activeSubTab == 10,
+                            onClick = { activeSubTab = 10 },
+                            text = { Text("Institutional Subsystems (10)", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                         )
                     }
                 }
@@ -3369,6 +3384,536 @@ fun BacktestLabSection(
                                 onClick = { viewModel.updateVolatilitySensitivity(1.5, 3.0, 0.8) },
                                 label = { Text("Defensive Crash Cap", fontSize = 11.sp) }
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (activeSubTab == 10) {
+            // --- 1. DECISION QUALITY ENGINE ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Analytics, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "1. DECISION QUALITY ENGINE (CAUSALITY ATTRIBUTION)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(title = "Trade ID", value = decisionQualityReport.tradeId, subtitle = "Recent Execution", valueColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                            MetricCard(title = "Decision Score", value = "${decisionQualityReport.score} / 100", subtitle = "Grade: ${decisionQualityReport.processGrade}", valueColor = Color(0xFF2E7D32), modifier = Modifier.weight(1f))
+                            MetricCard(title = "Missed Loss", value = "-${decisionQualityReport.missedOpportunityLossPct}%", subtitle = "Execution Drag", valueColor = Color(0xFFD32F2F), modifier = Modifier.weight(1f))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(text = "Causality: ${decisionQualityReport.causalityAttribution}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(10.dp))
+                        }
+                    }
+                }
+            }
+
+            // --- 2. BAYESIAN SELF-ADAPTATION 2.0 ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "2. BAYESIAN SELF-ADAPTATION 2.0 (UNCERTAINTY TRACKING)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(title = "Epistemic Risk", value = "${bayesianAdaptationState.epistemicUncertaintyScore}", subtitle = "Model Uncertainty", valueColor = Color(0xFF2E7D32), modifier = Modifier.weight(1f))
+                            MetricCard(title = "Aleatoric Noise", value = "${bayesianAdaptationState.aleatoricUncertaintyScore}", subtitle = "Market Noise", valueColor = Color(0xFFE65100), modifier = Modifier.weight(1f))
+                            MetricCard(title = "Regime Tag", value = bayesianAdaptationState.marketConditionTag, subtitle = "Condition State", valueColor = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(color = Color(0xFF1E1E1E), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(text = bayesianAdaptationState.adaptationSummary, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color(0xFF81D4FA), modifier = Modifier.padding(10.dp))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { viewModel.triggerClosedLoopFeedbackCoupling(92.5, 12.0, 2.4) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("🔄 Feed DQ Causality Score into Bayesian Engine (Closed-Loop)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // --- 3. MISSED OPPORTUNITY LEARNER ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.FindInPage, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "3. MISSED OPPORTUNITY LEARNER (FALSE NEGATIVES)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(title = "Shadow Trades", value = "${missedOpportunityAnalysis.shadowTradeCount}", subtitle = "${missedOpportunityAnalysis.falseNegativesCount} False Negatives", valueColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                            MetricCard(title = "Missed Yield", value = "+${missedOpportunityAnalysis.missedPotentialYieldPct}%", subtitle = "$${missedOpportunityAnalysis.shadowExecutionProfitUSD} PnL", valueColor = Color(0xFFE65100), modifier = Modifier.weight(1f))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(text = "💡 Rec: ${missedOpportunityAnalysis.recommendation}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(10.dp))
+                        }
+                    }
+                }
+            }
+
+            // --- 4. CHAMPION / CHALLENGER SUBSYSTEM EXTENSION ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "4. SUBSYSTEM CHAMPION / CHALLENGER (SOR & RISK)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(title = "Champion Subsystem", value = subsystemChampionChallenger.championSubsystem, subtitle = "Latency: ${subsystemChampionChallenger.championLatencyMs}ms", valueColor = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                            MetricCard(title = "Challenger Subsystem", value = subsystemChampionChallenger.challengerSubsystem, subtitle = "Latency: ${subsystemChampionChallenger.challengerLatencyMs}ms", valueColor = Color(0xFF2E7D32), modifier = Modifier.weight(1f))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(text = subsystemChampionChallenger.evaluationStatus, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(10.dp))
+                        }
+                    }
+                }
+            }
+
+            // --- 5. PORTFOLIO INTELLIGENCE (MONTE CARLO, VaR, CVaR) ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ShowChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "5. PORTFOLIO INTELLIGENCE (MONTE CARLO, VaR & CVaR)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(title = "Monte Carlo Runs", value = "${portfolioIntelligenceMetrics.monteCarloSimulationsCount}", subtitle = "Simulated Paths", valueColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                            MetricCard(title = "95% VaR", value = "$${portfolioIntelligenceMetrics.valueAtRisk95PctUSD}", subtitle = "Value at Risk", valueColor = Color(0xFFE65100), modifier = Modifier.weight(1f))
+                            MetricCard(title = "99% CVaR", value = "$${portfolioIntelligenceMetrics.expectedShortfall99PctUSD}", subtitle = "Expected Shortfall", valueColor = Color(0xFFD32F2F), modifier = Modifier.weight(1f))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(color = Color(0xFF1E1E1E), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(text = portfolioIntelligenceMetrics.riskSummary, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color(0xFF81C784), modifier = Modifier.padding(10.dp))
+                        }
+                    }
+                }
+            }
+
+            // --- 6. INSTITUTIONAL RECOVERY STATE MACHINE ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.HealthAndSafety, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "6. INSTITUTIONAL RECOVERY STATE MACHINE",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(title = "Current Drawdown", value = "${institutionalRecoveryState.currentDrawdownPct}%", subtitle = "Max Limit: -8.0%", valueColor = Color(0xFF2E7D32), modifier = Modifier.weight(1f))
+                            MetricCard(title = "Phase", value = institutionalRecoveryState.currentPhase, subtitle = "Recovery State", valueColor = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                            MetricCard(title = "Risk Multiplier", value = "${institutionalRecoveryState.RiskScaleMultiplier}x", subtitle = "Position Scaling", valueColor = Color(0xFF2E7D32), modifier = Modifier.weight(1f))
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(text = "Test Drawdown Recovery Scenarios:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = institutionalRecoveryState.currentDrawdownPct == -2.1, onClick = { viewModel.updateInstitutionalDrawdownRecovery(-2.1) }, label = { Text("-2.1% (Normal)", fontSize = 11.sp) })
+                            FilterChip(selected = institutionalRecoveryState.currentDrawdownPct == -4.5, onClick = { viewModel.updateInstitutionalDrawdownRecovery(-4.5) }, label = { Text("-4.5% (Gradual)", fontSize = 11.sp) })
+                            FilterChip(selected = institutionalRecoveryState.currentDrawdownPct == -7.2, onClick = { viewModel.updateInstitutionalDrawdownRecovery(-7.2) }, label = { Text("-7.2% (Defensive)", fontSize = 11.sp, color = Color(0xFFD32F2F)) })
+                        }
+                    }
+                }
+            }
+
+            // --- 7. EXECUTION INTELLIGENCE ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "7. EXECUTION INTELLIGENCE (VENUE SCORECARDS & SOR)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(title = "Primary Venue", value = executionIntelligenceRouting.primaryVenue, subtitle = "Fill Rate: ${executionIntelligenceRouting.fillRatePct}%", valueColor = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                            MetricCard(title = "Avg Slippage", value = "${executionIntelligenceRouting.averageSlippageBps} bps", subtitle = "Execution Quality", valueColor = Color(0xFF2E7D32), modifier = Modifier.weight(1f))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(text = executionIntelligenceRouting.routingDecision, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(10.dp))
+                        }
+                    }
+                }
+            }
+
+            // --- 8. META-REASONING 2.0 ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "8. META-REASONING 2.0 & PRE-TRADE GATE ENFORCERS",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(color = Color(0xFF1E1E1E), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(text = "Hypothesis A: ${metaReasoningValidation.competingHypothesisA}", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color(0xFF81C784))
+                                Text(text = "Hypothesis B: ${metaReasoningValidation.competingHypothesisB}", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color(0xFFFFB74D))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(text = "Counterfactual Result: ${metaReasoningValidation.counterfactualTestResult}", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color(0xFF81D4FA))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(text = "Approval Gate: ${metaReasoningValidation.tradeApprovalStatus}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (metaReasoningValidation.tradeApprovalStatus.contains("APPROVED")) Color(0xFF81C784) else Color(0xFFFF5252))
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(text = "Test Pre-Trade Gate Order Sizing against 95% VaR Cap ($3,450):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = metaReasoningValidation.tradeApprovalStatus.contains("APPROVED"),
+                                onClick = { viewModel.runPreTradeMetaReasoningGate(2500.0) },
+                                label = { Text("Pass: $2,500 Order", fontSize = 11.sp) }
+                            )
+                            FilterChip(
+                                selected = metaReasoningValidation.tradeApprovalStatus.contains("REJECTED"),
+                                onClick = { viewModel.runPreTradeMetaReasoningGate(4200.0) },
+                                label = { Text("Reject: $4,200 Order (>VaR)", fontSize = 11.sp, color = Color(0xFFD32F2F)) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // --- 9. SYSTEM HARMONY ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "9. SYSTEM HARMONY (GLOBAL UTILITY FUNCTION)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(title = "Global Utility", value = "${systemHarmonyGlobalUtility.globalUtilityScore} / 100", subtitle = "System Balance", valueColor = Color(0xFF2E7D32), modifier = Modifier.weight(1f))
+                            MetricCard(title = "Weights", value = "Profit(35%) Risk(25%)", subtitle = "Latency(15%) Compute(15%)", valueColor = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(text = systemHarmonyGlobalUtility.systemHealthStatus, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(10.dp))
+                        }
+                    }
+                }
+            }
+
+            // --- 10. AUTONOMOUS EXPERIMENT FRAMEWORK ---
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Science, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "10. AUTONOMOUS EXPERIMENT FRAMEWORK (SHADOW PHASE)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(title = "Active Paper Tests", value = "${autonomousExperimentState.activePaperExperimentsCount}", subtitle = "${autonomousExperimentState.totalTestedVariants} Total Variants", valueColor = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                            MetricCard(title = "Promoted Variants", value = "${autonomousExperimentState.promotedVariantsCount}", subtitle = "${autonomousExperimentState.institutionalMemoryLogCount} Memory Logs", valueColor = Color(0xFF2E7D32), modifier = Modifier.weight(1f))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(text = autonomousExperimentState.statusSummary, fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(10.dp))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { viewModel.promoteVariantAAndExploreParameters() },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                            ) {
+                                Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("🚀 Promote Variant A & Sweep Params", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = { viewModel.executeShadowPhaseTick() },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("🧪 Shadow Tick (+18 Logs)", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "📊 Shadow Phase Variant Performance & Risk Breakdown",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        autonomousExperimentState.variantPerformances.forEach { variant ->
+                            Surface(
+                                color = if (variant.status.contains("ACTIVE_CORE_CHAMPION")) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(text = variant.variantName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        val statusColor = when {
+                                            variant.status.contains("ACTIVE_CORE_CHAMPION") -> Color(0xFF1565C0)
+                                            variant.status.contains("PROMOTED") -> Color(0xFF2E7D32)
+                                            variant.status.contains("REJECTED") -> Color(0xFFD32F2F)
+                                            else -> Color(0xFFE65100)
+                                        }
+                                        Surface(color = statusColor.copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp)) {
+                                            Text(text = variant.status, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = statusColor, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(text = "Regime: ${variant.marketRegime}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(text = "Pos Size: ${variant.positionSizePct}% | ATR Stop: ${variant.stopLossAtrMultiple}x", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(text = "Net Yield: +${variant.netYieldPct}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (variant.netYieldPct >= 0) Color(0xFF2E7D32) else Color(0xFFD32F2F))
+                                        Text(text = "Peak DD: ${variant.peakDrawdownPct}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F))
+                                        Text(text = "Win Rate: ${variant.winRatePct}%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(text = "Sharpe: ${variant.sharpeRatio}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "🔗 Parameter Correlation Matrix (Position Sizing vs. ATR Stop-Loss)",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        autonomousExperimentState.parameterCorrelations.forEach { corr ->
+                            Surface(
+                                color = Color(0xFF1E1E1E),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(text = corr.parameterPair, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF81D4FA))
+                                        Text(text = "r = ${corr.correlationCoefficient}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (corr.correlationCoefficient < 0) Color(0xFFFFB74D) else Color(0xFF81C784))
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(text = corr.impactAnalysis, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(alpha = 0.85f))
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "🎯 Optimal Regime Parameter Configurations",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        autonomousExperimentState.optimalConfigs.forEach { cfg ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = cfg.regimeName, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                        Text(text = "Optimal Pos: ${cfg.optimalPositionSizePct}% | ATR Stop: ${cfg.optimalStopLossAtrMultiple}x", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f))
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(text = "Sharpe: ${cfg.expectedSharpe}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        Text(text = "Max DD: ${cfg.maxExpectedDrawdownPct}%", fontSize = 10.sp, color = Color(0xFFD32F2F))
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "🛡️ Variant A2 (Active Champion) What-If Stress Scenarios",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        autonomousExperimentState.stressScenarios.forEach { stress ->
+                            Surface(
+                                color = Color(0xFF1E293B),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(text = stress.scenarioName, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
+                                        Surface(color = Color(0xFF16A34A).copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
+                                            Text(text = stress.riskVerdict, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4ADE80), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(text = "Yield: +${stress.netYieldPct}%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4ADE80))
+                                        Text(text = "Max DD: ${stress.maxDrawdownPct}%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF87171))
+                                        Text(text = "Sharpe: ${stress.sharpeRatio}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFBBF24))
+                                        Text(text = "Rec: ${stress.recoveryTimeDays}d", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(text = "Subsystem Action: ${stress.bayesianAdaptationAction}", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(alpha = 0.85f))
+                                }
+                            }
                         }
                     }
                 }

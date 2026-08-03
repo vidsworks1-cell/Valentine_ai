@@ -5241,6 +5241,89 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     )
     val ethBnbHybridSimulation = _ethBnbHybridSimulation.asStateFlow()
 
+    private val _decisionQualityReport = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.generateDecisionQualityReport()
+    )
+    val decisionQualityReport = _decisionQualityReport.asStateFlow()
+
+    private val _bayesianAdaptationState = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.evaluateBayesianAdaptation()
+    )
+    val bayesianAdaptationState = _bayesianAdaptationState.asStateFlow()
+
+    private val _missedOpportunityAnalysis = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.analyzeMissedOpportunities()
+    )
+    val missedOpportunityAnalysis = _missedOpportunityAnalysis.asStateFlow()
+
+    private val _subsystemChampionChallenger = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.evaluateSubsystemChampionChallenger()
+    )
+    val subsystemChampionChallenger = _subsystemChampionChallenger.asStateFlow()
+
+    private val _portfolioIntelligenceMetrics = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.calculatePortfolioIntelligenceMetrics()
+    )
+    val portfolioIntelligenceMetrics = _portfolioIntelligenceMetrics.asStateFlow()
+
+    private val _institutionalRecoveryState = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.evaluateInstitutionalRecoveryState(-2.1)
+    )
+    val institutionalRecoveryState = _institutionalRecoveryState.asStateFlow()
+
+    private val _executionIntelligenceRouting = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.generateExecutionIntelligenceRouting()
+    )
+    val executionIntelligenceRouting = _executionIntelligenceRouting.asStateFlow()
+
+    private val _metaReasoningValidation = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.evaluateMetaReasoningHypothesis()
+    )
+    val metaReasoningValidation = _metaReasoningValidation.asStateFlow()
+
+    private val _systemHarmonyGlobalUtility = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.computeSystemHarmonyGlobalUtility()
+    )
+    val systemHarmonyGlobalUtility = _systemHarmonyGlobalUtility.asStateFlow()
+
+    private val _autonomousExperimentState = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.getAutonomousExperimentFrameworkState()
+    )
+    val autonomousExperimentState = _autonomousExperimentState.asStateFlow()
+
+    fun updateInstitutionalDrawdownRecovery(drawdownPct: Double) {
+        val newState = com.example.aza.strategy.BacktestEngine.evaluateInstitutionalRecoveryState(drawdownPct)
+        _institutionalRecoveryState.value = newState
+        _executionIntelligenceRouting.value = com.example.aza.strategy.BacktestEngine.generateExecutionIntelligenceRouting(drawdownPct)
+        addThought("🛡️ RECOVERY STATE & SOR CIRCUIT BREAKER: Drawdown ${drawdownPct}%. Risk Multiplier: ${newState.RiskScaleMultiplier}x. Route: ${newState.currentPhase}.")
+    }
+
+    fun triggerClosedLoopFeedbackCoupling(dqScore: Double = 92.5, latencyMs: Double = 12.0, slippageBps: Double = 2.4) {
+        val newState = com.example.aza.strategy.BacktestEngine.evaluateBayesianAdaptation(dqScore, latencyMs, slippageBps)
+        _bayesianAdaptationState.value = newState
+        addThought("🔄 CLOSED-LOOP FEEDBACK: Score ($dqScore) fed into Bayesian Engine. MACD weight updated to ${newState.dynamicFeatureWeights["MACD_Divergence"]}, OrderBook Imbalance to ${newState.dynamicFeatureWeights["OrderBook_Imbalance"]}.")
+    }
+
+    fun executeShadowPhaseTick() {
+        val currentLogs = _autonomousExperimentState.value.institutionalMemoryLogCount
+        val newState = com.example.aza.strategy.BacktestEngine.triggerShadowPhaseTickSimulation(currentLogs)
+        _autonomousExperimentState.value = newState
+        addThought("🧪 AUTONOMOUS EXPERIMENT SHADOW TICK: Processed live tick feeds across 6 variants. Total Memory Logs: ${newState.institutionalMemoryLogCount}.")
+    }
+
+    fun promoteVariantAAndExploreParameters() {
+        val currentLogs = _autonomousExperimentState.value.institutionalMemoryLogCount
+        val newState = com.example.aza.strategy.BacktestEngine.promoteVariantAAndExploreParameters(currentLogs)
+        _autonomousExperimentState.value = newState
+        addThought("🚀 PROMOTED VARIANT A: Dynamic 1.8x ATR stop with 20% position sizing is now the Active Core Champion (Sharpe 2.75). Launched parameter sweep across sub-variants A1-A4.")
+    }
+
+    fun runPreTradeMetaReasoningGate(orderSizeUSD: Double) {
+        val newState = com.example.aza.strategy.BacktestEngine.evaluateMetaReasoningHypothesis(orderSizeUSD)
+        _metaReasoningValidation.value = newState
+        addThought("🛑 PRE-TRADE GATE CHECK ($${orderSizeUSD}): ${newState.tradeApprovalStatus}.")
+    }
+
     private val _selectedReportTemplateId = MutableStateFlow("EXECUTIVE_SUMMARY")
     val selectedReportTemplateId = _selectedReportTemplateId.asStateFlow()
 
