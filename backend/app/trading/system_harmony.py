@@ -138,8 +138,40 @@ class SystemHarmonyEngine:
     @classmethod
     def get_instance(cls) -> 'SystemHarmonyEngine':
         if cls._instance is None:
-            cls._instance = SystemHarmonyEngine()
+            cls._instance = cls()
         return cls._instance
+
+    def compute_global_utility(
+        self,
+        expected_profit: float,
+        risk_cost: float = 12.0,
+        resource_cost: float = 1.5,
+        api_usage_cost: float = 0.5,
+        latency_ms: float = 35.0,
+        learning_value: float = 5.0
+    ) -> Dict[str, Any]:
+        """
+        System Harmony Global Utility Optimization Function:
+        Formula: Utility = Profit - Risk Cost - Resource Cost - API Usage Cost - Latency Penalty + Learning Value
+        """
+        latency_penalty = round(max(0.0, (latency_ms - 20.0) * 0.10), 2)
+        global_utility = round(
+            expected_profit - risk_cost - resource_cost - api_usage_cost - latency_penalty + learning_value,
+            2
+        )
+        is_utility_positive = global_utility > 0.0
+
+        return {
+            "expected_profit": round(expected_profit, 2),
+            "risk_cost": round(risk_cost, 2),
+            "resource_cost": round(resource_cost, 2),
+            "api_usage_cost": round(api_usage_cost, 2),
+            "latency_penalty": latency_penalty,
+            "learning_value": round(learning_value, 2),
+            "global_utility": global_utility,
+            "is_utility_positive": is_utility_positive,
+            "formula_applied": "Utility = Profit - Risk_Cost - Resource_Cost - API_Usage_Cost - Latency_Penalty + Learning_Value"
+        }
 
     def harmonize_trade_decision(
         self,

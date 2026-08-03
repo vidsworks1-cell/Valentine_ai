@@ -53,6 +53,42 @@ class CapitalAllocationEngine:
             cls._instance = CapitalAllocationEngine()
         return cls._instance
 
+    def calculate_dynamic_portfolio_allocation(
+        self,
+        symbol: str,
+        expected_return: float,
+        bayesian_confidence: float,
+        correlation_matrix: Optional[Dict[str, float]] = None,
+        drawdown_pct: float = 0.0
+    ) -> Dict[str, Any]:
+        """
+        Portfolio Intelligence Dynamic Allocator:
+        Formula: Allocation = Expected Return * Bayesian Confidence * Correlation Penalty * Drawdown State
+        """
+        # Correlation Penalty (higher correlation with active positions -> lower multiplier)
+        avg_correlation = 0.35
+        if correlation_matrix and symbol in correlation_matrix:
+            avg_correlation = correlation_matrix[symbol]
+        correlation_penalty = max(0.20, 1.0 - (avg_correlation * 0.85))
+
+        # Drawdown State Scalar (e.g. 0% DD -> 1.0, 10% DD -> 0.50, 20% DD -> 0.20)
+        drawdown_state = max(0.15, 1.0 - (drawdown_pct / 20.0))
+
+        raw_allocation_score = expected_return * bayesian_confidence * correlation_penalty * drawdown_state
+        base_capital = 10000.0  # $10k per base unit
+        allocated_capital_usd = round(base_capital * raw_allocation_score, 2)
+
+        return {
+            "symbol": symbol,
+            "expected_return": expected_return,
+            "bayesian_confidence": bayesian_confidence,
+            "correlation_penalty": round(correlation_penalty, 3),
+            "drawdown_state": round(drawdown_state, 3),
+            "raw_allocation_score": round(raw_allocation_score, 4),
+            "allocated_capital_usd": allocated_capital_usd,
+            "formula_applied": "Expected Return * Bayesian Confidence * Correlation Penalty * Drawdown State"
+        }
+
     def recalculate_strategy_allocations(
         self,
         total_equity: float = 100000.0,

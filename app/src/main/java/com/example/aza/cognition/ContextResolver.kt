@@ -41,6 +41,7 @@ data class UnifiedContext(
             $budgetLine
             [Missions Status] Active Missions: $activeMissionsCount; Open Freelance Gigs: $openGigsCount; Draft Content: $contentCount
             [System Health] Status: $systemStatus
+            [User Investor Profile & Style] Active Style: ${preferences.investingStyleSummary}; Timeframe: ${preferences.preferredTimeframe}; Preferred Assets: ${preferences.preferredAssetsSummary}; Preferred Strategies: ${preferences.preferredStrategiesSummary}
             [User Style Preferences] Explanation: ${preferences.preferredExplanationDepth}; Tone: ${preferences.preferredTone}
             -----------------------------
         """.trimIndent()

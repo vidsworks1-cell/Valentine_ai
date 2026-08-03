@@ -81,7 +81,16 @@ class MissedOpportunityLearner:
             "max_price_reached": float(entry_price),
             "min_price_reached": float(entry_price),
             "counterfactual_pnl_pct": 0.0,
-            "evaluation_summary": f"Pending counterfactual price tracking for {symbol} {side}."
+            "evaluation_summary": f"Pending counterfactual price tracking for {symbol} {side}.",
+            # Missed Opportunity Learning: Shadow Execution Parameters
+            "shadow_position": {
+                "shadow_id": f"shadow_{record_id}",
+                "virtual_entry": float(entry_price),
+                "window_hours": 48,
+                "virtual_exit_price": None,
+                "virtual_pnl_usd": 0.0,
+                "guard_verdict": None  # "TRUE_NEGATIVE" or "FALSE_NEGATIVE"
+            }
         }
 
         self._records.append(record)

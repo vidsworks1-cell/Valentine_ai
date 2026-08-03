@@ -18,14 +18,26 @@ data class RelationshipProfile(
     var decisionControlPreference: Double = 0.50, // 0.0 (Manual/Approval-heavy) -> 1.0 (Autopilot/Autonomous)
     
     // User Investing Style & Preferences
-    var investingStyle: String = "MODERATE",   // AGGRESSIVE, MODERATE, CONSERVATIVE
+    var investingStyle: String = "MODERATE",   // AGGRESSIVE, MODERATE, CONSERVATIVE, SWING_TRADING, DAY_TRADING, LONG_TERM_HODL
+    var preferredTimeframe: String = "1H / 4H", // 15M/1H, 1H/4H, 1D/1W
     val preferredAssets: MutableSet<String> = mutableSetOf("BTC", "ETH", "SOL"),
     val preferredStrategies: MutableSet<String> = mutableSetOf("Breakout Momentum", "Volatility Expansion", "Liquidity Sweep"),
+    var conversationalWarmth: Double = 0.85,
 
     // Additional Calibration metrics
     var totalAdaptiveCycles: Int = 0,
     var lastCalibratedAt: Long = 0L
-)
+) {
+    val investingStyleDisplayName: String
+        get() = when (investingStyle.uppercase()) {
+            "AGGRESSIVE", "AGGRESSIVE_GROWTH" -> "Aggressive Growth & Breakouts"
+            "CONSERVATIVE", "CONSERVATIVE_PRESERVATION" -> "Conservative Capital Preservation"
+            "SWING_TRADING", "SWING" -> "Disciplined Swing Trader"
+            "DAY_TRADING", "DAY_TRADER", "SCALP" -> "High-Frequency Day Trader / Scalper"
+            "LONG_TERM_HODL", "HODL", "VALUE" -> "Long-Term Value & Macro HODL"
+            else -> "Balanced Moderate Growth"
+        }
+}
 
 class ConversationMemory {
 
@@ -152,12 +164,31 @@ class ConversationMemory {
         relationshipProfile.decisionControlPreference = (relationshipProfile.decisionControlPreference + decisionShift).coerceIn(0.10, 1.0)
         
         // --- 5. Investing Style & Preference Calibration ---
-        val aggCues = listOf("aggressive", "high risk", "leverage", "max gain", "degen", "scalp", "high beta", "momentum")
-        val consCues = listOf("conservative", "safe", "low risk", "preserve capital", "hedged", "protect", "defensive")
-        if (aggCues.any { lower.contains(it) }) {
-            relationshipProfile.investingStyle = "AGGRESSIVE"
-        } else if (consCues.any { lower.contains(it) }) {
-            relationshipProfile.investingStyle = "CONSERVATIVE"
+        val aggCues = listOf("aggressive", "high risk", "leverage", "max gain", "degen", "high beta", "momentum breakout", "breakout hunter")
+        val consCues = listOf("conservative", "safe", "low risk", "preserve capital", "hedged", "protect", "defensive", "preservative")
+        val swingCues = listOf("swing", "swing trader", "swing trading", "trend follower", "1h", "4h", "multi-day")
+        val dayCues = listOf("day trade", "day trader", "scalp", "scalper", "intraday", "15m", "high frequency")
+        val hodlCues = listOf("hodl", "long term", "buy and hold", "value investor", "dca", "macro", "multi-year", "wealth preservation")
+
+        when {
+            swingCues.any { lower.contains(it) } -> {
+                relationshipProfile.investingStyle = "SWING_TRADING"
+                relationshipProfile.preferredTimeframe = "1H / 4H"
+            }
+            dayCues.any { lower.contains(it) } -> {
+                relationshipProfile.investingStyle = "DAY_TRADING"
+                relationshipProfile.preferredTimeframe = "15M / 1H"
+            }
+            hodlCues.any { lower.contains(it) } -> {
+                relationshipProfile.investingStyle = "LONG_TERM_HODL"
+                relationshipProfile.preferredTimeframe = "1D / 1W"
+            }
+            aggCues.any { lower.contains(it) } -> {
+                relationshipProfile.investingStyle = "AGGRESSIVE"
+            }
+            consCues.any { lower.contains(it) } -> {
+                relationshipProfile.investingStyle = "CONSERVATIVE"
+            }
         }
 
         // Asset preference cues
@@ -167,7 +198,9 @@ class ConversationMemory {
             "sol" to "SOL", "solana" to "SOL",
             "bnb" to "BNB", "binance" to "BNB",
             "xrp" to "XRP", "ripple" to "XRP",
-            "ada" to "ADA", "cardano" to "ADA"
+            "ada" to "ADA", "cardano" to "ADA",
+            "nvda" to "NVDA", "nvidia" to "NVDA",
+            "aapl" to "AAPL", "apple" to "AAPL"
         )
         coinMap.forEach { (keyword, symbol) ->
             if (lower.contains(keyword)) {
@@ -180,6 +213,8 @@ class ConversationMemory {
         if (lower.contains("volatility") || lower.contains("expansion")) relationshipProfile.preferredStrategies.add("Volatility Expansion")
         if (lower.contains("sweep") || lower.contains("liquidity")) relationshipProfile.preferredStrategies.add("Liquidity Sweep")
         if (lower.contains("mean reversion") || lower.contains("reversion")) relationshipProfile.preferredStrategies.add("Mean Reversion")
+        if (lower.contains("trend following") || lower.contains("trend")) relationshipProfile.preferredStrategies.add("Trend Following")
+        if (lower.contains("ema") || lower.contains("ribbon")) relationshipProfile.preferredStrategies.add("EMA Cross Ribbon")
 
         relationshipProfile.totalAdaptiveCycles++
         relationshipProfile.lastCalibratedAt = System.currentTimeMillis()

@@ -103,6 +103,14 @@ class SelfAdaptationEngine:
             "profit_factor": 1.55,
             "status": "EXPECTANCY_VERIFIED"
         }
+        # Self-Adaptation 2.0: Condition-Based Feature Weight Learner
+        self._condition_feature_weights: Dict[str, float] = {
+            "RSI_OVERBOUGHT_82_EXPANDING_ATR": 0.35, # Downweight Mean Reversion when RSI > 82 & ATR expands
+            "POSITIVE_FUNDING_DECLINING_VOLUME": 0.40, # Downweight Breakout when Funding positive & Volume down
+            "HIGH_LIQUIDITY_ALIGNED_SWEEP": 1.25,     # Upweight Liquidity Sweep when orderbook aligned
+            "VOLATILE_REGIME_UNCONFIRMED_MTF": 0.30     # Downweight setup when Regime volatile & MTF unconfirmed
+        }
+        self._condition_learned_events: List[Dict[str, Any]] = []
         self._decision_audit_log: List[Dict[str, Any]] = []
         self._mtf_near_miss_log: List[Dict[str, Any]] = []
         self._evolution_telemetry: Dict[str, Any] = {
@@ -122,6 +130,18 @@ class SelfAdaptationEngine:
     def get_calibrated_reliability_weights(self) -> Dict[str, float]:
         """Returns current adaptive reliability weights for drift components."""
         return dict(self._adaptive_reliability_weights)
+
+    def get_condition_feature_multiplier(self, condition_keys: List[str]) -> float:
+        """
+        Self-Adaptation 2.0: Evaluates specific market condition signatures 
+        (e.g., RSI > 82 + ATR expanding, Funding positive + declining volume)
+        and returns composite feature weight multiplier.
+        """
+        mult = 1.0
+        for key in condition_keys:
+            if key in self._condition_feature_weights:
+                mult *= self._condition_feature_weights[key]
+        return round(max(0.10, min(2.0, mult)), 3)
 
     @classmethod
     def get_instance(cls) -> 'SelfAdaptationEngine':

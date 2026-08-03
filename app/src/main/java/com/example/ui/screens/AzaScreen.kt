@@ -9713,6 +9713,147 @@ fun AdaptivePreferenceCalibrationSubpanel(viewModel: com.example.viewmodel.AppVi
                 Text(profile.preferredExplanations, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             }
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // --- Tailored Investor Profile & Preferences Customizer ---
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                .padding(10.dp)
+        ) {
+            Text(
+                text = "🎯 User Investor Profile & Tailored Preferences",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Lumina intuitively tailors recommendations, risk bounds, and strategy picks to your active profile:",
+                fontSize = 9.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+
+            // 1. Investing Style Selection
+            Text(
+                text = "Active Investing Style:",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            )
+            
+            val styles = listOf(
+                "SWING_TRADING" to "📈 Swing Trader",
+                "AGGRESSIVE" to "🚀 Aggressive Growth",
+                "CONSERVATIVE" to "🛡️ Conservative",
+                "DAY_TRADING" to "⚡ Day Trader",
+                "LONG_TERM_HODL" to "🏛️ Long-Term HODL",
+                "MODERATE" to "⚖️ Balanced"
+            )
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                styles.take(3).forEach { (styleKey, label) ->
+                    val isSelected = profile.investingStyle.equals(styleKey, ignoreCase = true)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            profile.investingStyle = styleKey
+                            viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
+                        },
+                        label = { Text(label, fontSize = 8.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.height(24.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                styles.drop(3).forEach { (styleKey, label) ->
+                    val isSelected = profile.investingStyle.equals(styleKey, ignoreCase = true)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            profile.investingStyle = styleKey
+                            viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
+                        },
+                        label = { Text(label, fontSize = 8.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier.height(24.dp)
+                    )
+                }
+            }
+
+            // 2. Target Assets
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Target Focus Assets:",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            val availableAssets = listOf("BTC", "ETH", "SOL", "NVDA", "AAPL")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                availableAssets.forEach { asset ->
+                    val isSelected = profile.preferredAssets.contains(asset)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            if (isSelected) profile.preferredAssets.remove(asset) else profile.preferredAssets.add(asset)
+                            viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
+                        },
+                        label = { Text(asset, fontSize = 8.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onSecondary
+                        ),
+                        modifier = Modifier.height(24.dp)
+                    )
+                }
+            }
+
+            // 3. Live Guidance Summary Box
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
+                    .padding(8.dp)
+            ) {
+                Column {
+                    Text(
+                        text = "✨ Lumina Tailored Guidance active:",
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Configured for ${profile.investingStyleDisplayName} (${profile.preferredTimeframe}) focusing on ${profile.preferredAssets.joinToString(", ")}. Lumina prioritizes ${profile.preferredStrategies.joinToString(", ")} with conversational intuitive feedback.",
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
     }
 }
 

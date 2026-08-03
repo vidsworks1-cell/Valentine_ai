@@ -47,6 +47,45 @@ class ChampionChallengerEngine:
             "Mean Reversion": 1605.0,
             "Momentum": 1550.0,
         }
+        # Multi-Level Subsystem Champions & Challengers Framework
+        self._subsystem_champions: Dict[str, Dict[str, Any]] = {
+            "PARAMETER_SET": {
+                "champion": "ATR_MULT_2.0",
+                "challengers": ["ATR_MULT_2.5", "ATR_MULT_1.8"],
+                "elo": 1720.0,
+                "win_rate_pct": 64.0
+            },
+            "CONFIDENCE_MODEL": {
+                "champion": "BAYESIAN_EXPONENTIAL",
+                "challengers": ["BAYESIAN_NEURAL_CALIBRATED", "CAUSAL_ATTRIBUTION_WEIGHTED"],
+                "elo": 1810.0,
+                "win_rate_pct": 68.5
+            },
+            "RISK_MODEL": {
+                "champion": "KELLY_DYNAMIC",
+                "challengers": ["VAR_PROPORTIONAL", "STAGED_RECOVERY"],
+                "elo": 1750.0,
+                "win_rate_pct": 62.0
+            },
+            "EXECUTION_MODEL": {
+                "champion": "TWAP_AGGRESSIVE",
+                "challengers": ["LIMIT_MAKER_ONLY", "SMART_SCORECARD_ROUTING"],
+                "elo": 1780.0,
+                "win_rate_pct": 66.0
+            },
+            "STOP_LOSS_MODEL": {
+                "champion": "TRAILING_ATR",
+                "challengers": ["STRUCTURE_SWEEP_SL", "VOLATILITY_EXPANSION_SL"],
+                "elo": 1690.0,
+                "win_rate_pct": 59.5
+            },
+            "TAKE_PROFIT_MODEL": {
+                "champion": "STAGGERED_FIB",
+                "challengers": ["RVOL_TARGET", "LIQUIDITY_MAGNET_TP"],
+                "elo": 1740.0,
+                "win_rate_pct": 63.5
+            }
+        }
 
     @classmethod
     def get_instance(cls) -> 'ChampionChallengerEngine':
@@ -57,6 +96,10 @@ class ChampionChallengerEngine:
     @property
     def champion_strategy(self) -> str:
         return self._champion_strategy
+
+    def get_subsystem_champions(self) -> Dict[str, Dict[str, Any]]:
+        """Returns multi-level champions and active challengers across all 6 core subsystems."""
+        return self._subsystem_champions
 
     def record_trade_outcome(self, strategy: str, pnl: float, exit_reason: str = "") -> float:
         """

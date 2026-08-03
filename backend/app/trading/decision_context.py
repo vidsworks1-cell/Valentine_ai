@@ -126,6 +126,9 @@ class DecisionContext:
         self.adaptive_modifier: float = 0.0
         self.position_multiplier: float = 1.0
         
+        # Causal Attribution Breakdown (Decision Intelligence)
+        self.causal_attribution: Dict[str, Any] = {}
+        
         # Rejection & Immutability State
         self.is_rejected: bool = False
         self.rejection_stage: Optional[str] = None
@@ -139,6 +142,61 @@ class DecisionContext:
     def set_guard_result(self, guard_name: str, result: Any):
         """Caches a guard evaluation result in context."""
         self.eval_cache[guard_name] = result
+
+    def compute_causal_attribution(self) -> Dict[str, Any]:
+        """
+        Computes explicit causal factor breakdown for decision confidence attribution:
+        e.g., Base (0.50) + Trend (+0.24) + Volume (+0.18) + Bayesian (+0.17) - Volatility (-0.08) - Macro (-0.05)
+        """
+        base_confidence = 0.50
+        factors = []
+        
+        # Trend Confirmation
+        mtf_data = self.eval_cache.get("mtf_alignment", {})
+        align_score = mtf_data.get("alignment_score", 0.75) if isinstance(mtf_data, dict) else 0.75
+        trend_contrib = round(align_score * 0.32, 2)
+        factors.append({"factor": "Trend confirmation", "impact": trend_contrib, "type": "POSITIVE"})
+
+        # Volume & Liquidity Confirmation
+        vol_data = self.eval_cache.get("volume_liquidity", {})
+        vol_rvol = vol_data.get("rvol", 1.5) if isinstance(vol_data, dict) else 1.5
+        vol_contrib = round(min(0.25, (vol_rvol - 1.0) * 0.20 + 0.10), 2)
+        factors.append({"factor": "Volume confirmation", "impact": vol_contrib, "type": "POSITIVE"})
+
+        # Bayesian Expectancy
+        bayesian_prob = self.eval_cache.get("bayesian_probability", 0.68)
+        bayesian_contrib = round((bayesian_prob - 0.50) * 0.50, 2)
+        factors.append({"factor": "Bayesian expectancy", "impact": bayesian_contrib, "type": "POSITIVE" if bayesian_contrib >= 0 else "NEGATIVE"})
+
+        # Volatility & Macro Penalties / Boosts
+        macro_risk = self.eval_cache.get("macro_risk", {}).get("risk_level", "NORMAL")
+        if macro_risk == "HIGH" or macro_risk == "CRITICAL":
+            macro_impact = -0.12
+        elif macro_risk == "ELEVATED":
+            macro_impact = -0.05
+        else:
+            macro_impact = 0.05
+        factors.append({"factor": "Macro uncertainty", "impact": macro_impact, "type": "NEGATIVE" if macro_impact < 0 else "POSITIVE"})
+
+        # Squeeze & Liquidity Sweep
+        if self.eval_cache.get("squeeze_info", {}).get("squeeze_state") == "SQUEEZE_FIRING":
+            sweep_contrib = 0.12
+            factors.append({"factor": "Liquidity sweep", "impact": sweep_contrib, "type": "POSITIVE"})
+
+        # Net Attribution Summary
+        total_impact = sum(f["impact"] for f in factors)
+        net_confidence = round(max(0.0, min(1.0, base_confidence + total_impact)), 2)
+
+        self.causal_attribution = {
+            "signal_id": self.signal_id,
+            "base_confidence": base_confidence,
+            "net_confidence": net_confidence,
+            "factors": factors,
+            "top_positive_driver": max(factors, key=lambda f: f["impact"])["factor"] if factors else "None",
+            "top_negative_driver": min(factors, key=lambda f: f["impact"])["factor"] if factors else "None"
+        }
+        self.add_trace("CausalAttribution", "PASS", self.causal_attribution)
+        return self.causal_attribution
 
     def verify_pipeline_integrity(self) -> tuple[bool, str]:
         """

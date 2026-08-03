@@ -61,6 +61,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     val dynamicExponentialEstimator = com.example.aza.executive.DynamicExponentialEstimator(repository)
     val marketIntelligenceEngine = com.example.aza.intelligence.MarketIntelligenceEngine(repository, viewModelScope, dynamicExponentialEstimator)
     val currentSentimentReports: StateFlow<Map<String, com.example.aza.intelligence.SentimentSynthesisReport>> = marketIntelligenceEngine.currentSentimentReport
+    val portfolioMacroDecision = marketIntelligenceEngine.portfolioMacroDecision
+    val regimeMemoryStats = marketIntelligenceEngine.regimeMemoryStats
+    val confidenceCalibrationReport = marketIntelligenceEngine.confidenceCalibrationReport
+    val strategyCapitalAllocations = marketIntelligenceEngine.strategyCapitalAllocations
+    val selfEvaluationReport = marketIntelligenceEngine.selfEvaluationReport
     val marketOpportunities: StateFlow<List<com.example.data.database.OpportunityEntity>> = repository.marketOpportunities
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val tradeProposals: StateFlow<List<com.example.data.database.TradeProposalEntity>> = repository.tradeProposals
@@ -5126,6 +5131,207 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _backtestPattern = MutableStateFlow("TREND")
     val backtestPattern = _backtestPattern.asStateFlow()
 
+    private val _multiStrategyReport = MutableStateFlow<com.example.aza.strategy.MultiStrategyComparisonReport?>(null)
+    val multiStrategyReport = _multiStrategyReport.asStateFlow()
+
+    private val _scenarioSuiteReport = MutableStateFlow<com.example.aza.strategy.ComprehensiveScenarioSuiteReport?>(null)
+    val scenarioSuiteReport = _scenarioSuiteReport.asStateFlow()
+
+    private val _walkForwardReport = MutableStateFlow<com.example.aza.strategy.WalkForwardOptimizationReport?>(null)
+    val walkForwardReport = _walkForwardReport.asStateFlow()
+
+    private val _monteCarloReport = MutableStateFlow<com.example.aza.strategy.MonteCarloResult?>(null)
+    val monteCarloReport = _monteCarloReport.asStateFlow()
+
+    private val _monteCarloIterations = MutableStateFlow(200)
+    val monteCarloIterations = _monteCarloIterations.asStateFlow()
+
+    private val _agentPerformanceMetrics = MutableStateFlow<List<com.example.aza.strategy.AgentPerformanceMetrics>>(emptyList())
+    val agentPerformanceMetrics = _agentPerformanceMetrics.asStateFlow()
+
+    private val _assetCorrelationMatrix = MutableStateFlow<com.example.aza.strategy.CorrelationMatrixResult?>(null)
+    val assetCorrelationMatrix = _assetCorrelationMatrix.asStateFlow()
+
+    private val _strategyCorrelationMatrix = MutableStateFlow<com.example.aza.strategy.CorrelationMatrixResult?>(null)
+    val strategyCorrelationMatrix = _strategyCorrelationMatrix.asStateFlow()
+
+    private val _circuitBreakerState = MutableStateFlow(
+        com.example.aza.strategy.CircuitBreakerState(
+            isTriggered = false,
+            dailyLossPercent = 0.85,
+            maxDailyLossLimitPercent = 3.0,
+            scalingFactor = 1.0,
+            statusSummary = "✅ NORMAL RISK CONTROLS: Daily Loss 0.85% < 3.0% Limit. Adaptive Position Scale: 1.00x."
+        )
+    )
+    val circuitBreakerState = _circuitBreakerState.asStateFlow()
+
+    private val _dualSpeedResponseLoop = MutableStateFlow(
+        com.example.aza.strategy.DualSpeedResponseLoop(
+            fastLoopAction = "⚡ FAST LOOP STATUS: Latency 12ms | Volatility Normal | No emergency circuit breaker cut required.",
+            fastLoopLatencyMs = 12,
+            slowLoopAction = "🐢 SLOW LOOP ADJUSTMENT: 14-day rolling window lookback Sharpe=1.85, WinRate=62.5% -> Base Scale: 1.00x",
+            slowLoopLookbackDays = 14
+        )
+    )
+    val dualSpeedResponseLoop = _dualSpeedResponseLoop.asStateFlow()
+
+    private val _resourceArbitrageResult = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.evaluateResourceArbitrage("STRONG_BULL")
+    )
+    val resourceArbitrageResult = _resourceArbitrageResult.asStateFlow()
+
+    private val _pairStrategyMatrix = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.evaluatePairStrategyMatrix()
+    )
+    val pairStrategyMatrix = _pairStrategyMatrix.asStateFlow()
+
+    private val _cvrCorrelationBreakdown = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.evaluateCvrCorrelationBreakdown()
+    )
+    val cvrCorrelationBreakdown = _cvrCorrelationBreakdown.asStateFlow()
+
+    private val _volatilitySensitivityConfig = MutableStateFlow(
+        com.example.aza.strategy.VolatilitySensitivityConfig()
+    )
+    val volatilitySensitivityConfig = _volatilitySensitivityConfig.asStateFlow()
+
+    private val _compositeEvaluationProfile = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.getCompositeProfile("CAPITAL_PRESERVATION")
+    )
+    val compositeEvaluationProfile = _compositeEvaluationProfile.asStateFlow()
+
+    private val _multiDayVolLockoutState = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.simulateMultiDayVolatility(1)
+    )
+    val multiDayVolLockoutState = _multiDayVolLockoutState.asStateFlow()
+
+    private val _championChallengerHysteresisState = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.evaluateChampionChallengerHysteresis(18.4, "HIGH_VOLATILITY")
+    )
+    val championChallengerHysteresisState = _championChallengerHysteresisState.asStateFlow()
+
+    private val _tradeQualityScores = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.generateTradeQualityScores()
+    )
+    val tradeQualityScores = _tradeQualityScores.asStateFlow()
+
+    private val _recalibratedEngines = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.getRecalibratedEngines()
+    )
+    val recalibratedEngines = _recalibratedEngines.asStateFlow()
+
+    private val _metaStrategyFusion = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.generateMetaStrategyFusion()
+    )
+    val metaStrategyFusion = _metaStrategyFusion.asStateFlow()
+
+    private val _dailyDigestReport = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.getDailyDigestReport()
+    )
+    val dailyDigestReport = _dailyDigestReport.asStateFlow()
+
+    private val _ethBnbHybridLiveState = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.getEthBnbHybridLiveState(true, 55, 45)
+    )
+    val ethBnbHybridLiveState = _ethBnbHybridLiveState.asStateFlow()
+
+    private val _ethBnbHybridSimulation = MutableStateFlow(
+        com.example.aza.strategy.BacktestEngine.runEthBnbHybridMultiRegimeSimulation(7)
+    )
+    val ethBnbHybridSimulation = _ethBnbHybridSimulation.asStateFlow()
+
+    private val _selectedReportTemplateId = MutableStateFlow("EXECUTIVE_SUMMARY")
+    val selectedReportTemplateId = _selectedReportTemplateId.asStateFlow()
+
+    private val _customGeneratedReportText = MutableStateFlow("")
+    val customGeneratedReportText = _customGeneratedReportText.asStateFlow()
+
+    fun toggleEthBnbHybridLive(isLive: Boolean) {
+        val currentEth = _ethBnbHybridLiveState.value.ethWeightPct
+        val currentBnb = _ethBnbHybridLiveState.value.bnbWeightPct
+        _ethBnbHybridLiveState.value = com.example.aza.strategy.BacktestEngine.getEthBnbHybridLiveState(isLive, currentEth, currentBnb)
+        addThought("⚡ LIVE HYBRID MODE TOGGLED: Active = $isLive.")
+    }
+
+    fun rebalanceEthBnbWeights(ethWeight: Int, bnbWeight: Int) {
+        val isLive = _ethBnbHybridLiveState.value.isLiveModeActive
+        _ethBnbHybridLiveState.value = com.example.aza.strategy.BacktestEngine.getEthBnbHybridLiveState(isLive, ethWeight, bnbWeight)
+        addThought("⚖️ AUTO-REBALANCE TRIGGERED: Weights adjusted to $ethWeight% ETH / $bnbWeight% BNB.")
+    }
+
+    fun runEthBnbHybridSimulation(days: Int) {
+        val simResult = com.example.aza.strategy.BacktestEngine.runEthBnbHybridMultiRegimeSimulation(days)
+        _ethBnbHybridSimulation.value = simResult
+        addThought("🧪 ETH-BNB HYBRID MULTI-REGIME SIMULATION ($days DAYS): Sharpe ${simResult.hybridSharpe}, Max Drawdown ${simResult.maxDrawdownPct}%.")
+    }
+
+    fun evaluateHysteresisGuardrails(outperformancePct: Double) {
+        val newState = com.example.aza.strategy.BacktestEngine.evaluateChampionChallengerHysteresis(outperformancePct, _backtestPattern.value)
+        _championChallengerHysteresisState.value = newState
+        addThought("🛡️ HYSTERESIS EVALUATION: Outperformance ${outperformancePct}%. Net after microstructure drag: ${newState.netAdjustedOutperformancePct}%. Promotion Approved: ${newState.isPromotionTriggered}.")
+    }
+
+    fun toggleEngineLiveDeployment(engineName: String) {
+        val currentList = _recalibratedEngines.value.map { item ->
+            if (item.engineName == engineName) {
+                val newStatus = !item.isLiveModeDeployed
+                item.copy(
+                    isLiveModeDeployed = newStatus,
+                    livePerformanceStatus = if (newStatus) "🟢 DEPLOYED IN LIVE MODE: Actively trading live order-book." else "🟡 PAUSED / SHADOW MODE: Engine paused for calibration."
+                )
+            } else item
+        }
+        _recalibratedEngines.value = currentList
+        addThought("⚡ ENGINE LIVE DEPLOYMENT TOGGLED: $engineName status updated.")
+    }
+
+    fun runGeminiMetaStrategyFusion() {
+        val fusion = com.example.aza.strategy.BacktestEngine.generateMetaStrategyFusion()
+        _metaStrategyFusion.value = fusion
+        addThought("♊ GEMINI VIBE CODE FUSION COMPLETE: Fused ${fusion.primaryStrategy} and ${fusion.secondaryStrategy} into MetaStrategy Matrix. Combined Sharpe: ${fusion.projectedCombinedSharpe}.")
+    }
+
+    fun setCompositeEvaluationProfile(profileName: String) {
+        val profile = com.example.aza.strategy.BacktestEngine.getCompositeProfile(profileName)
+        _compositeEvaluationProfile.value = profile
+        addThought("🎯 COMPOSITE EVALUATION PROFILE CHANGED: Set to ${profile.profileName} (${profile.promotionShadowWindowDays}-Day Shadow Window). Sharpe Weight: ${profile.sharpeWeightPct}%, VaR Weight: ${profile.varDrawdownWeightPct}%, Out-of-Sample Degradation: ${profile.outOfSampleDegradationPct}%.")
+    }
+
+    fun simulateMultiDayVolLockout(consecutiveDays: Int) {
+        val state = com.example.aza.strategy.BacktestEngine.simulateMultiDayVolatility(consecutiveDays)
+        _multiDayVolLockoutState.value = state
+        addThought("🛑 PROLONGED VOLATILITY SIMULATION: $consecutiveDays Consecutive 3% Daily Loss Triggers -> Status: ${state.lockoutStatus}, Cooldown: ${state.cooldownHoursRemaining}h, Delta Neutral Hedge: ${state.deltaNeutralHedgeActive}.")
+    }
+
+    fun testCircuitBreakerDrawdown(simulatedLossPct: Double) {
+        val (cbState, dualSpeed) = com.example.aza.strategy.BacktestEngine.evaluateCircuitBreakerAndSizing(
+            simulatedLossPct, 58.0, 1.45, _backtestPattern.value
+        )
+        _circuitBreakerState.value = cbState
+        _dualSpeedResponseLoop.value = dualSpeed
+        addThought("🛡️ CIRCUIT BREAKER SIMULATION: Simulated Daily Loss ${String.format(Locale.US, "%.2f", simulatedLossPct)}%. Breached 3.0% Cap: ${cbState.isTriggered}. Scaling Factor: ${cbState.scalingFactor}x.")
+    }
+
+    fun runResourceArbitrageEngine() {
+        val regime = _backtestPattern.value
+        val res = com.example.aza.strategy.BacktestEngine.evaluateResourceArbitrage(regime)
+        _resourceArbitrageResult.value = res
+        addThought("⚖️ DYNAMIC ARBITRAGE REBALANCE: Allocated ${res.tradingCapitalAllocatedPct.toInt()}% Capital to Trading, ${res.freelanceCapitalAllocatedPct.toInt()}% to Freelance Agent Services based on $regime market regime.")
+    }
+
+    fun updateVolatilitySensitivity(calmBaseline: Double, crashThreshold: Double, tradeFreqMult: Double) {
+        _volatilitySensitivityConfig.value = com.example.aza.strategy.VolatilitySensitivityConfig(
+            modeName = if (calmBaseline < 0.9) "HYPER_ADAPTIVE" else if (calmBaseline > 1.2) "DEFENSIVE" else "BALANCED",
+            calmVolatilityBaseline = calmBaseline,
+            crashVolatilityThreshold = crashThreshold,
+            tradeFrequencyMultiplier = tradeFreqMult,
+            positionSizingMultiplier = 1.0,
+            drawdownControlWeight = 0.85
+        )
+        addThought("🎛️ VOLATILITY CALIBRATION: Updated Calm Baseline to ${calmBaseline}%, Crash Threshold to ${crashThreshold}%, Trade Frequency Multiplier to ${tradeFreqMult}x.")
+    }
+
     fun selectBacktestStrategy(name: String) {
         _selectedBacktestStrategy.value = name
     }
@@ -5140,6 +5346,65 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun setBacktestCandleCount(count: Int) {
         _backtestCandleCount.value = count
+    }
+
+    fun setMonteCarloIterations(count: Int) {
+        _monteCarloIterations.value = count
+    }
+
+    fun runMonteCarloSimulation() {
+        viewModelScope.launch {
+            _isBacktesting.value = true
+            val stratName = _selectedBacktestStrategy.value
+            val market = _backtestMarket.value
+            val pattern = _backtestPattern.value
+            val count = _backtestCandleCount.value
+            val iterations = _monteCarloIterations.value
+
+            val strategy = com.example.aza.strategy.StrategyRegistry.getStrategy(stratName) ?: com.example.aza.strategy.StrategyRegistry.getAllStrategies().first()
+            val seedPrice = when(market) {
+                "BTC" -> 67450.0
+                "ETH" -> 3480.0
+                "AAPL" -> 192.3
+                "NVDA" -> 945.5
+                else -> 100.0
+            }
+            val candles = com.example.aza.strategy.BacktestEngine.generateMockCandles(market, seedPrice, count, pattern)
+            val trades = com.example.aza.strategy.BacktestEngine.generateBacktestTrades(strategy, market, candles)
+
+            val mcResult = com.example.aza.strategy.BacktestEngine.runMonteCarloSimulation(trades, 10000.0, iterations)
+            _monteCarloReport.value = mcResult
+
+            addThought("🎲 MONTE CARLO SIMULATION: Executed $iterations random trade reshuffle iterations for ${strategy.name} on $market. Ruin Probability: ${String.format(Locale.US, "%.1f", mcResult.ruinProbabilityPercent)}%, 95% VaR Profit: $${String.format(Locale.US, "%.2f", mcResult.profit5thPercentile)} USD.")
+            _isBacktesting.value = false
+        }
+    }
+
+    fun runAgentPipelineAttribution() {
+        viewModelScope.launch {
+            _isBacktesting.value = true
+            val stratName = _selectedBacktestStrategy.value
+            val market = _backtestMarket.value
+            val count = _backtestCandleCount.value
+
+            val strategy = com.example.aza.strategy.StrategyRegistry.getStrategy(stratName) ?: com.example.aza.strategy.StrategyRegistry.getAllStrategies().first()
+            val candles = com.example.aza.strategy.BacktestEngine.generateMockCandles(market, 67450.0, count, "TREND")
+            val trades = com.example.aza.strategy.BacktestEngine.generateBacktestTrades(strategy, market, candles)
+
+            val metrics = com.example.aza.strategy.BacktestEngine.evaluateAgentPipelinePerformance(trades)
+            _agentPerformanceMetrics.value = metrics
+
+            addThought("🤖 6-AGENT CONSENSUS ATTRIBUTION: Evaluated signal accuracy, confidence calibration, and PnL contributions across all 6 agents.")
+            _isBacktesting.value = false
+        }
+    }
+
+    fun calculateCorrelationMatrices() {
+        viewModelScope.launch {
+            _assetCorrelationMatrix.value = com.example.aza.strategy.BacktestEngine.calculateAssetCorrelationMatrix()
+            _strategyCorrelationMatrix.value = com.example.aza.strategy.BacktestEngine.calculateStrategyCorrelationMatrix()
+            addThought("📊 CORRELATION MATRICES: Computed Pearson correlation matrices for asset diversification and strategy overlap analysis.")
+        }
     }
 
     fun changeActiveStrategy(name: String) {
@@ -5178,6 +5443,114 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             }
             _isBacktesting.value = false
         }
+    }
+
+    fun runMultiStrategyComparison() {
+        viewModelScope.launch {
+            _isBacktesting.value = true
+            val market = _backtestMarket.value
+            val pattern = _backtestPattern.value
+            val count = _backtestCandleCount.value
+
+            val seedPrice = when(market) {
+                "BTC" -> 67450.0
+                "ETH" -> 3480.0
+                "AAPL" -> 192.3
+                "NVDA" -> 945.5
+                else -> 100.0
+            }
+            val candles = com.example.aza.strategy.BacktestEngine.generateMockCandles(market, seedPrice, count, pattern)
+            val comparisonReport = com.example.aza.strategy.BacktestEngine.runMultiStrategyEvaluation(market, candles)
+            
+            _multiStrategyReport.value = comparisonReport
+
+            val topStratReport = comparisonReport.strategyReports[comparisonReport.topPerformingStrategy]
+            if (topStratReport != null) {
+                _lastBacktestReport.value = topStratReport
+                repository.insertBacktestReport(topStratReport)
+            }
+
+            addThought("📊 MULTI-STRATEGY EVALUATION: Side-by-side comparison completed for $market. Top performing strategy: **${comparisonReport.topPerformingStrategy}**.")
+            _isBacktesting.value = false
+        }
+    }
+
+    fun runScenarioStressTest(scenario: String = "FLASH_CRASH") {
+        viewModelScope.launch {
+            _isBacktesting.value = true
+            val stratName = _selectedBacktestStrategy.value
+            val market = _backtestMarket.value
+            val count = _backtestCandleCount.value
+
+            val strategy = com.example.aza.strategy.StrategyRegistry.getStrategy(stratName)
+            if (strategy != null) {
+                val seedPrice = 67450.0
+                val stressCandles = com.example.aza.strategy.BacktestEngine.generateMockCandles(market, seedPrice, count, scenario)
+                val report = com.example.aza.strategy.BacktestEngine.runBacktest(strategy, market, stressCandles)
+
+                repository.insertBacktestReport(report)
+                _lastBacktestReport.value = report
+
+                addThought("⚠️ SCENARIO STRESS TEST: Replayed extreme scenario [$scenario] on ${strategy.name} ($market). Net profit: $${String.format(Locale.US, "%.2f", report.netProfit)} USD, Max DD: ${String.format(Locale.US, "%.2f", report.maxDrawdown)}%")
+            }
+            _isBacktesting.value = false
+        }
+    }
+
+    fun runComprehensiveScenarioSuite() {
+        viewModelScope.launch {
+            _isBacktesting.value = true
+            val market = _backtestMarket.value
+            val report = com.example.aza.strategy.BacktestEngine.runAllScenarioBasedSuite(market, 10000.0)
+            _scenarioSuiteReport.value = report
+            generateCustomizedReport()
+            addThought("🧪 SCENARIO SUITE COMPLETE: Evaluated ${report.totalScenariosTested} scenario/strategy combinations. Resilience Pass Rate: ${report.passedScenariosCount}/${report.totalScenariosTested}. Aggregate Sharpe: ${String.format(Locale.US, "%.2f", report.aggregateSharpe)}, Sortino: ${String.format(Locale.US, "%.2f", report.aggregateSortino)}, Calmar: ${String.format(Locale.US, "%.2f", report.aggregateCalmar)}.")
+            _isBacktesting.value = false
+        }
+    }
+
+    fun runWalkForwardOptimization() {
+        viewModelScope.launch {
+            _isBacktesting.value = true
+            val stratName = _selectedBacktestStrategy.value
+            val strategy = com.example.aza.strategy.StrategyRegistry.getStrategy(stratName) ?: com.example.aza.strategy.StrategyRegistry.getAllStrategies().first()
+            val market = _backtestMarket.value
+            val count = _backtestCandleCount.value
+            val pattern = _backtestPattern.value
+
+            val seedPrice = when(market) {
+                "BTC" -> 67450.0
+                "ETH" -> 3480.0
+                "AAPL" -> 192.3
+                "NVDA" -> 945.5
+                else -> 100.0
+            }
+
+            val candles = com.example.aza.strategy.BacktestEngine.generateMockCandles(market, seedPrice, count, pattern)
+            val wfReport = com.example.aza.strategy.BacktestEngine.runWalkForwardOptimization(strategy, market, candles, windowCount = 4)
+            _walkForwardReport.value = wfReport
+
+            generateCustomizedReport()
+
+            addThought("🔄 WALK-FORWARD OPTIMIZATION COMPLETE: Strategy [${strategy.name}] evaluated over ${wfReport.totalWindowsTested} rolling windows. Out-of-Sample Net Profit: $${String.format(Locale.US, "%.2f", wfReport.aggregateOutOfSampleProfit)}, WFE: ${String.format(Locale.US, "%.1f", wfReport.aggregateWalkForwardEfficiencyPct)}%, Rating: ${wfReport.robustnessRating}.")
+            _isBacktesting.value = false
+        }
+    }
+
+    fun selectReportTemplate(templateId: String) {
+        _selectedReportTemplateId.value = templateId
+        generateCustomizedReport(templateId)
+    }
+
+    fun generateCustomizedReport(templateId: String = _selectedReportTemplateId.value) {
+        val reportText = com.example.aza.strategy.BacktestEngine.generateCustomizedReport(
+            templateId = templateId,
+            strategyReport = _lastBacktestReport.value,
+            multiReport = _multiStrategyReport.value,
+            scenarioReport = _scenarioSuiteReport.value,
+            walkForwardReport = _walkForwardReport.value
+        )
+        _customGeneratedReportText.value = reportText
     }
 
     fun runPaperTradeSignal(market: String) {

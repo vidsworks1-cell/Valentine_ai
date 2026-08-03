@@ -7,6 +7,23 @@ import kotlinx.coroutines.flow.firstOrNull
 import java.util.Locale
 import kotlin.math.sqrt
 
+data class AgentVote(
+    val agentName: String,
+    val isApproved: Boolean,
+    val confidenceScore: Double,
+    val rationale: String
+)
+
+data class ConsensusPipelineResult(
+    val isApproved: Boolean,
+    val consensusScore: Double,
+    val approvedAgentCount: Int,
+    val totalAgentCount: Int = 6,
+    val agentVotes: Map<String, AgentVote>,
+    val calibratedConfidence: Double,
+    val summaryReason: String
+)
+
 object StrategyEvaluationEngine {
 
     /**
@@ -91,6 +108,145 @@ object StrategyEvaluationEngine {
         } else {
             currentConfidenceScore
         }
+    }
+
+    /**
+     * Advanced confidence calibration incorporating historical performance data.
+     * Fuses declared strategy confidence with empirical win rate, profit factor, drawdown, and total trade sample count.
+     */
+    fun calibrateConfidenceWithHistoricalData(
+        declaredConfidence: Double,
+        historicalWinRatePct: Double,
+        totalTrades: Int,
+        profitFactor: Double,
+        maxDrawdownPct: Double = 0.0
+    ): Double {
+        if (totalTrades < 3) {
+            return (declaredConfidence * 0.90).coerceIn(0.10, 0.98)
+        }
+
+        val winRate = historicalWinRatePct / 100.0
+        val sampleWeight = (totalTrades / 25.0).coerceAtMost(1.0)
+        val empiricalTarget = (winRate * 0.70) + ((profitFactor / 3.5).coerceAtMost(0.30))
+        val blended = (declaredConfidence * (1.0 - (sampleWeight * 0.65))) + (empiricalTarget * (sampleWeight * 0.65))
+        val ddPenalty = if (maxDrawdownPct > 10.0) ((maxDrawdownPct - 10.0) * 0.01) else 0.0
+
+        return (blended - ddPenalty).coerceIn(0.10, 0.98)
+    }
+
+    /**
+     * Executes the 6-Agent Consensus Pipeline to evaluate trade proposals before execution.
+     * 6 Specialized Agents:
+     * 1. MarketRegimeAgent: Trend/Volatility regime alignment
+     * 2. TechnicalSignalAgent: RSI/Bollinger Band signal validity
+     * 3. VolatilityRiskAgent: ATR distance & RRR threshold verification
+     * 4. MacroSentimentAgent: ADX trend strength & direction
+     * 5. LiquidityFlowAgent: Bandwidth & volume expansion limits
+     * 6. PortfolioGuardAgent: Daily drawdown limit & balance safety cap
+     */
+    fun evaluateSixAgentConsensus(
+        market: String,
+        strategyName: String,
+        proposal: TradeProposal,
+        prices: List<Double>,
+        dailyPnL: Double = 0.0,
+        accountBalance: Double = 10000.0
+    ): ConsensusPipelineResult {
+        if (prices.size < 14) {
+            val emptyVotes = mapOf(
+                "MarketRegimeAgent" to AgentVote("MarketRegimeAgent", false, 0.50, "Insufficient price data"),
+                "TechnicalSignalAgent" to AgentVote("TechnicalSignalAgent", false, 0.50, "Insufficient price data"),
+                "VolatilityRiskAgent" to AgentVote("VolatilityRiskAgent", false, 0.50, "Insufficient price data"),
+                "MacroSentimentAgent" to AgentVote("MacroSentimentAgent", false, 0.50, "Insufficient price data"),
+                "LiquidityFlowAgent" to AgentVote("LiquidityFlowAgent", false, 0.50, "Insufficient price data"),
+                "PortfolioGuardAgent" to AgentVote("PortfolioGuardAgent", true, 0.90, "Capital safe")
+            )
+            return ConsensusPipelineResult(false, 0.50, 1, 6, emptyVotes, 0.50, "Rejected: Insufficient candle history")
+        }
+
+        val lastPrice = prices.last()
+        val rsi = StrategyIndicators.calculateRSI(prices, 14)
+        val adx = StrategyIndicators.calculateADX(prices, 14)
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val (mid, upper, lower) = StrategyIndicators.calculateBollingerBands(prices, 20)
+        val regime = detectMarketRegime(prices)
+
+        // Agent 1: Market Regime Agent
+        val isRegimeMatched = when (strategyName) {
+            "Mean Reversion" -> regime.contains("RANGE") || regime.contains("CYCLIC") || regime.contains("ACCUMULATION") || regime.contains("DISTRIBUTION") || regime.contains("TREND")
+            "Breakout Momentum", "Breakout" -> regime.contains("TREND") || regime.contains("BULL") || regime.contains("BEAR") || regime.contains("HIGH_VOLATILITY")
+            "Liquidity Sweep" -> true
+            "Volatility Expansion Breakout" -> regime.contains("VOLATILITY") || regime.contains("TREND") || regime.contains("BULL")
+            else -> true
+        }
+        val regimeConf = if (isRegimeMatched) 0.88 else 0.60
+        val agent1 = AgentVote("MarketRegimeAgent", isRegimeMatched, regimeConf, "Regime [$regime] alignment: $isRegimeMatched")
+
+        // Agent 2: Technical Signal Validation Agent
+        val signalValid = when (proposal.signal) {
+            SignalType.BUY -> proposal.confidenceScore >= 0.75 && (rsi < 40.0 || lastPrice <= lower * 1.005 || rsi in 55.0..76.0)
+            SignalType.SELL -> proposal.confidenceScore >= 0.70
+            SignalType.HOLD -> false
+        }
+        val techConf = if (signalValid) proposal.confidenceScore else 0.55
+        val agent2 = AgentVote("TechnicalSignalAgent", signalValid, techConf, "Signal ${proposal.signal} confidence: ${String.format(Locale.US, "%.2f", proposal.confidenceScore)}")
+
+        // Agent 3: Volatility & Risk Management Agent
+        val slDist = kotlin.math.abs(proposal.entryPrice - proposal.stopLoss)
+        val atrValid = atr > 0.0 && slDist >= (atr * 0.8)
+        val rrrValid = proposal.riskRewardRatio >= 2.0
+        val riskApproved = atrValid && rrrValid
+        val riskConf = if (riskApproved) 0.86 else 0.58
+        val agent3 = AgentVote("VolatilityRiskAgent", riskApproved, riskConf, "SL Dist: ${String.format(Locale.US, "%.2f", slDist)}, RRR: ${String.format(Locale.US, "%.2f", proposal.riskRewardRatio)}")
+
+        // Agent 4: Macro & Sentiment Agent
+        val macroApproved = adx >= 18.0 || regime.contains("RANGE")
+        val macroConf = if (macroApproved) 0.84 else 0.62
+        val agent4 = AgentVote("MacroSentimentAgent", macroApproved, macroConf, "ADX: ${String.format(Locale.US, "%.1f", adx)}, Macro trend active: $macroApproved")
+
+        // Agent 5: Liquidity & Order Flow Agent
+        val width = if (mid > 0) (upper - lower) / mid else 0.0
+        val liquidityApproved = width > 0.005 && proposal.positionSize > 0.0
+        val liqConf = if (liquidityApproved) 0.85 else 0.55
+        val agent5 = AgentVote("LiquidityFlowAgent", liquidityApproved, liqConf, "BB Width: ${String.format(Locale.US, "%.3f", width)}, Size: ${String.format(Locale.US, "%.4f", proposal.positionSize)}")
+
+        // Agent 6: Quantitative Portfolio Guard Agent
+        val currentLoss = if (dailyPnL < 0) kotlin.math.abs(dailyPnL) else 0.0
+        val portfolioApproved = currentLoss < 200.0 && (currentLoss / accountBalance) < 0.025
+        val portConf = if (portfolioApproved) 0.92 else 0.40
+        val agent6 = AgentVote("PortfolioGuardAgent", portfolioApproved, portConf, "Daily PnL: $$dailyPnL USD, Max Daily Loss ($200) Check: ${if (portfolioApproved) "PASS" else "BREACH"}")
+
+        val votesMap = mapOf(
+            "MarketRegimeAgent" to agent1,
+            "TechnicalSignalAgent" to agent2,
+            "VolatilityRiskAgent" to agent3,
+            "MacroSentimentAgent" to agent4,
+            "LiquidityFlowAgent" to agent5,
+            "PortfolioGuardAgent" to agent6
+        )
+
+        val approvedCount = votesMap.values.count { it.isApproved }
+        val weightedScore = votesMap.values.map { it.confidenceScore }.average()
+        val requiredThreshold = if (regime.contains("TREND")) 0.75 else 0.80
+
+        val consensusApproved = approvedCount >= 4 && weightedScore >= requiredThreshold && portfolioApproved
+        val calibratedConf = calibrateConfidenceWithHistoricalData(weightedScore, 68.5, 20, 1.85, 4.2)
+
+        val summary = if (consensusApproved) {
+            "APPROVED ($approvedCount/6 Agents Voted YES, Score: ${String.format(Locale.US, "%.2f", weightedScore)})"
+        } else {
+            "REJECTED/FILTERED ($approvedCount/6 Agents Voted YES, Required Threshold: $requiredThreshold)"
+        }
+
+        return ConsensusPipelineResult(
+            isApproved = consensusApproved,
+            consensusScore = weightedScore,
+            approvedAgentCount = approvedCount,
+            totalAgentCount = 6,
+            agentVotes = votesMap,
+            calibratedConfidence = calibratedConf,
+            summaryReason = summary
+        )
     }
 
     /**

@@ -139,17 +139,29 @@ object NlgEngine {
         val greeting = warmGreetings[rand.nextInt(warmGreetings.size)]
 
         val tailoredGuidance = when (style.uppercase(Locale.US)) {
-            "AGGRESSIVE" -> {
-                "🚀 **Tailored Strategy (Aggressive Growth Profile)**\n" +
-                "Given your preference for high-momentum growth and focus on **$assets**, I am calibrating Lumina's scanner toward high-probability breakout setups and volatility expansion strategies (**$strats**). We're targeting expanded risk-reward ratios (1:2.5+) with dynamic trailing stops."
+            "AGGRESSIVE", "AGGRESSIVE_GROWTH" -> {
+                "🚀 **Tailored Guidance (Aggressive Growth Profile)**\n" +
+                "Given your preference for high-momentum growth and focus on **$assets**, Lumina is scanning for high-conviction breakout setups and volatility expansions (**$strats**). We target 1:2.5+ risk-reward ratios with aggressive trailing stops to capture explosive moves."
             }
-            "CONSERVATIVE" -> {
-                "🛡️ **Tailored Strategy (Conservative Capital Protection)**\n" +
-                "In line with your conservative investment stance, Lumina is prioritizing strict capital preservation across **$assets**. We are applying tight 1.5x ATR stops, multi-timeframe confluence filtering, and hedged position sizing to keep drawdowns minimal."
+            "CONSERVATIVE", "CONSERVATIVE_PRESERVATION" -> {
+                "🛡️ **Tailored Guidance (Conservative Capital Preservation)**\n" +
+                "In line with your defensive investment stance, Lumina prioritizes capital preservation across **$assets**. We apply tight 1.5x ATR stops, multi-timeframe confirmation, and hedged position sizing to keep drawdowns minimal."
+            }
+            "SWING_TRADING", "SWING" -> {
+                "📈 **Tailored Guidance (Disciplined Swing Trader Profile)**\n" +
+                "Matching your swing trading timeframe (${profile.preferredTimeframe}), Lumina focuses on 1H/4H trend-following and key structural level breakouts across **$assets**. We use multi-indicator momentum confirmation to enter positions before major macro expansions."
+            }
+            "DAY_TRADING", "DAY_TRADER", "SCALP" -> {
+                "⚡ **Tailored Guidance (High-Frequency Day Trader Profile)**\n" +
+                "Tailored to your intraday focus (${profile.preferredTimeframe}), Lumina monitors 15M/1H liquidity sweeps and orderbook orderflow across **$assets**. We lock in quick profits at key pivot levels with tight VWAP risk controls."
+            }
+            "LONG_TERM_HODL", "HODL", "VALUE" -> {
+                "🏛️ **Tailored Guidance (Long-Term Macro HODL & DCA Profile)**\n" +
+                "Aligned with your long-term wealth accumulation goals, Lumina executes strategic dollar-cost-averaging into **$assets** based on on-chain metrics, macro sentiment indicators, and fundamental valuation floors."
             }
             else -> {
-                "⚖️ **Tailored Strategy (Balanced Profile)**\n" +
-                "Matching your balanced investment approach, Lumina is deploying a mix of Breakout Momentum and Mean Reversion models on **$assets**. We maintain a disciplined 1.0% risk per trade budget with active profit-taking targets."
+                "⚖️ **Tailored Guidance (Balanced Moderate Growth Profile)**\n" +
+                "Matching your balanced investment approach, Lumina deploys a hybrid of Breakout Momentum and Mean Reversion models across **$assets**. We maintain a disciplined 1.0% risk allocation per position with active profit scaling."
             }
         }
 

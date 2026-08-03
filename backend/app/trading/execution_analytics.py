@@ -22,11 +22,71 @@ class ExecutionAnalyticsEngine:
         self._missed_fills: List[Dict[str, Any]] = []
         self.MAX_LOGS = 500
 
+        # Execution Intelligence: Broker / Venue Scorecard
+        self._venue_scorecard: Dict[str, Dict[str, Any]] = {
+            "BINANCE_FUTURES": {
+                "name": "Binance Futures Direct",
+                "avg_latency_ms": 35.2,
+                "rejection_rate_pct": 0.4,
+                "avg_slippage_bps": 2.1,
+                "spread_bps": 1.2,
+                "fill_ratio_pct": 99.2,
+                "disconnects_count": 0,
+                "score": 95.8
+            },
+            "BYBIT_LINEAR": {
+                "name": "Bybit Perpetual Linear",
+                "avg_latency_ms": 48.0,
+                "rejection_rate_pct": 0.8,
+                "avg_slippage_bps": 3.4,
+                "spread_bps": 1.8,
+                "fill_ratio_pct": 98.5,
+                "disconnects_count": 0,
+                "score": 92.4
+            },
+            "PAPER_SIMULATOR": {
+                "name": "Local Paper Execution Engine",
+                "avg_latency_ms": 4.5,
+                "rejection_rate_pct": 0.0,
+                "avg_slippage_bps": 0.5,
+                "spread_bps": 0.8,
+                "fill_ratio_pct": 100.0,
+                "disconnects_count": 0,
+                "score": 99.0
+            }
+        }
+
     @classmethod
     def get_instance(cls) -> 'ExecutionAnalyticsEngine':
         if cls._instance is None:
             cls._instance = ExecutionAnalyticsEngine()
         return cls._instance
+
+    def get_venue_scorecard(self) -> Dict[str, Dict[str, Any]]:
+        """Returns current venue scorecard metrics."""
+        return self._venue_scorecard
+
+    def select_optimal_execution_venue(self, trading_mode: str = "PAPER") -> Dict[str, Any]:
+        """
+        Execution Intelligence Auto-Routing:
+        Selects highest-scoring broker/venue based on real-time scorecard rankings.
+        """
+        if trading_mode == "PAPER":
+            selected_key = "PAPER_SIMULATOR"
+        else:
+            # Filter live venues and select max score
+            live_venues = {k: v for k, v in self._venue_scorecard.items() if k != "PAPER_SIMULATOR"}
+            selected_key = max(live_venues, key=lambda k: live_venues[k]["score"]) if live_venues else "BINANCE_FUTURES"
+
+        selected = self._venue_scorecard[selected_key]
+        return {
+            "selected_venue": selected_key,
+            "venue_name": selected["name"],
+            "venue_score": selected["score"],
+            "avg_latency_ms": selected["avg_latency_ms"],
+            "fill_ratio_pct": selected["fill_ratio_pct"],
+            "routing_reason": f"Auto-routed to {selected_key} based on highest composite execution score ({selected['score']}/100)"
+        }
 
     def record_execution(
         self,

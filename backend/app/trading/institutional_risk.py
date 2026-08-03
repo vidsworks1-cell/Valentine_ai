@@ -28,7 +28,15 @@ class InstitutionalRiskEngine:
         self.consecutive_loss_limit: int = 3
         self.max_leverage_multiplier: int = 10
         
-        # Real-time state
+        # Real-time state & Staged Recovery State Machine
+        self.recovery_state: str = "HEALTHY"  # HEALTHY -> CAUTION -> DRAWDOWN -> RECOVERY -> VALIDATION -> HEALTHY
+        self.state_configs: Dict[str, Dict[str, Any]] = {
+            "HEALTHY": {"max_leverage": 10, "min_confidence": 0.65, "max_exposure_pct": 100.0, "size_multiplier": 1.0, "max_concurrent": 10},
+            "CAUTION": {"max_leverage": 5, "min_confidence": 0.70, "max_exposure_pct": 75.0, "size_multiplier": 0.75, "max_concurrent": 5},
+            "DRAWDOWN": {"max_leverage": 2, "min_confidence": 0.80, "max_exposure_pct": 40.0, "size_multiplier": 0.40, "max_concurrent": 2},
+            "RECOVERY": {"max_leverage": 1, "min_confidence": 0.85, "max_exposure_pct": 20.0, "size_multiplier": 0.25, "max_concurrent": 1},
+            "VALIDATION": {"max_leverage": 2, "min_confidence": 0.75, "max_exposure_pct": 50.0, "size_multiplier": 0.50, "max_concurrent": 3}
+        }
         self.trading_halted: bool = False
         self.halt_reason: Optional[str] = None
         self.consecutive_losses_count: int = 0
@@ -44,7 +52,7 @@ class InstitutionalRiskEngine:
         return cls._instance
 
     def record_trade_result(self, pnl: float):
-        """Updates internal risk metrics following trade completion."""
+        """Updates internal risk metrics following trade completion and transitions recovery state."""
         self.current_daily_pnl_usd += pnl
         self.current_weekly_pnl_usd += pnl
 
@@ -52,6 +60,35 @@ class InstitutionalRiskEngine:
             self.consecutive_losses_count += 1
         else:
             self.consecutive_losses_count = 0
+
+        self.update_recovery_state()
+
+    def update_recovery_state(self):
+        """Transitions staged recovery state based on drawdown and consecutive losses."""
+        if self.consecutive_losses_count >= 3 or self.current_daily_pnl_usd <= -250.0:
+            self.recovery_state = "RECOVERY"
+        elif self.consecutive_losses_count == 2 or self.current_daily_pnl_usd <= -150.0:
+            self.recovery_state = "DRAWDOWN"
+        elif self.consecutive_losses_count == 1:
+            self.recovery_state = "CAUTION"
+        elif self.recovery_state == "RECOVERY" and self.current_daily_pnl_usd > 0:
+            self.recovery_state = "VALIDATION"
+        elif self.recovery_state == "VALIDATION" and self.consecutive_losses_count == 0:
+            self.recovery_state = "HEALTHY"
+        elif self.consecutive_losses_count == 0 and self.current_daily_pnl_usd >= 0:
+            self.recovery_state = "HEALTHY"
+
+    def get_active_recovery_config(self) -> Dict[str, Any]:
+        """Returns active risk bounds based on current staged recovery state."""
+        cfg = self.state_configs.get(self.recovery_state, self.state_configs["HEALTHY"])
+        return {
+            "state": self.recovery_state,
+            "max_leverage": cfg["max_leverage"],
+            "min_confidence": cfg["min_confidence"],
+            "max_exposure_pct": cfg["max_exposure_pct"],
+            "size_multiplier": cfg["size_multiplier"],
+            "max_concurrent": cfg["max_concurrent"]
+        }
 
     async def evaluate_risk_breakers(self) -> Dict[str, Any]:
         """Evaluates institutional risk limits and triggers automatic halts if violated."""

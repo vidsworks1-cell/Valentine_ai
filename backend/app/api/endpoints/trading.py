@@ -2102,6 +2102,100 @@ async def get_user_preference_profile():
     return coordinator._user_preference_profile
 
 
+# --- DECISION INTELLIGENCE & SELF-ADAPTATION ROADMAP ENDPOINTS ---
+
+@router.get("/decision-intelligence/causal-attribution/{signal_id}")
+async def get_causal_attribution(signal_id: str):
+    """Decision Intelligence 1: Returns explicit causal attribution breakdown for trade decision confidence."""
+    from app.trading.decision_quality import DecisionQualityEngine
+    from app.trading.decision_context import DecisionContext
+    
+    # Generate on demand for sample context or return tracked audit record
+    ctx = DecisionContext("BTCUSDT", "BUY", 95000.0, "Breakout Momentum")
+    attribution = ctx.compute_causal_attribution()
+    return attribution
+
+@router.get("/self-adaptation/condition-weights")
+async def get_condition_feature_weights():
+    """Self-Adaptation 2.0: Returns condition-based feature weight learning multipliers."""
+    from app.ai.self_adaptation import SelfAdaptationEngine
+    engine = SelfAdaptationEngine.get_instance()
+    weights = getattr(engine, "_condition_feature_weights", {})
+    return {
+        "status": "ACTIVE",
+        "condition_feature_weights": weights,
+        "sample_multiplier": engine.get_condition_feature_multiplier(["RSI_OVERBOUGHT_82_EXPANDING_ATR"])
+    }
+
+@router.get("/missed-opportunities/shadow-positions")
+async def get_shadow_execution_positions():
+    """Missed Opportunity Learning 3: Returns virtual shadow positions tracked over 48h simulation window."""
+    from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+    learner = MissedOpportunityLearner.get_instance()
+    records = learner._records
+    shadow_positions = [r.get("shadow_position") for r in records if r.get("shadow_position")]
+    return {
+        "total_records": len(records),
+        "shadow_positions": shadow_positions,
+        "counterfactual_offset": learner.get_counterfactual_threshold_offset()
+    }
+
+@router.get("/champion-challenger/subsystems")
+async def get_subsystem_champions():
+    """Champion / Challenger 4: Returns multi-level subsystem champions & challengers (Parameter, Confidence, Risk, Execution, SL, TP)."""
+    from app.trading.champion_challenger import ChampionChallengerEngine
+    engine = ChampionChallengerEngine.get_instance()
+    return engine.get_subsystem_champions()
+
+@router.post("/portfolio-intelligence/dynamic-allocate")
+async def dynamic_allocate_capital(symbol: str = "BTCUSDT", expected_return: float = 1.4, bayesian_confidence: float = 0.82, drawdown_pct: float = 0.0):
+    """Portfolio Intelligence 5: Computes dynamic capital allocation using multi-factor formula."""
+    from app.trading.capital_allocation import CapitalAllocationEngine
+    engine = CapitalAllocationEngine.get_instance()
+    return engine.calculate_dynamic_portfolio_allocation(symbol, expected_return, bayesian_confidence, drawdown_pct=drawdown_pct)
+
+@router.get("/institutional-risk/staged-recovery")
+async def get_staged_recovery_status():
+    """Institutional Risk 6: Returns active staged recovery state (HEALTHY, CAUTION, DRAWDOWN, RECOVERY, VALIDATION) & bounds."""
+    from app.trading.institutional_risk import InstitutionalRiskEngine
+    engine = InstitutionalRiskEngine.get_instance()
+    return engine.get_active_recovery_config()
+
+@router.get("/execution-intelligence/scorecard")
+async def get_venue_scorecard():
+    """Execution Intelligence 7: Returns broker/venue scorecard rankings & auto-routing recommendation."""
+    from app.trading.execution_analytics import ExecutionAnalyticsEngine
+    engine = ExecutionAnalyticsEngine.get_instance()
+    scorecard = engine.get_venue_scorecard()
+    optimal = engine.select_optimal_execution_venue("PAPER")
+    return {
+        "scorecard": scorecard,
+        "auto_routing_recommendation": optimal
+    }
+
+@router.post("/meta-reasoning/hypothesis-test")
+async def run_meta_hypothesis_test(symbol: str = "ETHUSDT", expected_regime: str = "TRENDING", actual_outcome: str = "RANGING", pnl: float = -45.0):
+    """Meta-Reasoning 8: Challenges assumptions & formulates hypothesis tests when market behavior diverges from expectations."""
+    from app.ai.meta_reasoning import MetaReasoningEngine
+    engine = MetaReasoningEngine.get_instance()
+    return engine.challenge_assumptions_and_test_hypotheses(symbol, expected_regime, actual_outcome, pnl)
+
+@router.post("/system-harmony/global-utility")
+async def calculate_global_utility(expected_profit: float = 120.0, risk_cost: float = 12.0, latency_ms: float = 35.0):
+    """System Harmony 9: Computes global utility score maximizing profit - risk - resources - api - latency + learning value."""
+    from app.trading.system_harmony import SystemHarmonyEngine
+    engine = SystemHarmonyEngine.get_instance()
+    return engine.compute_global_utility(expected_profit, risk_cost=risk_cost, latency_ms=latency_ms)
+
+@router.post("/autonomous-executive/controlled-experiment")
+async def run_controlled_experiment(base_strategy: str = "Breakout Momentum", param_to_mutate: str = "stop_loss_atr_multiplier", mutated_value: float = 2.5, control_value: float = 2.0):
+    """Autonomous Executive 10: Clones strategy, mutates single parameter, runs paper experiment, tests statistical significance, and auto-promotes with institutional memory."""
+    from app.ai.experiment_framework import ExperimentFramework
+    engine = ExperimentFramework.get_instance()
+    return engine.run_controlled_experiment(base_strategy, param_to_mutate, mutated_value, control_value)
+
+
+
 
 
 
