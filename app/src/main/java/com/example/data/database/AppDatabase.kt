@@ -52,9 +52,10 @@ import kotlinx.coroutines.launch
         YouTubeAnalyticsSnapshot::class,
         YouTubeUploadDraft::class,
         GraphNodeEntity::class,
-        GraphEdgeEntity::class
+        GraphEdgeEntity::class,
+        WeeklyAutonomousReviewEntity::class
     ],
-    version = 26,
+    version = 27,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

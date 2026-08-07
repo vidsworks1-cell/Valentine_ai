@@ -254,6 +254,7 @@ class AppRepository(private val db: AppDatabase) {
     val optimizationRecords: Flow<List<StrategyOptimizationRecord>> = strategyDao.getAllOptimizationRecordsFlow()
     val tradeAuditLogs: Flow<List<TradeAuditLog>> = strategyDao.getAllTradeAuditLogsFlow()
     val exportedReports: Flow<List<ExportedReportHistory>> = strategyDao.getAllExportedReportsFlow()
+    val weeklyReviews: Flow<List<WeeklyAutonomousReviewEntity>> = strategyDao.getAllWeeklyReviewsFlow()
     val experiments: Flow<List<Experiment>> = experimentDao.getAllExperimentsFlow()
     val allExperimentTrades: Flow<List<ExperimentTrade>> = experimentDao.getAllExperimentTradesFlow()
     val knowledgeEntries: Flow<List<KnowledgeEntry>> = knowledgeDao.getAllKnowledgeFlow()
@@ -426,6 +427,18 @@ class AppRepository(private val db: AppDatabase) {
 
     suspend fun clearAllExportedReports() = withContext(Dispatchers.IO) {
         strategyDao.clearAllExportedReports()
+    }
+
+    suspend fun getAllWeeklyReviewsDirect(): List<WeeklyAutonomousReviewEntity> = withContext(Dispatchers.IO) {
+        strategyDao.getAllWeeklyReviewsDirect()
+    }
+
+    suspend fun insertWeeklyReview(review: WeeklyAutonomousReviewEntity): Long = withContext(Dispatchers.IO) {
+        strategyDao.insertWeeklyReview(review)
+    }
+
+    suspend fun clearAllWeeklyReviews() = withContext(Dispatchers.IO) {
+        strategyDao.clearAllWeeklyReviews()
     }
 
     suspend fun getTradesForExperimentDirect(experimentId: Int): List<ExperimentTrade> = withContext(Dispatchers.IO) {

@@ -92,4 +92,17 @@ interface StrategyDao {
 
     @Query("DELETE FROM exported_report_history")
     suspend fun clearAllExportedReports()
+
+    // Weekly Autonomous Reviews
+    @Query("SELECT * FROM weekly_autonomous_reviews ORDER BY timestamp DESC")
+    fun getAllWeeklyReviewsFlow(): Flow<List<WeeklyAutonomousReviewEntity>>
+
+    @Query("SELECT * FROM weekly_autonomous_reviews ORDER BY timestamp DESC")
+    suspend fun getAllWeeklyReviewsDirect(): List<WeeklyAutonomousReviewEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWeeklyReview(review: WeeklyAutonomousReviewEntity): Long
+
+    @Query("DELETE FROM weekly_autonomous_reviews")
+    suspend fun clearAllWeeklyReviews()
 }

@@ -109,8 +109,8 @@ class MainActivity : ComponentActivity() {
                     },
                     bottomBar = {
                         NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            tonalElevation = 4.dp
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 6.dp
                         ) {
                             NavigationBarItem(
                                 selected = selectedTab == 0,
@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                     selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = Color(0xFFE8DEF8),
+                                    indicatorColor = Color(0xFF0F2744),
                                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                     selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = Color(0xFFE8DEF8),
+                                    indicatorColor = Color(0xFF0F2744),
                                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                     selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = Color(0xFFE8DEF8),
+                                    indicatorColor = Color(0xFF0F2744),
                                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
@@ -182,7 +182,7 @@ class MainActivity : ComponentActivity() {
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                     selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = Color(0xFFE8DEF8),
+                                    indicatorColor = Color(0xFF0F2744),
                                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
@@ -201,7 +201,7 @@ class MainActivity : ComponentActivity() {
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                     selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = Color(0xFFE8DEF8),
+                                    indicatorColor = Color(0xFF0F2744),
                                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )

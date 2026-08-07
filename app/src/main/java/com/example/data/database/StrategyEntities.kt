@@ -93,3 +93,26 @@ data class ExportedReportHistory(
     val exportTimestamp: String,
     val formattedContent: String
 )
+
+@Entity(tableName = "weekly_autonomous_reviews")
+data class WeeklyAutonomousReviewEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val timestamp: Long = System.currentTimeMillis(),
+    val reviewPeriodLabel: String,
+    val overallExpectancy: Double,
+    val sharpeRatio: Double,
+    val profitFactor: Double,
+    val maxDrawdownPct: Double,
+    val averageR: Double,
+    val executionQualityPct: Double,
+    val confidenceCalibrationPct: Double,
+    val bestStrategies: String,
+    val worstStrategies: String,
+    val mostProfitableSymbols: String,
+    val leastProfitableSymbols: String,
+    val highestUncertaintyStrategies: String,
+    val biggestMistakes: String,
+    val recommendedImprovements: String,
+    val aiPerformanceNarrative: String,
+    val monthOverMonthComparison: String
+)

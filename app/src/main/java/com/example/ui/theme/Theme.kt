@@ -2,37 +2,38 @@ package com.example.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val GeometricLightColorScheme = lightColorScheme(
-    primary = Color(0xFF6750A4),       // Balanced Purple
-    secondary = Color(0xFF7D5260),     // Soft Rose/Plum Accent
-    tertiary = Color(0xFF21005D),      // Dark Violet Accent
-    background = Color(0xFFFEF7FF),    // Warm Light Lavender Base
-    surface = Color(0xFFFFFFFF),       // Clear White Card Base
-    onPrimary = Color(0xFFFFFFFF),
-    onSecondary = Color(0xFFFFFFFF),
-    onTertiary = Color(0xFFFFFFFF),
-    onBackground = Color(0xFF1D1B20),  // Deep Charcoal Body
-    onSurface = Color(0xFF1D1B20),     // Safe Contrast Content
-    surfaceVariant = Color(0xFFF3EDF7), // Light Soft Pastel Surface Variant
-    onSurfaceVariant = Color(0xFF49454F), // Neutral Grey Label
-    outline = Color(0xFFCAC4D0),       // M3 Gray Outlines
-    outlineVariant = Color(0xFFEADDFF)  // Pale Purple Borders
+private val LuminaDarkColorScheme = darkColorScheme(
+    primary = NeonGreen,                  // Vibrant Neon Green Primary
+    secondary = NeonCyan,                 // Electric Neon Cyan Accent
+    tertiary = NeonBlueAccent,            // Neon Sky Blue Accent
+    background = NavyBackground,          // Deep Charcoal / Navy Background
+    surface = CharcoalSurface,            // Charcoal Navy Card Surface
+    surfaceVariant = DarkNavySurfaceVariant, // Elevated Surface Variant
+    onPrimary = Color(0xFF00210B),        // High Contrast Text on Neon Green
+    onSecondary = Color(0xFF002029),      // High Contrast Text on Neon Cyan
+    onTertiary = Color(0xFF001A2C),
+    onBackground = TextPrimary,           // Crisp White Body Text
+    onSurface = TextPrimary,              // Crisp White Card Text
+    onSurfaceVariant = TextSecondary,     // Muted Slate Labels & Icons
+    outline = CyberBorder,                // Cybernetic Blue Outline
+    outlineVariant = Color(0xFF0F2744)
 )
 
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Preserve original requested colors exactly
+    darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = GeometricLightColorScheme,
+        colorScheme = LuminaDarkColorScheme,
         typography = Typography,
         content = content
     )
 }
+
 
