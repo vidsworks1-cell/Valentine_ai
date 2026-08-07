@@ -781,4 +781,60 @@ object EngineValidationSuite {
         )
     }
 
+    /**
+     * Validates Decision Engine Consistency & Refinement Patch Rules:
+     * 1. Mathematical guard logic correctness (75.1% >= 70.0% -> PASS)
+     * 2. Meta-reasoning hard guard override prohibition (MTF FAIL blocks trade despite high conviction)
+     * 3. Strategy substitution re-evaluation sequence
+     * 4. Single DecisionContext authority attribution
+     */
+    fun runDecisionConsistencyAuditSuiteValidation(): Map<String, String> {
+        val testPrices = listOf(67000.0, 67100.0, 67050.0, 66950.0, 67200.0, 67180.0, 67300.0, 67250.0, 67400.0, 67350.0, 67500.0, 67450.0, 67600.0, 67550.0, 67700.0)
+        val dummyProposal = TradeProposal(
+            strategyName = "Volatility Expansion Breakout",
+            market = "ETHUSDT",
+            signal = SignalType.SELL,
+            confidenceScore = 0.72,
+            entryPrice = 3500.0,
+            stopLoss = 3550.0,
+            takeProfit = 3400.0,
+            positionSize = 0.05,
+            riskRewardRatio = 2.0,
+            explanation = "Breakout setup"
+        )
+
+        // Case 1: Mathematical Guard Correctness (75.1% vs 70.0%)
+        val guardResultPass = GuardEvaluator.checkMinThreshold("VolumeLiquidityGuard", 75.1, 70.0)
+
+        // Case 2: Meta-Reasoning cannot override hard MTF Guard failure (MTF 55% < 66%, Meta Conviction 90%)
+        val mtfFailContext = StrategyEvaluationEngine.buildPipelineDecisionContext(
+            symbol = "ETHUSDT",
+            side = "SELL",
+            requestedStrategy = "Volatility Expansion Breakout",
+            proposal = dummyProposal,
+            prices = testPrices,
+            mtfWeightedScore = 55.0,
+            mtfThreshold = 66.0,
+            metaConviction = 90.0,
+            sampleSize = 20,
+            recentWinRatePct = 37.5,
+            recentExpectancyR = 0.02
+        )
+
+        // Case 3: Strategy Substitution re-evaluation
+        val substitutionOccurred = mtfFailContext.wasSubstituted
+        val effectiveStrat = mtfFailContext.effectiveStrategy
+
+        return mapOf(
+            "Guard 75.1% >= 70.0% Result" to if (guardResultPass.isPassed) "PASS (Correct)" else "FAIL (Bug)",
+            "Guard Rationale String" to guardResultPass.rationale,
+            "MTF Hard Fail State" to mtfFailContext.decisionState.name,
+            "MTF Hard Fail Authority" to mtfFailContext.rejectionAuthority.name,
+            "Meta Reasoning Overridden?" to if (mtfFailContext.isExecutionApproved) "YES (CRITICAL BUG)" else "NO (SAFE - Meta Reasoning blocked from overriding hard guard)",
+            "Strategy Substituted?" to "$substitutionOccurred (${mtfFailContext.originalStrategy} -> $effectiveStrat)",
+            "Substitution Rationale" to mtfFailContext.substitutionReason,
+            "Decision Context Version" to mtfFailContext.pipelineVersion
+        )
+    }
+
 }

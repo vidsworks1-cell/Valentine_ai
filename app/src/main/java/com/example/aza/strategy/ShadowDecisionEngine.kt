@@ -112,6 +112,36 @@ object ShadowDecisionEngine {
         val simTp = rejectionPrice + (stopDistance * 2.0)
         val initialRisk = stopDistance
 
+        // Identify subsystem based on rejection reason
+        val subsystem = when {
+            reasonRejected.contains("MTF", ignoreCase = true) -> "MTFGuard"
+            reasonRejected.contains("Liquidity", ignoreCase = true) || reasonRejected.contains("Volume", ignoreCase = true) -> "LiquidityGuard"
+            reasonRejected.contains("Portfolio", ignoreCase = true) || reasonRejected.contains("Hedge", ignoreCase = true) -> "PortfolioGuard"
+            reasonRejected.contains("Risk", ignoreCase = true) || reasonRejected.contains("Loss", ignoreCase = true) -> "RiskGuard"
+            reasonRejected.contains("Confidence", ignoreCase = true) -> "ConfidenceFilter"
+            else -> "SystemGuard"
+        }
+
+        // 1. Record opportunity in REJECTED stage
+        val oppRecord = LuminaMissedOpportunityEngine.recordRejectedOpportunity(
+            symbol = symbol,
+            rejectionSubsystem = subsystem,
+            rejectionCategory = "SIGNAL_REJECTION",
+            entry = rejectionPrice,
+            hypotheticalSL = simStop,
+            hypotheticalTP = simTp,
+            direction = "BUY",
+            strategy = strategyName,
+            regime = marketRegime,
+            confidence = confidenceScorePct,
+            expectedValue = 1.5,
+            monitoringHorizon = lookaheadCandles.size,
+            positionNotionalUSD = 1000.0
+        )
+
+        // 2. Resolve counterfactual with lookahead candles if available
+        val resolvedOpp = LuminaMissedOpportunityEngine.resolveCounterfactual(oppRecord.id, lookaheadCandles)
+
         var peakHigh = rejectionPrice
         var troughLow = rejectionPrice
         var exitPriceSim = rejectionPrice
@@ -138,16 +168,16 @@ object ShadowDecisionEngine {
                 wouldWin = exitPriceSim > rejectionPrice
             }
         } else {
-            // Default synthetic outcome if lookahead empty
-            peakHigh = rejectionPrice * 1.035
-            troughLow = rejectionPrice * 0.992
-            exitPriceSim = peakHigh
-            wouldWin = true
+            // Objective counterfactual fallback: no lookahead data available, mark neutral unresolved
+            peakHigh = rejectionPrice
+            troughLow = rejectionPrice
+            exitPriceSim = rejectionPrice
+            wouldWin = false
         }
 
-        val expectedR = (exitPriceSim - rejectionPrice) / initialRisk
-        val mfe = (peakHigh - rejectionPrice) / initialRisk
-        val mae = max(0.0, (rejectionPrice - troughLow) / initialRisk)
+        val expectedR = if (lookaheadCandles.isNotEmpty()) (exitPriceSim - rejectionPrice) / initialRisk else 0.0
+        val mfe = if (lookaheadCandles.isNotEmpty()) (peakHigh - rejectionPrice) / initialRisk else 0.0
+        val mae = if (lookaheadCandles.isNotEmpty()) max(0.0, (rejectionPrice - troughLow) / initialRisk) else 0.0
 
         val record = RejectedTradeRecord(
             id = "SHADOW-REJ-${System.currentTimeMillis() % 100000}",
@@ -177,8 +207,9 @@ object ShadowDecisionEngine {
             }
         }
 
-        // Hindsight Guard: Log shadow outcome without mutating live execution parameters
-        val auditMsg = "👁️ SHADOW MON: Recorded rejected $symbol signal ($strategyName, Conf ${String.format(Locale.US, "%.1f", confidenceScorePct)}%). Outcome: ${if (wouldWin) "WIN (+${String.format(Locale.US, "%.2f", expectedR)}R)" else "LOSS (${String.format(Locale.US, "%.2f", expectedR)}R)"}. MFE: ${String.format(Locale.US, "%.2f", mfe)}R."
+        // Hindsight Guard: Log shadow outcome with proper attribution message
+        val auditMsg = resolvedOpp?.getAttributionMessage()
+            ?: "👁️ SHADOW MON: Recorded rejected $symbol signal ($strategyName, Conf ${String.format(Locale.US, "%.1f", confidenceScorePct)}%). Outcome: ${if (wouldWin) "WIN (+${String.format(Locale.US, "%.2f", expectedR)}R)" else "LOSS (${String.format(Locale.US, "%.2f", expectedR)}R)"}. MFE: ${String.format(Locale.US, "%.2f", mfe)}R."
         addAuditLog(auditMsg)
 
         // Evaluate whether to generate threshold recommendation
@@ -192,7 +223,7 @@ object ShadowDecisionEngine {
      */
     private fun evaluateThresholdDiscrepancies(strategyName: String) {
         val trades = synchronized(rejectedTradeLedger) {
-            rejectedTradeLedger.filter { it.strategyName == strategyName || strategyName == "ALL" }
+            rejectedTradeLedger.filter { (it.strategyName == strategyName || strategyName == "ALL") && it.evaluatedCandlesCount > 0 }
         }
 
         if (trades.size < 5) return

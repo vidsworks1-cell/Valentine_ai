@@ -74,9 +74,252 @@ data class PortfolioTradeInteractionSummary(
     val optimizationRecommendation: String
 )
 
+data class PortfolioGuardState(
+    val accountBalance: Double = 10000.0,
+    val availableCapital: Double = 8500.0,
+    val existingPositionExposureUSD: Double = 0.0,
+    val existingPositionSide: String? = null,
+    val existingPositionConviction: Double = 0.80,
+    val existingPositionUnrealizedPnLPct: Double = 2.5,
+    val existingPositionEntryPrice: Double = 0.0,
+    val existingScaleInCount: Int = 0,
+    val netExposureUSD: Double = 1500.0,
+    val grossExposureUSD: Double = 2500.0,
+    val correlatedExposureUSD: Double = 1200.0,
+    val portfolioVolatilityPct: Double = 12.5,
+    val symbolConcentrationPct: Double = 0.15,
+    val currentDrawdownUSD: Double = 0.0,
+    val maxDailyLossUSD: Double = 200.0,
+    val portfolioHeatPct: Double = 5.0,
+    val maxScaleInsAllowed: Int = 3,
+    val maxSymbolConcentrationPct: Double = 0.35,
+    val existingPositionQualityScore: Double = 80.0,
+    val originalThesisValid: Boolean = true,
+    val distanceRatioFromEntry: Double = 1.2,
+    val cumulativeRiskPct: Double = 3.5,
+    val maxPortfolioHeatPct: Double = 15.0
+)
+
+data class PortfolioGuardEvaluation(
+    val actionIntent: TradeActionIntent,
+    val isSignalValidated: Boolean,
+    val isCapitalEligible: Boolean,
+    val isExecutionAuthorized: Boolean,
+    val capitalRejectionReason: String,
+    val dynamicHedgeThreshold: Double = 0.82,
+    val netExposureReductionPct: Double = 0.0,
+    val hedgeBenefitScore: Double = 0.0,
+    val auditLog: String = ""
+)
+
 object PortfolioTradeInteractionEngine {
 
     private val assets = listOf("BTC", "ETH", "SOL", "EURUSD", "NVDA")
+
+    fun evaluatePortfolioCapitalAuthority(
+        symbol: String,
+        side: String,
+        proposedSizeUSD: Double,
+        incomingConfidence: Double = 0.75,
+        marketRegime: String = "NORMAL",
+        hasOppositePosition: Boolean = false,
+        hasSameSidePosition: Boolean = false,
+        isPyramidScaleIn: Boolean = false,
+        dailyPnL: Double = 0.0,
+        portfolioState: PortfolioGuardState = PortfolioGuardState()
+    ): PortfolioGuardEvaluation {
+        // 1. Determine Action Intent
+        val actionIntent = when {
+            hasOppositePosition -> {
+                if (incomingConfidence >= 0.85 && marketRegime.contains("TREND")) TradeActionIntent.REVERSAL
+                else TradeActionIntent.HEDGE
+            }
+            hasSameSidePosition || isPyramidScaleIn -> TradeActionIntent.SCALE_IN
+            side.equals("REDUCE", ignoreCase = true) || side.equals("CLOSE", ignoreCase = true) -> TradeActionIntent.REDUCE_POSITION
+            else -> TradeActionIntent.NEW_POSITION
+        }
+
+        val currentLossUSD = if (dailyPnL < 0) abs(dailyPnL) else portfolioState.currentDrawdownUSD
+
+        // 2. Portfolio-Level Guard Checks (Daily Loss Cap, Concentration, Capital)
+        if (currentLossUSD >= portfolioState.maxDailyLossUSD) {
+            val reason = "PORTFOLIO_DAILY_LOSS_CAP_EXCEEDED"
+            val log = buildPortfolioGuardAuditLog(
+                symbol = symbol,
+                actionIntent = actionIntent,
+                signalValidated = true,
+                capitalEligible = false,
+                executionAuthorized = false,
+                portfolioState = portfolioState,
+                reason = reason,
+                details = "Daily loss (${String.format(Locale.US, "%.2f", currentLossUSD)}) reached or exceeded max cap (${String.format(Locale.US, "%.2f", portfolioState.maxDailyLossUSD)})."
+            )
+            return PortfolioGuardEvaluation(
+                actionIntent = actionIntent,
+                isSignalValidated = true,
+                isCapitalEligible = false,
+                isExecutionAuthorized = false,
+                capitalRejectionReason = reason,
+                auditLog = log
+            )
+        }
+
+        val totalSymbolExposure = portfolioState.existingPositionExposureUSD + proposedSizeUSD
+        val concentration = totalSymbolExposure / max(1.0, portfolioState.accountBalance)
+        if (concentration > portfolioState.maxSymbolConcentrationPct) {
+            val reason = "SYMBOL_CONCENTRATION_EXCEEDED"
+            val log = buildPortfolioGuardAuditLog(
+                symbol = symbol,
+                actionIntent = actionIntent,
+                signalValidated = true,
+                capitalEligible = false,
+                executionAuthorized = false,
+                portfolioState = portfolioState,
+                reason = reason,
+                details = "Concentration (${String.format(Locale.US, "%.1f", concentration * 100)}%) exceeds max threshold (${String.format(Locale.US, "%.1f", portfolioState.maxSymbolConcentrationPct * 100)}%)."
+            )
+            return PortfolioGuardEvaluation(
+                actionIntent = actionIntent,
+                isSignalValidated = true,
+                isCapitalEligible = false,
+                isExecutionAuthorized = false,
+                capitalRejectionReason = reason,
+                auditLog = log
+            )
+        }
+
+        // 3. Action-Specific Checks: HEDGE / REVERSAL vs SCALE_IN vs NEW_POSITION
+        if (actionIntent == TradeActionIntent.HEDGE || actionIntent == TradeActionIntent.REVERSAL) {
+            val baseThreshold = 0.82
+            val regimeBonus = if (marketRegime.contains("VOLATILE") || marketRegime.contains("HIGH_VOLATILITY")) -0.05 else 0.0
+            val netExposureReductPct = (proposedSizeUSD / max(1.0, portfolioState.netExposureUSD)).coerceIn(0.0, 1.0)
+            val reductBonus = if (netExposureReductPct > 0.30) -0.05 else 0.0
+            val dynamicHedgeThreshold = (baseThreshold + regimeBonus + reductBonus).coerceIn(0.68, 0.88)
+
+            val passedHedge = incomingConfidence >= dynamicHedgeThreshold
+            val reason = if (passedHedge) "" else "OPPOSITE_EXPOSURE_BELOW_HEDGE_THRESHOLD"
+            val details = if (passedHedge) {
+                "Hedge/Reversal authorized: Incoming confidence (${String.format(Locale.US, "%.2f", incomingConfidence)}) >= dynamic threshold (${String.format(Locale.US, "%.2f", dynamicHedgeThreshold)})."
+            } else {
+                "Opposite position exists. Signal confidence (${String.format(Locale.US, "%.2f", incomingConfidence)}) below dynamic hedge threshold (${String.format(Locale.US, "%.2f", dynamicHedgeThreshold)})."
+            }
+
+            val log = buildPortfolioGuardAuditLog(
+                symbol = symbol,
+                actionIntent = actionIntent,
+                signalValidated = true,
+                capitalEligible = passedHedge,
+                executionAuthorized = passedHedge,
+                portfolioState = portfolioState,
+                reason = if (passedHedge) "NONE" else reason,
+                details = details,
+                dynamicThreshold = dynamicHedgeThreshold,
+                netExposureReductPct = netExposureReductPct
+            )
+
+            return PortfolioGuardEvaluation(
+                actionIntent = actionIntent,
+                isSignalValidated = true,
+                isCapitalEligible = passedHedge,
+                isExecutionAuthorized = passedHedge,
+                capitalRejectionReason = reason,
+                dynamicHedgeThreshold = dynamicHedgeThreshold,
+                netExposureReductionPct = netExposureReductPct,
+                auditLog = log
+            )
+        } else if (actionIntent == TradeActionIntent.SCALE_IN) {
+            var pyramidFailedReason = ""
+            if (portfolioState.existingScaleInCount >= portfolioState.maxScaleInsAllowed) {
+                pyramidFailedReason = "PYRAMID_MAX_SCALE_INS_EXCEEDED"
+            } else if (portfolioState.existingPositionUnrealizedPnLPct <= 0.0) {
+                pyramidFailedReason = "PYRAMID_POSITION_NOT_IN_PROFIT"
+            } else if (!portfolioState.originalThesisValid) {
+                pyramidFailedReason = "PYRAMID_THESIS_INVALID"
+            } else if (portfolioState.distanceRatioFromEntry < 0.8) {
+                pyramidFailedReason = "PYRAMID_INSUFFICIENT_ENTRY_DISTANCE"
+            } else if (portfolioState.portfolioHeatPct > portfolioState.maxPortfolioHeatPct) {
+                pyramidFailedReason = "PYRAMID_PORTFOLIO_HEAT_EXCEEDED"
+            }
+
+            val passedPyramid = pyramidFailedReason.isEmpty()
+            val reason = if (passedPyramid) "" else "PYRAMID_RULE_VIOLATED: $pyramidFailedReason"
+            val details = if (passedPyramid) {
+                "Scale-in authorized: Position in profit (+${String.format(Locale.US, "%.1f", portfolioState.existingPositionUnrealizedPnLPct)}%), scale-in count ${portfolioState.existingScaleInCount}/${portfolioState.maxScaleInsAllowed}."
+            } else {
+                "Scale-in rejected: $pyramidFailedReason."
+            }
+
+            val log = buildPortfolioGuardAuditLog(
+                symbol = symbol,
+                actionIntent = actionIntent,
+                signalValidated = true,
+                capitalEligible = passedPyramid,
+                executionAuthorized = passedPyramid,
+                portfolioState = portfolioState,
+                reason = if (passedPyramid) "NONE" else reason,
+                details = details
+            )
+
+            return PortfolioGuardEvaluation(
+                actionIntent = actionIntent,
+                isSignalValidated = true,
+                isCapitalEligible = passedPyramid,
+                isExecutionAuthorized = passedPyramid,
+                capitalRejectionReason = reason,
+                auditLog = log
+            )
+        }
+
+        // Default NEW_POSITION
+        val log = buildPortfolioGuardAuditLog(
+            symbol = symbol,
+            actionIntent = actionIntent,
+            signalValidated = true,
+            capitalEligible = true,
+            executionAuthorized = true,
+            portfolioState = portfolioState,
+            reason = "NONE",
+            details = "New position capital allocation approved."
+        )
+
+        return PortfolioGuardEvaluation(
+            actionIntent = actionIntent,
+            isSignalValidated = true,
+            isCapitalEligible = true,
+            isExecutionAuthorized = true,
+            capitalRejectionReason = "",
+            auditLog = log
+        )
+    }
+
+    private fun buildPortfolioGuardAuditLog(
+        symbol: String,
+        actionIntent: TradeActionIntent,
+        signalValidated: Boolean,
+        capitalEligible: Boolean,
+        executionAuthorized: Boolean,
+        portfolioState: PortfolioGuardState,
+        reason: String,
+        details: String,
+        dynamicThreshold: Double = 0.82,
+        netExposureReductPct: Double = 0.0
+    ): String {
+        return buildString {
+            append("ACTION_INTENT: ${actionIntent.name} | ")
+            append("SIGNAL_VALIDATED: ${if (signalValidated) "YES" else "NO"} | ")
+            append("CAPITAL_ELIGIBLE: ${if (capitalEligible) "YES" else "NO"} | ")
+            append("EXECUTION_AUTHORIZED: ${if (executionAuthorized) "YES" else "NO"} | ")
+            append("CAPITAL_REJECTION_REASON: $reason | ")
+            append("PORTFOLIO_METRICS: [NetExp USD: ${String.format(Locale.US, "%.0f", portfolioState.netExposureUSD)}, GrossExp USD: ${String.format(Locale.US, "%.0f", portfolioState.grossExposureUSD)}, Conc: ${String.format(Locale.US, "%.1f", portfolioState.symbolConcentrationPct * 100)}%, Vol: ${String.format(Locale.US, "%.1f", portfolioState.portfolioVolatilityPct)}%] | ")
+            if (actionIntent == TradeActionIntent.HEDGE || actionIntent == TradeActionIntent.REVERSAL) {
+                append("HEDGE_ANALYSIS: [DynamicThresh: ${String.format(Locale.US, "%.2f", dynamicThreshold)}, NetReductPct: ${String.format(Locale.US, "%.1f", netExposureReductPct * 100)}%] | ")
+            }
+            if (actionIntent == TradeActionIntent.SCALE_IN) {
+                append("PYRAMID_ANALYSIS: [Count: ${portfolioState.existingScaleInCount}/${portfolioState.maxScaleInsAllowed}, UnPnLPct: ${String.format(Locale.US, "%.1f", portfolioState.existingPositionUnrealizedPnLPct)}%, HeatPct: ${String.format(Locale.US, "%.1f", portfolioState.portfolioHeatPct)}%] | ")
+            }
+            append("DETAILS: $details")
+        }
+    }
 
     // Default Correlation Matrix
     private val correlationPairs = listOf(
@@ -255,21 +498,41 @@ object PortfolioTradeInteractionEngine {
 
     /**
      * Evaluates trade interaction impact on a proposed new trade signal.
-     * If proposed trade has high correlation (> 0.75) with existing heavy assets or is a detractor,
-     * calculates a portfolio stability penalty and recommends sizing adjustments.
+     * Incorporates Portfolio Guard opposite position hedging checks, correlation scaling, and pyramid scale-in limits.
      */
     fun evaluateProposedTradeInteraction(
         symbol: String,
         strategyName: String,
-        proposedSizeUSD: Double
+        proposedSizeUSD: Double,
+        signalConviction: Double = 0.75,
+        hasOppositePosition: Boolean = false,
+        isPyramidScaleIn: Boolean = false,
+        currentRiskAllocationPct: Double = 0.05
     ): Pair<Double, String> { // Pair(Size Multiplier, Rationale)
         val matrix = getCorrelationMatrix()
-        val impacts = calculateTradeImpacts()
 
-        // Check correlation with top weighted assets (e.g. BTC & ETH)
+        // 1. Portfolio Guard Opposite Position Hedging Check
+        val hedgeThreshold = 0.82
+        if (hasOppositePosition) {
+            if (signalConviction < hedgeThreshold) {
+                return Pair(
+                    0.0,
+                    "⛔ Portfolio Guard Rejected: Opposite position currently open for $symbol. Signal conviction (${String.format(Locale.US, "%.2f", signalConviction)}) is below required hedge threshold ($hedgeThreshold). Hedge blocked to protect capital."
+                )
+            }
+        }
+
+        // 2. Pyramid Scale-In Sizing Gate
+        if (isPyramidScaleIn && currentRiskAllocationPct < 0.04) {
+            return Pair(
+                0.0,
+                "⛔ Portfolio Guard Gated: Pyramid scale-in rejected for $symbol because existing position risk allocation (${String.format(Locale.US, "%.2f", currentRiskAllocationPct)}%) has been reduced below minimum 0.04% threshold."
+            )
+        }
+
+        // 3. Correlation Matrix Risk Scaling
         val corrBTC = matrix.getCorrelation(symbol, "BTC")
         val corrETH = matrix.getCorrelation(symbol, "ETH")
-
         val avgCorr = (corrBTC + corrETH) / 2.0
 
         return if (avgCorr > 0.75) {
