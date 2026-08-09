@@ -29,6 +29,27 @@ enum class UncertaintyLevel {
 }
 
 /**
+ * Empirical Confidence Calibration Table record for a specific confidence range.
+ * Tracks actual trades, win rate, expectancy, profit factor, and average R multiple
+ * to fix model overconfidence and non-discriminating confidence predictions.
+ */
+data class ConfidenceBucketRecord(
+    val rangeLabel: String,      // e.g. "0.85-0.90"
+    val minConfidence: Double,   // 0.85
+    val maxConfidence: Double,   // 0.90
+    var totalTrades: Int = 0,
+    var winningTrades: Int = 0,
+    var totalPnlR: Double = 0.0,
+    var grossProfitsR: Double = 0.0,
+    var grossLossesR: Double = 0.0
+) {
+    val winRatePct: Double get() = if (totalTrades > 0) (winningTrades.toDouble() / totalTrades.toDouble()) * 100.0 else 0.0
+    val expectancyR: Double get() = if (totalTrades > 0) totalPnlR / totalTrades.toDouble() else 0.0
+    val profitFactor: Double get() = if (grossLossesR > 1e-5) grossProfitsR / grossLossesR else if (grossProfitsR > 0) 5.0 else 1.0
+    val averageRMultiple: Double get() = if (totalTrades > 0) totalPnlR / totalTrades.toDouble() else 0.0
+}
+
+/**
  * Explicit Calibration and Capital Eligibility breakdown.
  * Separates raw model confidence, calibration-adjusted probability, meta conviction,
  * holistic strategy quality, and capital eligibility score.
@@ -93,6 +114,66 @@ object LuminaSelfAdaptationEngine {
     private val counterfactualLedger = mutableListOf<CounterfactualEntry>()
     private val currentStrategyStates = mutableMapOf<String, StrategyState>()
     private val lastStateTransitionTradeCounts = mutableMapOf<String, Int>()
+    private val strategyConfidenceTables = mutableMapOf<String, MutableList<ConfidenceBucketRecord>>()
+
+    fun createStandardBuckets(): MutableList<ConfidenceBucketRecord> {
+        return mutableListOf(
+            ConfidenceBucketRecord("0.30-0.35", 0.30, 0.35),
+            ConfidenceBucketRecord("0.35-0.40", 0.35, 0.40),
+            ConfidenceBucketRecord("0.40-0.45", 0.40, 0.45),
+            ConfidenceBucketRecord("0.45-0.50", 0.45, 0.50),
+            ConfidenceBucketRecord("0.50-0.55", 0.50, 0.55),
+            ConfidenceBucketRecord("0.55-0.60", 0.55, 0.60),
+            ConfidenceBucketRecord("0.60-0.65", 0.60, 0.65),
+            ConfidenceBucketRecord("0.65-0.70", 0.65, 0.70),
+            ConfidenceBucketRecord("0.70-0.75", 0.70, 0.75),
+            ConfidenceBucketRecord("0.75-0.80", 0.75, 0.80),
+            ConfidenceBucketRecord("0.80-0.85", 0.80, 0.85),
+            ConfidenceBucketRecord("0.85-0.90", 0.85, 0.90),
+            ConfidenceBucketRecord("0.90-0.95", 0.90, 0.95),
+            ConfidenceBucketRecord("0.95-1.00", 0.95, 1.00)
+        )
+    }
+
+    fun buildStrategySymbolKey(strategyName: String, symbol: String = ""): String {
+        val cleanSym = symbol.trim().uppercase()
+        return if (cleanSym.isNotEmpty()) "$strategyName@$cleanSym" else strategyName
+    }
+
+    fun getOrCreateConfidenceTable(strategyName: String, symbol: String = ""): MutableList<ConfidenceBucketRecord> {
+        val key = buildStrategySymbolKey(strategyName, symbol)
+        return strategyConfidenceTables.getOrPut(key) { createStandardBuckets() }
+    }
+
+    /**
+     * Records trade outcome into the Confidence Calibration Table for empirical self-adaptation.
+     * Records both symbol-specific and global strategy tables to support symbol-dependent allocation.
+     */
+    fun recordTradeOutcomeForCalibration(
+        strategyName: String,
+        predictedConfidence: Double,
+        isWin: Boolean,
+        pnlR: Double,
+        symbol: String = ""
+    ) {
+        val symbolKey = buildStrategySymbolKey(strategyName, symbol)
+        val keysToUpdate = if (symbol.isNotBlank()) listOf(symbolKey, strategyName) else listOf(strategyName)
+
+        for (key in keysToUpdate) {
+            val table = strategyConfidenceTables.getOrPut(key) { createStandardBuckets() }
+            val conf = predictedConfidence.coerceIn(0.30, 0.99)
+            val bucket = table.find { conf >= it.minConfidence && conf < it.maxConfidence } ?: table.last()
+
+            bucket.totalTrades++
+            if (isWin) bucket.winningTrades++
+            bucket.totalPnlR += pnlR
+            if (pnlR > 0) bucket.grossProfitsR += pnlR else bucket.grossLossesR += kotlin.math.abs(pnlR)
+        }
+    }
+
+    fun getConfidenceCalibrationTable(strategyName: String, symbol: String = ""): List<ConfidenceBucketRecord> {
+        return getOrCreateConfidenceTable(strategyName, symbol)
+    }
 
     /**
      * Determines statistical uncertainty level and CI width from sample size and win rate.
@@ -220,12 +301,13 @@ object LuminaSelfAdaptationEngine {
             return previousState
         }
 
-        // Rule 4: Anti-Oscillation Hysteresis Buffers
+        // Rule 4: Anti-Oscillation Hysteresis Buffers with Expectancy-First Degradation
         val newState = when (previousState) {
             StrategyState.PRELIMINARY_OBSERVATION -> {
                 when {
                     winRatePct >= 55.0 && expectancyR >= 0.40 && totalTrades >= 30 -> StrategyState.CHAMPION
                     winRatePct >= 45.0 && expectancyR >= 0.15 -> StrategyState.ACTIVE
+                    expectancyR < -0.05 || winRatePct < 30.0 -> StrategyState.DEGRADED
                     winRatePct < 40.0 || expectancyR < 0.05 -> StrategyState.RESTRICTED
                     else -> StrategyState.ACTIVE
                 }
@@ -233,6 +315,7 @@ object LuminaSelfAdaptationEngine {
             StrategyState.ACTIVE -> {
                 when {
                     winRatePct >= 58.0 && expectancyR >= 0.45 && totalTrades >= 30 && maxDrawdownPct <= 5.0 -> StrategyState.CHAMPION
+                    expectancyR < -0.05 || winRatePct < 32.0 || maxDrawdownPct > 12.0 -> StrategyState.DEGRADED
                     winRatePct < 42.0 || expectancyR < 0.08 || maxDrawdownPct > 8.0 -> StrategyState.RESTRICTED
                     else -> StrategyState.ACTIVE
                 }
@@ -240,14 +323,15 @@ object LuminaSelfAdaptationEngine {
             StrategyState.RESTRICTED -> {
                 when {
                     winRatePct > 48.0 && expectancyR > 0.12 && maxDrawdownPct <= 6.0 -> StrategyState.ACTIVE
-                    winRatePct < 35.0 || expectancyR < 0.01 || maxDrawdownPct > 12.0 -> StrategyState.DEGRADED
+                    expectancyR < 0.0 || winRatePct < 30.0 || maxDrawdownPct > 12.0 -> StrategyState.SUSPENDED
+                    winRatePct < 35.0 || expectancyR < 0.01 -> StrategyState.DEGRADED
                     else -> StrategyState.RESTRICTED
                 }
             }
             StrategyState.DEGRADED -> {
                 when {
                     winRatePct > 44.0 && expectancyR > 0.10 -> StrategyState.RESTRICTED
-                    maxDrawdownPct > 15.0 -> StrategyState.SUSPENDED
+                    expectancyR < 0.0 || winRatePct < 32.0 || maxDrawdownPct > 12.0 -> StrategyState.SUSPENDED
                     else -> StrategyState.DEGRADED
                 }
             }
@@ -283,8 +367,10 @@ object LuminaSelfAdaptationEngine {
         maxDrawdownPct: Double = 4.0,
         marketRegime: String = "RANGE_BOUND",
         volatilityState: String = "NORMAL",
-        strategyName: String = "DefaultStrategy"
+        strategyName: String = "DefaultStrategy",
+        symbol: String = ""
     ): CalibrationBreakdown {
+        val effectiveKey = buildStrategySymbolKey(strategyName, symbol)
         val wins = ((longTermWinRatePct / 100.0) * totalTrades).toInt()
         val (uncertainty, ciWidth) = calculateUncertaintyDetails(wins, totalTrades)
         val wilsonLower = calculateWilsonLowerBound(wins, totalTrades)
@@ -298,15 +384,19 @@ object LuminaSelfAdaptationEngine {
         val regimeAdj = getRegimeAdjustment(strategyName, marketRegime, volatilityState)
 
         val state = evaluateStrategyState(
-            strategyName = strategyName,
+            strategyName = effectiveKey,
             totalTrades = totalTrades,
             winRatePct = blendedWR,
             expectancyR = blendedExp,
             maxDrawdownPct = maxDrawdownPct
         )
 
-        // Calculate Calibrated Confidence
-        val calibratedProb = if (uncertainty == UncertaintyLevel.HIGH) {
+        // Lookup empirical confidence bucket calibration if historical trades exist
+        val table = getOrCreateConfidenceTable(strategyName, symbol)
+        val targetConf = rawConfidence.coerceIn(0.30, 0.99)
+        val bucket = table.find { targetConf >= it.minConfidence && targetConf < it.maxConfidence } ?: table.last()
+
+        val baseCalibratedProb = if (uncertainty == UncertaintyLevel.HIGH) {
             // High uncertainty: Cap adjustment at max +/- 0.05 from raw confidence
             val target = (wilsonLower * 0.50) + (rawConfidence * 0.50)
             val delta = (target - rawConfidence).coerceIn(-0.05, 0.05)
@@ -318,11 +408,27 @@ object LuminaSelfAdaptationEngine {
             blended.coerceIn(0.10, 0.98)
         }
 
+        val calibratedProb = if (bucket.totalTrades >= 5) {
+            val empiricalWR = bucket.winRatePct / 100.0
+            val bucketWeight = (bucket.totalTrades / 25.0).coerceAtMost(0.70)
+            val bucketAdjusted = (baseCalibratedProb * (1.0 - bucketWeight)) + (empiricalWR * bucketWeight)
+            if (empiricalWR < 0.45 && rawConfidence >= 0.75) {
+                // Fix inverse discrimination (e.g. overconfidence on losing setups)
+                kotlin.math.min(bucketAdjusted, empiricalWR + 0.10).coerceIn(0.10, 0.98)
+            } else {
+                bucketAdjusted.coerceIn(0.10, 0.98)
+            }
+        } else {
+            baseCalibratedProb
+        }
+
         // Calculate Holistic Strategy Quality (0 to 100)
-        val wrQuality = (blendedWR * 0.80).coerceIn(0.0, 80.0)
-        val expQuality = (blendedExp * 20.0).coerceIn(0.0, 20.0)
+        // Expectancy E[R] is the primary measure of trading edge rather than raw confidence
+        val expQuality = (((blendedExp.coerceIn(-1.0, 3.0) + 1.0) / 4.0) * 50.0).coerceIn(0.0, 50.0)
+        val wrQuality = (blendedWR * 0.35).coerceIn(0.0, 35.0)
+        val profitFactorQuality = if (bucket.profitFactor > 1.0) ((bucket.profitFactor - 1.0) * 10.0).coerceAtMost(15.0) else 0.0
         val ddPenalty = (maxDrawdownPct * 1.5).coerceAtMost(20.0)
-        val rawQuality = (wrQuality + expQuality - ddPenalty + (regimeAdj * 100.0)).coerceIn(10.0, 99.0)
+        val rawQuality = (expQuality + wrQuality + profitFactorQuality - ddPenalty + (regimeAdj * 100.0)).coerceIn(5.0, 99.0)
 
         // Calculate Capital Eligibility Score (0.0 to 1.0)
         val stateMultiplier = when (state) {

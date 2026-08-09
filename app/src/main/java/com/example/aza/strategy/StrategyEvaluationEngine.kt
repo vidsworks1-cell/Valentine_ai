@@ -27,7 +27,7 @@ data class ConsensusPipelineResult(
 object StrategyEvaluationEngine {
 
     /**
-     * Classifies the current market using independent dimensions of Trend and Volatility.
+     * Classifies the current market using independent dimensions of Trend, Volatility, and Tail-Risk Shocks.
      */
     fun detectMarketRegime(prices: List<Double>): String {
         if (prices.size < 5) return "LOW_VOLATILITY_RANGING"
@@ -45,13 +45,27 @@ object StrategyEvaluationEngine {
         // Volatility classification boundaries
         val isHighVol = stdDev > 0.012
 
-        // Trend classification
+        // Trend and Drawdown classification
         val last = prices.last()
         val first = prices.first()
         val changePct = (last - first) / first
         val totalChange = kotlin.math.abs(changePct)
         
-        // Let's determine the trend type
+        val maxInLookback = prices.maxOrNull() ?: last
+        val drawdownFromPeak = if (maxInLookback > 0.0) (last - maxInLookback) / maxInLookback else 0.0
+
+        // TAIL-RISK SHOCK CIRCUIT BREAKERS (CRASH & BLACK_SWAN)
+        // 1. BLACK_SWAN: Catastrophic systemic shock (> 12% precipitous drop OR > 14% peak drawdown OR stdDev > 0.038 with drop > 9%)
+        if (changePct < -0.12 || drawdownFromPeak < -0.14 || (changePct < -0.09 && stdDev > 0.038)) {
+            return "BLACK_SWAN"
+        }
+
+        // 2. CRASH: Rapid market flash selloff (-6% to -12% drop OR > 8% peak drawdown OR stdDev > 0.024 with drop > 4.5%)
+        if (changePct < -0.06 || drawdownFromPeak < -0.08 || (changePct < -0.045 && stdDev > 0.024)) {
+            return "CRASH"
+        }
+
+        // Let's determine standard trend type
         val isTrending = totalChange > 0.03
 
         return when {
@@ -399,15 +413,28 @@ object StrategyEvaluationEngine {
         val regime = detectMarketRegime(prices)
 
         // Agent 1: Market Regime Agent
-        val isRegimeMatched = when (strategyName) {
-            "Mean Reversion" -> regime.contains("RANGE") || regime.contains("CYCLIC") || regime.contains("ACCUMULATION") || regime.contains("DISTRIBUTION") || regime.contains("TREND")
-            "Breakout Momentum", "Breakout" -> regime.contains("TREND") || regime.contains("BULL") || regime.contains("BEAR") || regime.contains("HIGH_VOLATILITY")
-            "Liquidity Sweep" -> true
-            "Volatility Expansion Breakout" -> regime.contains("VOLATILITY") || regime.contains("TREND") || regime.contains("BULL")
-            else -> true
+        val isCrashOrBlackSwan = regime == "CRASH" || regime == "BLACK_SWAN"
+        val isLongBuy = proposal.signal == SignalType.BUY
+        val globalLongFreeze = isCrashOrBlackSwan && isLongBuy
+
+        val isRegimeMatched = if (globalLongFreeze) {
+            false // Global Long Freeze active during CRASH / BLACK_SWAN
+        } else {
+            when (strategyName) {
+                "Mean Reversion" -> regime.contains("RANGE") || regime.contains("CYCLIC") || regime.contains("ACCUMULATION") || regime.contains("DISTRIBUTION") || regime.contains("TREND")
+                "Breakout Momentum", "Breakout" -> regime.contains("TREND") || regime.contains("BULL") || regime.contains("BEAR") || regime.contains("HIGH_VOLATILITY") || regime.contains("CRASH")
+                "Liquidity Sweep" -> true
+                "Volatility Expansion Breakout" -> regime.contains("VOLATILITY") || regime.contains("TREND") || regime.contains("BULL")
+                else -> true
+            }
         }
-        val regimeConf = if (isRegimeMatched) 0.88 else 0.60
-        val agent1 = AgentVote("MarketRegimeAgent", isRegimeMatched, regimeConf, "Regime [$regime] alignment: $isRegimeMatched")
+        val regimeConf = if (globalLongFreeze) 0.10 else if (isRegimeMatched) 0.88 else 0.60
+        val agent1Rationale = if (globalLongFreeze) {
+            "GLOBAL LONG FREEZE ACTIVE: $regime tail-risk shock detected. Long entry signals blocked for capital preservation."
+        } else {
+            "Regime [$regime] alignment: $isRegimeMatched"
+        }
+        val agent1 = AgentVote("MarketRegimeAgent", isRegimeMatched, regimeConf, agent1Rationale)
 
         // Agent 2: Technical Signal Validation Agent
         val signalValid = when (proposal.signal) {
@@ -1043,6 +1070,7 @@ object StrategyEvaluationEngine {
             hasOppositePosition = hasOppositePosition,
             dailyPnL = dailyPnL,
             portfolioState = PortfolioGuardState(
+                accountBalance = accountBalance,
                 existingPositionExposureUSD = if (hasOppositePosition) effectiveProposal.positionSize * effectiveProposal.entryPrice else 0.0,
                 existingPositionSide = if (hasOppositePosition) (if (side == "BUY") "SELL" else "BUY") else null,
                 existingPositionConviction = metaConviction / 100.0,
@@ -1120,7 +1148,8 @@ object StrategyEvaluationEngine {
             maxDrawdownPct = 4.2,
             marketRegime = currentRegime,
             volatilityState = volatilityState,
-            strategyName = effectiveStratName
+            strategyName = effectiveStratName,
+            symbol = symbol
         )
 
         val waterfallResult = LuminaRiskEngine.calculateRiskWaterfall(

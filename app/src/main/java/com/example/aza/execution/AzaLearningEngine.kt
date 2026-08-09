@@ -224,6 +224,22 @@ class AzaLearningEngine(private val repository: AppRepository) {
                 currentSignal = if (isWin) "WIN - $market (+$${String.format("%.2f", profit)})" else "LOSS - $market ($${String.format("%.2f", profit)})"
             )
             repository.updateStrategy(updated)
+
+            val pnlR = if (kotlin.math.abs(profit) > 1e-5) profit / 100.0 else (if (isWin) 1.0 else -1.0)
+            com.example.aza.strategy.LuminaSelfAdaptationEngine.recordTradeOutcomeForCalibration(
+                strategyName = strategyName,
+                predictedConfidence = existing.confidence,
+                isWin = isWin,
+                pnlR = pnlR,
+                symbol = market
+            )
+            com.example.aza.strategy.LuminaSelfAdaptationEngine.recordRegimeOutcome(
+                strategyName = strategyName,
+                marketRegime = "RANGE_BOUND",
+                volatilityState = "NORMAL",
+                isWin = isWin,
+                pnlR = pnlR
+            )
         }
     }
 }

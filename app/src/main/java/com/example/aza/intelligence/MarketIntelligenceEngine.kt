@@ -564,6 +564,8 @@ class MarketIntelligenceEngine(
         val isTrending = Math.abs(trendScore) > 1.8
         
         return when {
+            trendScore < -8.0 || (volatilityScore > 5.5 && trendScore < -5.0) -> "BLACK_SWAN"
+            trendScore < -5.5 || (volatilityScore > 4.0 && trendScore < -3.5) -> "CRASH"
             trendScore > 4.0 -> "STRONG_BULL"
             trendScore < -4.0 -> "STRONG_BEAR"
             isHighVol && isTrending -> "HIGH_VOLATILITY_TRENDING"
@@ -830,6 +832,8 @@ class MarketIntelligenceEngine(
         // Regime & Confidence-Based Adaptive Position Sizing Adjustment:
         // Scale position size down in VOLATILE or low confidence environments to preserve capital
         val regimeScale = when (regime.uppercase(Locale.US)) {
+            "BLACK_SWAN" -> 0.05 // Emergency Capital Preservation: 95% sizing cut during Black Swan events
+            "CRASH" -> 0.20 // Emergency Capital Preservation: 80% sizing cut during Market Crashes
             "VOLATILE", "HIGH_VOLATILITY", "HIGH_VOLATILITY_RANGING", "HIGH_VOLATILITY_TRENDING" -> 0.50 // 50% sizing cut in volatile markets
             "BEAR", "STRONG_BEAR" -> 0.75 // 25% sizing cut in bear regimes
             "BULL", "STRONG_BULL" -> 1.10 // 10% sizing boost in clear bull trends

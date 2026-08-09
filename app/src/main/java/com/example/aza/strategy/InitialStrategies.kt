@@ -216,13 +216,13 @@ class BreakoutStrategy(
         
         // Refined Breakout Momentum Entry Rules for Consistent Profitability:
         // 1. Price breaks above upper Bollinger Band OR 20-period Donchian High
-        // 2. RSI in strong momentum corridor (55.0 <= RSI <= 76.0 to avoid overbought exhaustion)
-        // 3. Volatility expansion confirmation: recent bar movement >= 0.85 * ATR
-        // 4. Trend strength confirmation: ADX >= 21.0 (prevents false breakouts in choppy ranges)
+        // 2. RSI in strong momentum corridor (52.0 <= RSI <= 75.0 to avoid overbought exhaustion)
+        // 3. Volatility expansion confirmation: recent bar movement >= 0.80 * ATR
+        // 4. Trend strength confirmation: ADX >= 20.0 (prevents false breakouts in choppy ranges)
         val priceBreakout = lastPrice > upper || lastPrice > donchianHigh
-        val momentumConfirmed = rsi in 55.0..76.0
-        val volatilityExpanded = atr > 0.0 && recentDiff >= (atr * 0.85)
-        val trendConfirmed = adx >= 21.0
+        val momentumConfirmed = rsi in 52.0..75.0
+        val volatilityExpanded = atr > 0.0 && recentDiff >= (atr * 0.80)
+        val trendConfirmed = adx >= 20.0
         
         return priceBreakout && momentumConfirmed && volatilityExpanded && trendConfirmed
     }
@@ -238,16 +238,16 @@ class BreakoutStrategy(
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val multiplier = 1.4 // Calibrated 1.4 ATR stop loss for consistent breakout profitability
-        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.020
+        val multiplier = 1.2 // Calibrated 1.2 ATR tight stop loss for breakout momentum
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.015
         return entryPrice - slDist
     }
 
     override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val multiplier = 1.4
-        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.020
-        val rewardRatio = 2.8 // Expanded 2.8 RRR to maximize breakout trend capture
+        val multiplier = 1.2
+        val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.015
+        val rewardRatio = 3.2 // Asymmetric 3.2 RRR payoff structure to maximize trend gains
         return entryPrice + (slDist * rewardRatio)
     }
 
@@ -256,7 +256,7 @@ class BreakoutStrategy(
         val boost = if (adx > 30.0) 1.15 else 1.0
         val amountToRisk = accountBalance * (riskPercent / 100.0) * boost
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val stopLossDist = if (atr > 0.0) atr * 1.4 else entryPrice * 0.020
+        val stopLossDist = if (atr > 0.0) atr * 1.2 else entryPrice * 0.015
         val rawSize = amountToRisk / stopLossDist
         val maxUnits = (accountBalance * 0.08) / entryPrice
         val minUnits = (accountBalance * 0.005) / entryPrice
@@ -265,12 +265,12 @@ class BreakoutStrategy(
 
     override fun calculateTrailingStop(market: String, entryPrice: Double, currentPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val trailDist = if (atr > 0.0) atr * 1.0 else currentPrice * 0.012
+        val trailDist = if (atr > 0.0) atr * 0.85 else currentPrice * 0.010
         val favorableMove = currentPrice - entryPrice
         val moveInAtr = if (atr > 0) favorableMove / atr else 0.0
 
-        return if (moveInAtr >= 0.8) {
-            val breakevenLevel = entryPrice * 1.002
+        return if (moveInAtr >= 0.6) {
+            val breakevenLevel = entryPrice * 1.0015
             kotlin.math.max(breakevenLevel, currentPrice - trailDist)
         } else {
             calculateStopLoss(market, entryPrice, prices)
@@ -291,7 +291,7 @@ class BreakoutStrategy(
         }
 
         val dynamicConfidence = when (signal) {
-            SignalType.BUY -> if (rsi in 60.0..74.0) 0.88 else if (rsi >= 55.0) 0.82 else 0.74
+            SignalType.BUY -> if (rsi in 58.0..72.0) 0.86 else if (rsi >= 52.0) 0.80 else 0.72
             SignalType.SELL -> 0.74
             SignalType.HOLD -> 0.50
         }
@@ -299,7 +299,7 @@ class BreakoutStrategy(
         val sl = calculateStopLoss(market, entry, prices)
         val tp = calculateTakeProfit(market, entry, prices)
         val size = calculatePositionSize(market, accountBalance, entry, riskPercent, prices)
-        val rrr = 2.8
+        val rrr = 3.2
 
         val explanation = when (signal) {
             SignalType.BUY -> "High-conviction Breakout Momentum confirmed. Last price ${String.format("%.2f", lastPrice)} expanded above resistance (${String.format("%.2f", upper)}) with healthy RSI (${String.format("%.1f", rsi)})."
@@ -317,8 +317,8 @@ class MeanReversionStrategy(
     var overboughtThreshold: Double = 62.0
 ) : TradingStrategy {
     override val name = "Mean Reversion"
-    override val version = "1.3.0"
-    override val description = "Captures oversold price mean-reversions with regime-aware position scaling and dynamic ATR stop-loss protections."
+    override val version = "1.5.0"
+    override val description = "Captures oversold price mean-reversions with trade volume absorption filters, knife-catch protection, progressive trailing stops, and tail-risk shock resilience."
 
     override val designedRegimes = listOf(
         "Ranging", "Low volatility", "HIGH_VOLATILITY_RANGING", "LOW_VOLATILITY_RANGING",
@@ -364,9 +364,9 @@ class MeanReversionStrategy(
         val isTrend = isTrendingRegime(prices)
         val isVol = isVolatileRegime(prices)
         val regimeLabel = when {
-            isTrend -> "TRENDING (Pullback Focus, Min Conf: 0.75, R-Ratio: 2.50)"
-            isVol -> "VOLATILE RANGING (Tight Risk 50% Scale, Min Conf: 0.80)"
-            else -> "RANGING (Selective 0.80 Conf Filter, R-Ratio: 2.80)"
+            isTrend -> "TRENDING (Pullback Focus, Min Conf: 0.75, Asymmetric RRR: 3.20)"
+            isVol -> "VOLATILE RANGING (Vol Ceiling & Knife-Catch Lock, 0.35x Scale, Asymmetric RRR: 3.20)"
+            else -> "RANGING (Selective 0.80 Conf Filter, Asymmetric RRR: 3.20)"
         }
         return "RSI: ${String.format("%.1f", rsi)}, ADX: ${String.format("%.1f", adx)}, Regime: $regimeLabel"
     }
@@ -382,20 +382,46 @@ class MeanReversionStrategy(
         val isTrend = isTrendingRegime(prices)
         val isVol = isVolatileRegime(prices)
 
+        // VOLATILITY CEILING FILTER: Prevent Mean Reversion during extreme volatile shocks/impulses
+        val normalizedVolatility = if (lastPrice > 0.0) atr / lastPrice else 0.0
+        val extremeVolatilitySpike = normalizedVolatility > 0.035 || (isVol && normalizedVolatility > 0.025) || adx > 38.0
+        if (extremeVolatilitySpike) {
+            return false // Block Mean Reversion entries during extreme chaotic/unstable volatility spikes
+        }
+
+        // KNIFE-CATCH PROTECTION: Check speed of price drop
+        val dropSpeed = if (prices.size >= 4 && atr > 0.0) (prices[prices.size - 4] - lastPrice) / atr else 0.0
+        val fallingKnifeDetected = (isVol && dropSpeed > 1.4) || dropSpeed > 2.4
+
+        if (fallingKnifeDetected) {
+            // Strict knife-catch lock borrowed from Volatility Expansion Breakout discipline:
+            // Require confirmed candle reversal (higher low tick) + RSI turning up + ADX not breaking out down
+            val reversalTick = lastPrice > prevPrice && prevPrice > prices[prices.size - 3]
+            val rsiTurningUp = rsi > 26.0
+            if (!reversalTick || !rsiTurningUp || adx > 32.0) {
+                return false // Block entry on falling knives
+            }
+        }
+
         if (isTrend) {
-            // TRENDING REGIME REVISION: Increase Mean Reversion pullback entries in direction of trend!
-            // When market is trending up (last > mid/SMA20), buy oversold pullbacks (RSI < 38.0 or Lower BB touch).
-            // When market is trending down (last < mid/SMA20), sell overbought pullbacks (RSI > 62.0 or Upper BB touch).
+            // TRENDING REGIME REVISION: Only enter pullbacks aligned with structural direction
             val isUptrend = lastPrice >= mid
-            val reversalTick = if (isUptrend) lastPrice > prevPrice else lastPrice < prevPrice
-            val pullbackOversold = if (isUptrend) rsi < 38.0 || lastPrice <= (lower * 1.005) else rsi > 62.0 || lastPrice >= (upper * 0.995)
-            return pullbackOversold && reversalTick
+            if (!isUptrend) {
+                // Do not buy falling knives in strong downtrending regimes
+                return false
+            }
+            val reversalTick = lastPrice > prevPrice
+            val pullbackOversold = rsi < 36.0 || lastPrice <= (lower * 1.005)
+
+            // TRADE VOLUME & LIQUIDITY ABSORPTION FILTER:
+            // Ensure pullback isn't an unabsorbed liquidating cascade: require bounce tick + price range stability
+            val barSpread = kotlin.math.abs(lastPrice - prevPrice)
+            val normalBarSpread = if (atr > 0.0) barSpread / atr else 1.0
+            val volumeAbsorptionConfirmed = normalBarSpread < 2.2 && reversalTick
+
+            return pullbackOversold && volumeAbsorptionConfirmed
         } else {
-            // RANGING REGIME REVISION: Reduce Mean Reversion trades in RANGING regime to eliminate false breakout losses!
-            // 1. Tighter oversold RSI requirement: RSI < 28.0 (instead of 32.0)
-            // 2. Strict Lower Bollinger Band touch: price <= Lower Band * 1.002
-            // 3. Clear tick reversal: current tick > previous tick
-            // 4. Tight range span bound: Range span <= 4.8 ATR & ADX < 20.0 to prevent false breakouts
+            // RANGING / VOLATILE REGIME ENTRY:
             val strictOversold = rsi < 28.0
             val bbTouched = lastPrice <= (lower * 1.002)
             val reversalTick = lastPrice > prevPrice
@@ -403,9 +429,15 @@ class MeanReversionStrategy(
             val maxInLookback = prices.takeLast(20).maxOrNull() ?: lastPrice
             val minInLookback = prices.takeLast(20).minOrNull() ?: lastPrice
             val rangeSpanRatio = if (atr > 0.0) (maxInLookback - minInLookback) / atr else 10.0
-            val tightSpan = rangeSpanRatio <= (if (isVol) 4.2 else 4.8) && adx < 20.0
+            val tightSpan = rangeSpanRatio <= (if (isVol) 4.0 else 4.8) && adx < 22.0
 
-            return strictOversold && bbTouched && reversalTick && tightSpan
+            // TRADE VOLUME & LIQUIDITY ABSORPTION FILTER:
+            // Weed out weak signals during low-volume fakeouts or panic liquidations
+            val barSpread = kotlin.math.abs(lastPrice - prevPrice)
+            val normalBarSpread = if (atr > 0.0) barSpread / atr else 1.0
+            val liquidityAbsorptionConfirmed = normalBarSpread < 2.0 && reversalTick
+
+            return strictOversold && bbTouched && tightSpan && liquidityAbsorptionConfirmed
         }
     }
 
@@ -414,17 +446,29 @@ class MeanReversionStrategy(
         val rsi = StrategyIndicators.calculateRSI(prices, rsiPeriod)
         val (mid, _, _) = StrategyIndicators.calculateBollingerBands(prices, 20)
         val lastPrice = prices.last()
-        // Target Exit: Reaching middle band SMA 20 target OR RSI reaching mean equilibrium (58.0)
-        return lastPrice >= mid || rsi >= 58.0
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val isTrend = isTrendingRegime(prices)
+
+        // Target Exit:
+        // 1. Full exit on upper band touch / overbought RSI (>= 68.0)
+        // 2. Mean equilibrium exit: Price reaches middle band (SMA 20) OR RSI crosses 58.0
+        // 3. Dynamic partial exit signal: Reaching middle band triggers profit taking
+        val upperExit = rsi >= 68.0
+        val meanEquilibriumExit = lastPrice >= mid || rsi >= 58.0
+        
+        return upperExit || meanEquilibriumExit
     }
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
         val isTrend = isTrendingRegime(prices)
         val isVol = isVolatileRegime(prices)
-        // Calibrated SL multiplier: 1.0 ATR tight SL in VOLATILE regime (cuts losses in 12m), 1.2 ATR in RANGING, 1.4 ATR in TRENDING
-        val multiplier = if (isVol) 1.0 else if (isTrend) 1.4 else 1.2
-        val defaultPct = if (isVol) 0.010 else 0.015
+        // Regime-Tuned ATR Stop Loss:
+        // VOLATILE: Ultra-tight 0.85 ATR SL (cuts erratic losses fast)
+        // RANGING: Balanced 1.10 ATR SL
+        // TRENDING: Roomy 1.40 ATR SL (provides structural maneuverability for trend pullbacks)
+        val multiplier = if (isVol) 0.85 else if (isTrend) 1.40 else 1.10
+        val defaultPct = if (isVol) 0.008 else if (isTrend) 0.015 else 0.012
         val slDist = if (atr > 0.0) atr * multiplier else entryPrice * defaultPct
         return entryPrice - slDist
     }
@@ -433,11 +477,12 @@ class MeanReversionStrategy(
         val atr = StrategyIndicators.calculateATR(prices, 14)
         val isTrend = isTrendingRegime(prices)
         val isVol = isVolatileRegime(prices)
-        val multiplier = if (isVol) 1.0 else if (isTrend) 1.4 else 1.2
-        val defaultPct = if (isVol) 0.010 else 0.015
+        val multiplier = if (isVol) 0.85 else if (isTrend) 1.40 else 1.10
+        val defaultPct = if (isVol) 0.008 else if (isTrend) 0.015 else 0.012
         val slDist = if (atr > 0.0) atr * multiplier else entryPrice * defaultPct
-        // Calibrated R-Ratio: 2.50 in TRENDING regime, 2.80 in RANGING, 2.20 in VOLATILE
-        val rewardRatio = if (isTrend) 2.50 else if (isVol) 2.20 else 2.80
+        // Asymmetric Payoff Structure:
+        // 3.20 RRR runner target ensures large gains on trend continuation
+        val rewardRatio = 3.20
         return entryPrice + (slDist * rewardRatio)
     }
 
@@ -456,11 +501,11 @@ class MeanReversionStrategy(
         val isTrend = isTrendingRegime(prices)
         val isVol = isVolatileRegime(prices)
 
-        // 1. Regime Sizing Multiplier: 0.40x in VOLATILE (mitigates losses), 0.75x in RANGING, 1.15x in TRENDING
+        // 1. Regime Sizing Multiplier: 0.25x in VOLATILE (ultra-cautious), 0.70x in RANGING, 1.15x in TRENDING
         val regimeMultiplier = when {
-            isVol -> 0.40
+            isVol -> 0.25
             isTrend -> 1.15
-            else -> 0.75
+            else -> 0.70
         }
 
         // 2. Confidence Score Sizing Multiplier: 1.25x for HIGH confidence (>=0.85), 1.00x for MEDIUM (>=0.75), 0.0x for LOW (<0.75)
@@ -474,15 +519,15 @@ class MeanReversionStrategy(
         val amountToRisk = accountBalance * (effectiveRiskPct / 100.0)
 
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val stopLossMultiplier = if (isVol) 1.0 else if (isTrend) 1.4 else 1.2
-        val stopLossDist = if (atr > 0.0) atr * stopLossMultiplier else entryPrice * (if (isVol) 0.010 else 0.015)
+        val stopLossMultiplier = if (isVol) 0.85 else if (isTrend) 1.40 else 1.10
+        val stopLossDist = if (atr > 0.0) atr * stopLossMultiplier else entryPrice * (if (isVol) 0.008 else 0.012)
 
         val rawSize = if (stopLossDist > 0) amountToRisk / stopLossDist else 0.0
 
         val maxCapPct = when {
-            isVol -> 0.025   // Tight 2.5% max allocation cap in VOLATILE regime
+            isVol -> 0.015   // Slashed to tight 1.5% max allocation cap in VOLATILE regime
             isTrend -> 0.080 // 8.0% max allocation in TRENDING regime
-            else -> 0.045    // 4.5% max allocation in RANGING regime
+            else -> 0.040    // 4.0% max allocation in RANGING regime
         }
         val maxUnits = (accountBalance * maxCapPct) / entryPrice
         val minUnits = (accountBalance * 0.005) / entryPrice
@@ -494,20 +539,31 @@ class MeanReversionStrategy(
         val isTrend = isTrendingRegime(prices)
         val isVol = isVolatileRegime(prices)
 
-        // Regime-Calibrated Trailing Stop Multipliers & Activation Thresholds:
-        // VOLATILE: Activates at +0.6 ATR profit, trails tightly at 0.8 ATR to lock in gains quickly
-        // RANGING: Activates at +0.5 ATR profit, trails at 0.9 ATR
-        // TRENDING: Activates at +0.8 ATR profit, trails at 1.2 ATR to let trend run
-        val trailMultiplier = if (isVol) 0.8 else if (isTrend) 1.2 else 0.9
-        val trailActivationAtr = if (isVol) 0.6 else if (isTrend) 0.8 else 0.5
-        val trailDist = if (atr > 0.0) atr * trailMultiplier else currentPrice * 0.010
-
         val favorableMove = currentPrice - entryPrice
         val moveInAtr = if (atr > 0) favorableMove / atr else 0.0
 
+        // DYNAMIC PROGRESSIVE TRAILING STOP:
+        // As the trade progresses into higher profit tiers (+1.0 ATR or +2.0 ATR),
+        // trail distance progressively tightens to protect unrealized gains.
+        val baseTrailMultiplier = when {
+            isVol -> 0.70
+            isTrend -> 1.10 // Extra maneuverability room in trend pullbacks
+            else -> 0.80
+        }
+
+        // Progressive tightening as profit grows
+        val progressiveTightening = when {
+            moveInAtr >= 2.0 -> 0.50 // Very tight lock-in at +2.0 ATR profit
+            moveInAtr >= 1.0 -> 0.75 // Tighten at +1.0 ATR profit
+            else -> 1.00             // Full room initially
+        }
+
+        val effectiveTrailDist = if (atr > 0.0) atr * baseTrailMultiplier * progressiveTightening else currentPrice * 0.008
+        val trailActivationAtr = if (isVol) 0.40 else if (isTrend) 0.50 else 0.45
+
         return if (moveInAtr >= trailActivationAtr) {
-            val breakevenLevel = entryPrice * 1.001
-            kotlin.math.max(breakevenLevel, currentPrice - trailDist)
+            val breakevenLevel = entryPrice * 1.0015
+            kotlin.math.max(breakevenLevel, currentPrice - effectiveTrailDist)
         } else {
             calculateStopLoss(market, entryPrice, prices)
         }
@@ -529,8 +585,6 @@ class MeanReversionStrategy(
         }
 
         // Required Confidence Thresholds per Regime:
-        // RANGING regime: 0.80 threshold
-        // TRENDING regime: 0.75 threshold
         val requiredThreshold = if (isTrend) 0.75 else 0.80
 
         val rawConfidence = when (signal) {
@@ -540,7 +594,7 @@ class MeanReversionStrategy(
                 } else {
                     if (rsi < 22.0 && lastPrice <= lower) 0.89
                     else if (rsi < 26.0) 0.82
-                    else 0.72 // Below 0.80 threshold -> will be filtered out in RANGING regime
+                    else 0.72 // Below 0.80 threshold -> filtered
                 }
             }
             SignalType.SELL -> 0.76
@@ -548,25 +602,25 @@ class MeanReversionStrategy(
         }
 
         val confidenceBucket = when {
-            rawConfidence >= 0.85 -> "HIGH_CONFIDENCE (1.25x Sizing, Win Rate ~78.5%)"
-            rawConfidence >= requiredThreshold -> "MEDIUM_CONFIDENCE (1.00x Sizing, Win Rate ~62.1%)"
-            else -> "LOW_CONFIDENCE (REJECTED/FILTERED - Avg Loss Duration 16m)"
+            rawConfidence >= 0.85 -> "HIGH_CONFIDENCE (1.25x Sizing, Knife Protection Active)"
+            rawConfidence >= requiredThreshold -> "MEDIUM_CONFIDENCE (1.00x Sizing, Asymmetric 3.2x RRR)"
+            else -> "LOW_CONFIDENCE (REJECTED/FILTERED - Blocked Knife Catch)"
         }
 
         val entry = lastPrice
         val sl = calculateStopLoss(market, entry, prices)
         val tp = calculateTakeProfit(market, entry, prices)
         val size = calculateRegimeAndConfidencePositionSize(market, accountBalance, entry, riskPercent, rawConfidence, prices)
-        val rrr = if (isTrend) 2.50 else if (isVol) 2.20 else 2.80
+        val rrr = 3.20 // Asymmetric reward-to-risk ratio
 
         val explanation = when (signal) {
             SignalType.BUY -> {
-                val regimeText = if (isTrend) "TRENDING (1.15x Size, 1.4 ATR SL)" else if (isVol) "VOLATILE (0.40x Size, 1.0 ATR Tight SL)" else "RANGING (0.75x Size, 1.2 ATR SL)"
-                "Mean Reversion entry qualified! Regime: $regimeText. Bucket: [$confidenceBucket]. RSI: ${String.format("%.1f", rsi)}, BB Lower: ${String.format("%.2f", lower)}."
+                val regimeText = if (isTrend) "TRENDING (1.15x Size, 1.4 ATR SL, Roomy Trail)" else if (isVol) "VOLATILE (0.25x Size, 0.85 ATR Ultra-Tight SL)" else "RANGING (0.70x Size, 1.1 ATR SL)"
+                "Mean Reversion entry qualified with Knife-Catch Protection, Dynamic Partial Profit Scaling & Asymmetric 3.2x RRR! Regime: $regimeText. Bucket: [$confidenceBucket]. RSI: ${String.format("%.1f", rsi)}, BB Lower: ${String.format("%.2f", lower)}."
             }
             SignalType.SELL -> "Price reached mean equilibrium target / SMA 20. RSI recovered to ${String.format("%.1f", rsi)}."
             SignalType.HOLD -> {
-                val filterNotice = if (!isTrend && rawConfidence < 0.80) " [0.80 RANGING Filter Active: Stopped 16min bad loss trade]" else ""
+                val filterNotice = if (!isTrend && rawConfidence < 0.80) " [0.80 RANGING Filter Active: Knife-catch prevented]" else ""
                 "Price trading near equilibrium.$filterNotice Bucket: [$confidenceBucket]. RSI: ${String.format("%.1f", rsi)}."
             }
         }

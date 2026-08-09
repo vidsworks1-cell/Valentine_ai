@@ -208,4 +208,85 @@ class LuminaSelfAdaptationTest {
         assertEquals("Decision state must be SIGNAL_REJECTED", OverallDecisionState.SIGNAL_REJECTED, context.decisionState)
         assertEquals("Rejection authority must be MTF_GUARD", DecisionAuthority.MTF_GUARD, context.rejectionAuthority)
     }
+
+    @Test
+    fun testConfidenceCalibrationTableAndInverseDiscriminationCorrection() {
+        val stratName = "Mean Reversion"
+
+        // Simulate 10 trades recorded in the high-confidence bucket (0.85-0.90) with mostly losses (2 wins, 8 losses = 20% win rate)
+        repeat(2) {
+            LuminaSelfAdaptationEngine.recordTradeOutcomeForCalibration(stratName, 0.88, true, 1.2)
+        }
+        repeat(8) {
+            LuminaSelfAdaptationEngine.recordTradeOutcomeForCalibration(stratName, 0.88, false, -1.0)
+        }
+
+        val table = LuminaSelfAdaptationEngine.getConfidenceCalibrationTable(stratName)
+        val bucket85 = table.find { it.rangeLabel == "0.85-0.90" }
+
+        assertNotNull(bucket85)
+        assertEquals(10, bucket85!!.totalTrades)
+        assertEquals(2, bucket85.winningTrades)
+        assertEquals(20.0, bucket85.winRatePct, 0.01)
+
+        // Calibrate strategy with raw confidence 0.88. Empirical WR = 20%.
+        // Self-adaptation must clamp down calibrated confidence to prevent overconfidence in losing setups
+        val breakdown = LuminaSelfAdaptationEngine.calibrateStrategyAndCapital(
+            rawConfidence = 0.88,
+            metaConviction = 80.0,
+            longTermWinRatePct = 50.0,
+            recentWinRatePct = 50.0,
+            longTermExpectancyR = 0.20,
+            recentExpectancyR = 0.20,
+            totalTrades = 30,
+            strategyName = stratName
+        )
+
+        assertTrue(
+            "Calibrated confidence (${breakdown.calibratedConfidence}) must be penalized heavily below raw (0.88) due to empirical bucket win rate (20%)",
+            breakdown.calibratedConfidence < 0.35
+        )
+    }
+
+    @Test
+    fun testSymbolDependentStrategyTrustAllocation() {
+        val strat = "Breakout Momentum"
+
+        // ETHUSDT: Record 10 winning trades (100% WR)
+        repeat(10) {
+            LuminaSelfAdaptationEngine.recordTradeOutcomeForCalibration(strat, 0.80, true, 2.0, symbol = "ETHUSDT")
+        }
+
+        // BTCUSDT: Record 10 losing trades (0% WR)
+        repeat(10) {
+            LuminaSelfAdaptationEngine.recordTradeOutcomeForCalibration(strat, 0.80, false, -1.0, symbol = "BTCUSDT")
+        }
+
+        val ethBreakdown = LuminaSelfAdaptationEngine.calibrateStrategyAndCapital(
+            rawConfidence = 0.80,
+            metaConviction = 80.0,
+            longTermWinRatePct = 52.0,
+            recentWinRatePct = 55.0,
+            longTermExpectancyR = 0.40,
+            recentExpectancyR = 0.45,
+            totalTrades = 30,
+            strategyName = strat,
+            symbol = "ETHUSDT"
+        )
+
+        val btcBreakdown = LuminaSelfAdaptationEngine.calibrateStrategyAndCapital(
+            rawConfidence = 0.80,
+            metaConviction = 80.0,
+            longTermWinRatePct = 30.0,
+            recentWinRatePct = 25.0,
+            longTermExpectancyR = -0.20,
+            recentExpectancyR = -0.30,
+            totalTrades = 30,
+            strategyName = strat,
+            symbol = "BTCUSDT"
+        )
+
+        assertTrue("ETHUSDT should have significantly higher capital eligibility score than BTCUSDT", ethBreakdown.capitalEligibilityScore > btcBreakdown.capitalEligibilityScore)
+        assertTrue("ETHUSDT calibrated confidence should be higher than BTCUSDT", ethBreakdown.calibratedConfidence > btcBreakdown.calibratedConfidence)
+    }
 }

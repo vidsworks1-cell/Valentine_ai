@@ -134,6 +134,41 @@ enum class AssetClassProfile(
     }
 }
 
+data class OrderBookMetrics(
+    val bidVolume: Double = 0.0,
+    val askVolume: Double = 0.0,
+    val orderFlowImbalance: Double = 0.0 // -1.0 (heavy sell pressure) to +1.0 (heavy buy pressure)
+) {
+    val bidAskVolumeRatio: Double
+        get() {
+            val total = bidVolume + askVolume
+            return if (total > 1e-5) (bidVolume / total).coerceIn(0.0, 1.0) else 0.50
+        }
+
+    val orderBookScore: Double
+        get() {
+            val total = bidVolume + askVolume
+            if (total <= 1e-5 && abs(orderFlowImbalance) <= 1e-5) return 0.50
+            val imbalanceScore = ((orderFlowImbalance + 1.0) / 2.0).coerceIn(0.0, 1.0)
+            return (bidAskVolumeRatio * 0.50) + (imbalanceScore * 0.50)
+        }
+}
+
+data class EventDrivenMetrics(
+    val economicEventRisk: Double = 0.25, // 0.0 (quiet) to 1.0 (high macro impact)
+    val newsSentimentScore: Double = 0.10, // -1.0 (extremely bearish) to +1.0 (extremely bullish)
+    val hasUpcomingEarningsOrEvent: Boolean = false,
+    val eventImpactScore: Double = 0.0 // 0.0 (none) to 1.0 (severe high impact)
+) {
+    val eventDrivenScore: Double
+        get() {
+            val sentimentNorm = ((newsSentimentScore + 1.0) / 2.0).coerceIn(0.0, 1.0)
+            val macroPenalty = economicEventRisk * 0.30
+            val earningsPenalty = if (hasUpcomingEarningsOrEvent) eventImpactScore * 0.25 else 0.0
+            return (sentimentNorm - macroPenalty - earningsPenalty).coerceIn(0.05, 0.95)
+        }
+}
+
 data class ExitFactorMetrics(
     val atrExpansion: Double,
     val volatilityCompression: Double,
@@ -155,7 +190,9 @@ data class ExitFactorMetrics(
         adjustedUrgencyThreshold = AssetClassProfile.CRYPTO.urgencyThreshold,
         adjustedScaleOutR = 2.0,
         rationale = "Default calm volatility baseline."
-    )
+    ),
+    val orderBookMetrics: OrderBookMetrics = OrderBookMetrics(),
+    val eventDrivenMetrics: EventDrivenMetrics = EventDrivenMetrics()
 )
 
 data class ExitAssessmentResult(
@@ -230,9 +267,19 @@ object AdaptiveExitIntelligenceEngine {
         volumeHistory: List<Double> = emptyList(),
         economicEventRisk: Double = 0.25, // 0.0 (quiet) to 1.0 (high macro impact release imminent)
         newsSentimentScore: Double = 0.10, // -1.0 (extremely bearish) to +1.0 (extremely bullish)
-        assetClassProfile: AssetClassProfile? = null
+        assetClassProfile: AssetClassProfile? = null,
+        bidVolume: Double = 0.0,
+        askVolume: Double = 0.0,
+        orderFlowImbalance: Double = 0.0, // -1.0 (sell pressure) to +1.0 (buy pressure)
+        hasUpcomingEarningsOrEvent: Boolean = false,
+        eventImpactScore: Double = 0.0,
+        orderBookMetrics: OrderBookMetrics? = null,
+        eventDrivenMetrics: EventDrivenMetrics? = null
     ): ExitAssessmentResult {
         val profile = assetClassProfile ?: AssetClassProfile.inferFromSymbol(market)
+
+        val obMetrics = orderBookMetrics ?: OrderBookMetrics(bidVolume, askVolume, orderFlowImbalance)
+        val evMetrics = eventDrivenMetrics ?: EventDrivenMetrics(economicEventRisk, newsSentimentScore, hasUpcomingEarningsOrEvent, eventImpactScore)
 
         if (closingPrices.size < 10) {
             val unR = if (abs(entryPrice - initialStopLoss) > 1e-5) (currentPrice - entryPrice) / abs(entryPrice - initialStopLoss) else 0.0
@@ -250,7 +297,7 @@ object AdaptiveExitIntelligenceEngine {
             return ExitAssessmentResult(
                 action = ExitAction.HOLD,
                 confidencePct = 70.0,
-                metrics = ExitFactorMetrics(1.0, 1.0, 0.6, 0.2, 0.8, 1.5, unR, economicEventRisk, newsSentimentScore, profile, defaultAssessment),
+                metrics = ExitFactorMetrics(1.0, 1.0, 0.6, 0.2, 0.8, 1.5, unR, economicEventRisk, newsSentimentScore, profile, defaultAssessment, obMetrics, evMetrics),
                 rationale = "[${profile.displayName}] Insufficient price history for factor evaluation. Holding position."
             )
         }
@@ -275,27 +322,7 @@ object AdaptiveExitIntelligenceEngine {
         val longStd = calculateStdDev(closingPrices.takeLast(min(30, closingPrices.size)))
         val volatilityCompression = if (longStd > 1e-5) (shortStd / longStd).coerceIn(0.1, 2.0) else 1.0
 
-        // 5. Trend Continuation Probability
-        val last10 = closingPrices.takeLast(10)
-        val ema5 = calculateEma(last10, 5)
-        val ema10 = calculateEma(last10, 10)
-        val slope = (last10.last() - last10.first()) / (last10.first() * 10.0)
-        val trendContinuationProb = when {
-            ema5 > ema10 && slope > 0 -> (0.65 + min(0.3, slope * 20.0)).coerceIn(0.5, 0.95)
-            ema5 < ema10 && slope < 0 -> (0.35 - min(0.3, abs(slope) * 20.0)).coerceIn(0.05, 0.5)
-            else -> 0.50
-        }
-
-        // 6. Momentum Exhaustion
-        val rsi14 = calculateRsi(closingPrices, 14)
-        val momentumExhaustion = when {
-            rsi14 > 75.0 && slope < 0 -> 0.85
-            rsi14 > 80.0 -> 0.75
-            rsi14 < 30.0 -> 0.15
-            else -> ((rsi14 - 30.0) / 50.0).coerceIn(0.0, 1.0)
-        }
-
-        // 7. Liquidity Score
+        // Liquidity Score
         val liquidityScore = if (volumeHistory.size >= 5) {
             val avgVol = volumeHistory.takeLast(20).average()
             val recentVol = volumeHistory.takeLast(3).average()
@@ -307,7 +334,7 @@ object AdaptiveExitIntelligenceEngine {
         // Real-Time Volatility Assessment & Regime Classification
         val atrRatio = atrExpansion
         val stdDevRatio = if (volatilityCompression > 1e-5) 1.0 / volatilityCompression else 1.0
-        
+
         var maxDownsideVelocityPct = 0.0
         if (closingPrices.size >= 2) {
             val window = closingPrices.takeLast(min(5, closingPrices.size))
@@ -323,6 +350,41 @@ object AdaptiveExitIntelligenceEngine {
             atrRatio >= 1.35 || stdDevRatio >= 1.4 || economicEventRisk >= 0.60 || maxDownsideVelocityPct >= 1.2 -> VolatilityRegime.ELEVATED_STRESS
             else -> VolatilityRegime.CALM
         }
+
+        // 5. Trend Continuation Probability (Weighted average of Order Book 60%, Event-Driven 20%, Technical 20%, dynamically adjusted)
+        val orderBookScore = obMetrics.orderBookScore
+        val eventDrivenScore = evMetrics.eventDrivenScore
+
+        val last10 = closingPrices.takeLast(10)
+        val ema5 = calculateEma(last10, 5)
+        val ema10 = calculateEma(last10, 10)
+        val slope = (last10.last() - last10.first()) / (last10.first() * 10.0)
+        val technicalScore = when {
+            ema5 > ema10 && slope > 0 -> (0.65 + min(0.3, slope * 20.0)).coerceIn(0.5, 0.95)
+            ema5 < ema10 && slope < 0 -> (0.35 - min(0.3, abs(slope) * 20.0)).coerceIn(0.05, 0.5)
+            else -> 0.50
+        }
+
+        val (wOB, wEV, wTech) = when (regime) {
+            VolatilityRegime.FLASH_CRASH -> Triple(0.70, 0.20, 0.10)
+            VolatilityRegime.ELEVATED_STRESS -> Triple(0.65, 0.20, 0.15)
+            VolatilityRegime.CALM -> Triple(0.60, 0.20, 0.20)
+        }
+
+        val trendContinuationProb = ((orderBookScore * wOB) + (eventDrivenScore * wEV) + (technicalScore * wTech)).coerceIn(0.05, 0.95)
+
+        // 6. Momentum Exhaustion (RSI/Slope + Order Flow Imbalance & Sentiment)
+        val rsi14 = calculateRsi(closingPrices, 14)
+        val baseRsiExhaustion = when {
+            rsi14 > 80.0 -> 0.80
+            rsi14 > 75.0 && slope < 0 -> 0.85
+            rsi14 < 30.0 -> 0.15
+            else -> ((rsi14 - 30.0) / 50.0).coerceIn(0.0, 1.0)
+        }
+        val sellImbalanceExhaustionBoost = if (obMetrics.orderFlowImbalance < -0.2) abs(obMetrics.orderFlowImbalance) * 0.15 else 0.0
+        val adverseSentimentBoost = if (evMetrics.newsSentimentScore < -0.2) abs(evMetrics.newsSentimentScore) * 0.10 else 0.0
+
+        val momentumExhaustion = (baseRsiExhaustion + sellImbalanceExhaustionBoost + adverseSentimentBoost).coerceIn(0.0, 1.0)
 
         val adjustedTrailMultiplier = profile.atrTrailMultiplier * regime.trailMultiplierAdjustment
         val adjustedUrgencyThreshold = (profile.urgencyThreshold + regime.urgencyThresholdDelta).coerceAtLeast(35.0)
@@ -357,7 +419,9 @@ object AdaptiveExitIntelligenceEngine {
             economicEventRisk = economicEventRisk,
             newsSentimentScore = newsSentimentScore,
             assetClassProfile = profile,
-            volatilityAssessment = volatilityAssessment
+            volatilityAssessment = volatilityAssessment,
+            orderBookMetrics = obMetrics,
+            eventDrivenMetrics = evMetrics
         )
 
         // Composite Exit Urgency Score calibrated by AssetClassProfile & VolatilityRegime

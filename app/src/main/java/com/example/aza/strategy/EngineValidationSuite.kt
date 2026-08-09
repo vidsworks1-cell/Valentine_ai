@@ -132,6 +132,14 @@ object EngineValidationSuite {
                     } else 0.0
                     (random.nextGaussian() * 2.0) + spike
                 }
+                "CRASH", "FLASH_CRASH" -> {
+                    val shock = if (random.nextDouble() > 0.85) -5.5 else -0.8
+                    (random.nextGaussian() * 1.5) + shock
+                }
+                "BLACK_SWAN" -> {
+                    val shock = if (random.nextDouble() > 0.80) -11.0 else -2.0
+                    (random.nextGaussian() * 2.2) + shock
+                }
                 else -> random.nextGaussian() * 0.8
             }
 

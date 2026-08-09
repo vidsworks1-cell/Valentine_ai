@@ -13,7 +13,9 @@ enum class MarketRegime(val displayName: String) {
     TRENDING_UP("Trending Up"),
     TRENDING_DOWN("Trending Down"),
     RANGE_BOUND("Range Bound"),
-    LIQUIDITY_CRUNCH("Liquidity Crunch")
+    LIQUIDITY_CRUNCH("Liquidity Crunch"),
+    CRASH("Severe Market Crash"),
+    BLACK_SWAN("Black Swan Event")
 }
 
 data class ExecutionTelemetryRecord(

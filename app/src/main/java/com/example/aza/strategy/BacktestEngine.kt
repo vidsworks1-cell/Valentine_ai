@@ -2568,6 +2568,9 @@ object BacktestEngine {
             marketRegime.contains("HIGH_VOLATILITY") -> {
                 Tuple5(50.0, 50.0, 60.0, 40.0, "High volatility regime requires balanced allocation. 50% Trading / 50% Freelance Agent Services to buffer cash flow.")
             }
+            marketRegime.contains("BLACK_SWAN") -> {
+                Tuple5(5.0, 95.0, 10.0, 90.0, "Catastrophic Black Swan event detected! Global Long Freeze active. Emergency Capital Preservation slashed trading capital allocation to 5%, shifting 95% capital & 90% compute to risk-off Freelance Agent Services.")
+            }
             marketRegime.contains("FLASH_CRASH") || marketRegime.contains("CRASH") -> {
                 Tuple5(20.0, 80.0, 30.0, 70.0, "Extreme crash regime detected. Slashed Trading Capital to 20% to safeguard principal, shifting 80% capital & 70% compute to high-yield Freelance Agent Services.")
             }
