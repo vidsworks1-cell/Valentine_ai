@@ -833,6 +833,10 @@ object EngineValidationSuite {
         val substitutionOccurred = mtfFailContext.wasSubstituted
         val effectiveStrat = mtfFailContext.effectiveStrategy
 
+        // Case 4: Regime-Aware Risk Parity Framework 5-Year Calibration Validation
+        val riskParityTrendingReport = RegimeAwareRiskParityEngine.calibrate5YearRiskParityFramework(10000.0, "TRENDING")
+        val riskParityCrashReport = RegimeAwareRiskParityEngine.calibrate5YearRiskParityFramework(10000.0, "CRASH")
+
         return mapOf(
             "Guard 75.1% >= 70.0% Result" to if (guardResultPass.isPassed) "PASS (Correct)" else "FAIL (Bug)",
             "Guard Rationale String" to guardResultPass.rationale,
@@ -841,6 +845,10 @@ object EngineValidationSuite {
             "Meta Reasoning Overridden?" to if (mtfFailContext.isExecutionApproved) "YES (CRITICAL BUG)" else "NO (SAFE - Meta Reasoning blocked from overriding hard guard)",
             "Strategy Substituted?" to "$substitutionOccurred (${mtfFailContext.originalStrategy} -> $effectiveStrat)",
             "Substitution Rationale" to mtfFailContext.substitutionReason,
+            "Risk Parity Trending Sharpe" to String.format(Locale.US, "%.2f (Target >= 1.20 | %s)", riskParityTrendingReport.sharpeRatio, if (riskParityTrendingReport.sharpeRatioConstraintMet) "PASSED" else "FAILED"),
+            "Risk Parity Trending Max DD" to String.format(Locale.US, "%.2f%% (Target <= 10.0%% | %s)", riskParityTrendingReport.maxDrawdownPct, if (riskParityTrendingReport.maxDrawdownConstraintMet) "PASSED" else "FAILED"),
+            "Risk Parity Trending Return" to String.format(Locale.US, "%.2f%% (Target >= 15.0%% | %s)", riskParityTrendingReport.annualizedReturnPct, if (riskParityTrendingReport.expectedReturnConstraintMet) "PASSED" else "FAILED"),
+            "Risk Parity Crash Status" to riskParityCrashReport.frameworkStatus,
             "Decision Context Version" to mtfFailContext.pipelineVersion
         )
     }

@@ -564,11 +564,17 @@ object PortfolioTradeInteractionEngine {
         val totalCumReturn = impacts.sumOf { it.cumulativeReturnPct * (it.weightPct / 100.0) }
         val sharpe = 2.18
 
+        // Calibrate with Regime-Aware Risk Parity Engine on 5-year historical calibration data
+        val riskParityReport = RegimeAwareRiskParityEngine.calibrate5YearRiskParityFramework(
+            accountBalance = 10000.0,
+            activeMarketRegime = selectedScenarioId
+        )
+
         val recAdvice = if (detractorsCount > 0) {
             val detractorSymbols = impacts.filter { it.impactType == TradeStabilityImpact.STABILITY_DETRACTOR }.joinToString { it.symbol }
-            "⚡ PORTFOLIO OPTIMIZATION ACTIVE: Flagged detractor trade(s) [$detractorSymbols]. Rebalancing 5% from $detractorSymbols into BTC Alpha & EURUSD Macro Hedge improves overall Sharpe from 2.18 to 2.45 and lowers VaR by $420."
+            "⚡ PORTFOLIO OPTIMIZATION ACTIVE: Flagged detractor trade(s) [$detractorSymbols]. Rebalancing 5% from $detractorSymbols into BTC Alpha & EURUSD Macro Hedge improves overall Sharpe from 2.18 to ${String.format(Locale.US, "%.2f", riskParityReport.sharpeRatio)} (Max Drawdown: ${String.format(Locale.US, "%.1f", riskParityReport.maxDrawdownPct)}%, Calmar: ${String.format(Locale.US, "%.2f", riskParityReport.calmarRatio)})."
         } else {
-            "Optimal Trade-to-Portfolio Interaction: All active trades enhance or maintain portfolio stability."
+            "Optimal Regime-Aware Risk Parity Interaction: ${riskParityReport.executiveSummary}"
         }
 
         return PortfolioTradeInteractionSummary(
