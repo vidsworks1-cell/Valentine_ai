@@ -927,6 +927,19 @@ object StrategyEvaluationEngine {
     ): DecisionContext {
         val currentRegime = if (prices.size >= 5) detectMarketRegime(prices) else "LOW_VOLATILITY_RANGING"
 
+        // Dynamically calibrate effective MTF Threshold based on active market regime if default (66.0) was provided
+        val effectiveMtfThreshold = if (mtfThreshold == 66.0) {
+            when (currentRegime.uppercase(Locale.US)) {
+                "RANGING", "LOW_VOLATILITY_RANGING", "ACCUMULATION" -> 62.0
+                "TRENDING", "STRONG_BULL", "HIGH_VOLATILITY_TRENDING" -> 68.0
+                "HIGH_VOLATILITY", "HIGH_VOLATILITY_RANGING", "VOLATILE" -> 65.0
+                "CRASH", "BLACK_SWAN", "FLASH_CRASH" -> 72.0
+                else -> 66.0
+            }
+        } else {
+            mtfThreshold
+        }
+
         // Step 1: Strategy Substitution Evaluation
         val subResult = evaluateStrategySubstitution(
             requestedStrategy = requestedStrategy,
@@ -986,7 +999,7 @@ object StrategyEvaluationEngine {
 
         // Step 4: Evaluate Institutional MTF Diagnostics
         val mtfDiagnostics = if (timeframeStates.isNotEmpty()) {
-            MtfEvaluator.evaluateMtfDiagnostics(side, timeframeStates, mtfThreshold)
+            MtfEvaluator.evaluateMtfDiagnostics(side, timeframeStates, effectiveMtfThreshold)
         } else {
             val bias = if (side.equals("BUY", ignoreCase = true)) "BULLISH" else "BEARISH"
             val opposite = if (side.equals("BUY", ignoreCase = true)) "BEARISH" else "BULLISH"
@@ -1015,7 +1028,7 @@ object StrategyEvaluationEngine {
                     TimeframeState("15m", bias, 0.60)
                 )
             }
-            MtfEvaluator.evaluateMtfDiagnostics(side, defaultStates, mtfThreshold)
+            MtfEvaluator.evaluateMtfDiagnostics(side, defaultStates, effectiveMtfThreshold)
         }
 
         // Step 5: Evaluate Guards cleanly
