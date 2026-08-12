@@ -246,7 +246,8 @@ object RegimeAwareRiskParityEngine {
         val riskFreeRatePct = 2.0 // 2% risk-free rate assumption
         val excessReturnPct = max(0.0, finalAnnualizedReturnPct - riskFreeRatePct)
         val sharpeRatio = if (annualVolPct > 0.01) excessReturnPct / annualVolPct else 1.85
-        val calmarRatio = if (finalMaxDrawdownPct > 0.01) finalAnnualizedReturnPct / finalMaxDrawdownPct else 3.20
+        val effectiveMaxDrawdownPct = finalMaxDrawdownPct.coerceAtLeast(0.5)
+        val calmarRatio = (finalAnnualizedReturnPct / effectiveMaxDrawdownPct).coerceIn(-10.0, 20.0)
         val sortinoRatio = if (downsideAnnualVolPct > 0.01) excessReturnPct / downsideAnnualVolPct else 2.40
         val profitFactor = if (grossLosses > 1e-5) grossProfits / grossLosses else 2.80
 

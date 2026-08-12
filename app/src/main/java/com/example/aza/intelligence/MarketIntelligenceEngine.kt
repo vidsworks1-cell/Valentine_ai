@@ -377,10 +377,9 @@ class MarketIntelligenceEngine(
             
             val topOp = rankedOps.first()
             
-            val isRangingRegime = topOp.currentRegime.uppercase(Locale.US).contains("RANGE") || topOp.currentRegime.uppercase(Locale.US).contains("RANGING")
-            val regimeConfidenceThreshold = if (isRangingRegime) 0.80 else 0.75
+            val regimeConfidenceThreshold = calculateRegimeAwareConfidenceThreshold(topOp.strategy, topOp.currentRegime)
             
-            // If top opportunity exceeds threshold (0.80 for Ranging, 0.75 for Trending), pass through Multi-Agent Consensus & Validation Pipeline
+            // If top opportunity exceeds regime-aware adaptive threshold, pass through Multi-Agent Consensus & Validation Pipeline
             if (topOp.confidence >= regimeConfidenceThreshold) {
                 addThought("Initiating Multi-Agent Consensus and Safety Gate Validation for ${topOp.symbol}...")
                 
@@ -455,7 +454,7 @@ class MarketIntelligenceEngine(
                     addThought("Validation failed: Multi-Agent Consensus score too low (${String.format(Locale.US, "%.1f", consensusResult.score * 100.0)}% < 80%)")
                 }
             } else {
-                addThought("No opportunities met the minimum ${if (isRangingRegime) "80%" else "75%"} confidence threshold for proposal creation.")
+                addThought("No opportunities met the minimum ${String.format(Locale.US, "%.1f%%", regimeConfidenceThreshold * 100.0)} confidence threshold for proposal creation.")
             }
         }
 
@@ -465,6 +464,33 @@ class MarketIntelligenceEngine(
         getConfidenceCalibrationReport()
         calculateStrategyCapitalAllocations()
         generateContinuousSelfEvaluationReport()
+    }
+
+    fun calculateRegimeAwareConfidenceThreshold(
+        strategyName: String,
+        regime: String,
+        volatilityState: String = "NORMAL",
+        recentReturnsR: List<Double> = emptyList()
+    ): Double {
+        val cleanRegime = regime.uppercase(Locale.US)
+        
+        // 1. Base regime threshold
+        val baseThreshold = when {
+            cleanRegime.contains("VOLATILE") || cleanRegime.contains("CRITICAL") || cleanRegime.contains("CHAOTIC") -> 0.82
+            cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || cleanRegime.contains("ACCUMULATION") || cleanRegime.contains("DISTRIBUTION") -> 0.78
+            cleanRegime.contains("STRONG_BULL") || cleanRegime.contains("STRONG_BEAR") || cleanRegime.contains("TRENDING") -> 0.72
+            else -> 0.75
+        }
+
+        // 2. Counterfactual adaptation offset from LuminaSelfAdaptationEngine
+        val counterfactualRec = com.example.aza.strategy.LuminaSelfAdaptationEngine.evaluateAggregatedCounterfactuals(strategyName)
+        val counterfactualOffset = counterfactualRec.recommendedThresholdAdjustment
+
+        // 3. Return Distribution Shift offset from LuminaSelfAdaptationEngine
+        val distShiftReport = com.example.aza.strategy.LuminaSelfAdaptationEngine.ReturnDistributionShiftEngine.evaluateShift(recentReturnsR)
+        val distShiftOffset = distShiftReport.thresholdOffset
+
+        return (baseThreshold + counterfactualOffset + distShiftOffset).coerceIn(0.65, 0.88)
     }
 
     fun isStrategyStrictlyCompatibleWithRegime(strategyName: String, regime: String): Boolean {

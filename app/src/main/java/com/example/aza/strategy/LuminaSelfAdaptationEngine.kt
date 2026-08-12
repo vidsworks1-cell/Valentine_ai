@@ -706,4 +706,90 @@ object LuminaSelfAdaptationEngine {
 
         fun getModelMetrics(): Pair<Int, Double> = Pair(totalTrainSteps, recentCumulativeLoss)
     }
+
+    /**
+     * Return Distribution Shift Engine: Evaluates rolling return skewness, kurtosis, and distribution distance.
+     * Detects asymmetrical fat-tail downside risk and structural regime shifts.
+     */
+    object ReturnDistributionShiftEngine {
+        data class DistributionShiftReport(
+            val isShiftDetected: Boolean,
+            val skewness: Double,
+            val excessKurtosis: Double,
+            val wassersteinDistance: Double,
+            val riskScaleFactor: Double,
+            val thresholdOffset: Double,
+            val rationale: String
+        )
+
+        fun evaluateShift(recentReturnsR: List<Double>, benchmarkReturnsR: List<Double> = emptyList()): DistributionShiftReport {
+            if (recentReturnsR.size < 10) {
+                return DistributionShiftReport(
+                    isShiftDetected = false,
+                    skewness = 0.0,
+                    excessKurtosis = 0.0,
+                    wassersteinDistance = 0.0,
+                    riskScaleFactor = 1.0,
+                    thresholdOffset = 0.0,
+                    rationale = "Insufficient sample size (N=${recentReturnsR.size} < 10); distribution shift check bypassed."
+                )
+            }
+
+            val n = recentReturnsR.size.toDouble()
+            val mean = recentReturnsR.average()
+            val sumSq = recentReturnsR.map { val d = it - mean; d * d }.sum()
+            val variance = sumSq / n
+            val stdDev = kotlin.math.sqrt(variance).coerceAtLeast(1e-5)
+
+            // Calculate Skewness: E[(X-mu)^3] / stdDev^3
+            val sumCube = recentReturnsR.map { val d = it - mean; d * d * d }.sum()
+            val skewness = (sumCube / n) / (stdDev * stdDev * stdDev)
+
+            // Calculate Excess Kurtosis: E[(X-mu)^4] / stdDev^4 - 3.0
+            val sumFourth = recentReturnsR.map { val d = it - mean; d * d * d * d }.sum()
+            val excessKurtosis = ((sumFourth / n) / (stdDev * stdDev * stdDev * stdDev)) - 3.0
+
+            // Calculate 1D Wasserstein / Earth Mover's Distance if benchmark returns available
+            val wassersteinDist = if (benchmarkReturnsR.size >= 10) {
+                val sorted1 = recentReturnsR.sorted()
+                val sorted2 = benchmarkReturnsR.sorted()
+                val minLen = minOf(sorted1.size, sorted2.size)
+                (0 until minLen).map { Math.abs(sorted1[it] - sorted2[it]) }.sum() / minLen.toDouble()
+            } else 0.0
+
+            val isNegativeSkewSpike = skewness < -1.0
+            val isFatTailKurtosis = excessKurtosis > 3.0
+            val isDistributionShift = wassersteinDist > 0.25
+
+            val isShiftDetected = isNegativeSkewSpike || isFatTailKurtosis || isDistributionShift
+
+            val riskScale = when {
+                isNegativeSkewSpike && isFatTailKurtosis -> 0.50 // Heavy fat-tail downside risk
+                isShiftDetected -> 0.70                          // Moderate distribution shift
+                else -> 1.00
+            }
+
+            val thresholdOffset = when {
+                isNegativeSkewSpike && isFatTailKurtosis -> +0.05
+                isShiftDetected -> +0.03
+                else -> 0.0
+            }
+
+            val rationale = if (isShiftDetected) {
+                "⚠️ RETURN DISTRIBUTION SHIFT DETECTED: Skewness=${String.format(Locale.US, "%.2f", skewness)}, Excess Kurtosis=${String.format(Locale.US, "%.2f", excessKurtosis)}, Wasserstein Dist=${String.format(Locale.US, "%.2f", wassersteinDist)} -> Scaling risk to ${String.format(Locale.US, "%.0f%%", riskScale * 100.0)}, Threshold Offset: +${String.format(Locale.US, "%.2f", thresholdOffset)}"
+            } else {
+                "Return distribution stable: Skewness=${String.format(Locale.US, "%.2f", skewness)}, Excess Kurtosis=${String.format(Locale.US, "%.2f", excessKurtosis)}."
+            }
+
+            return DistributionShiftReport(
+                isShiftDetected = isShiftDetected,
+                skewness = skewness,
+                excessKurtosis = excessKurtosis,
+                wassersteinDistance = wassersteinDist,
+                riskScaleFactor = riskScale,
+                thresholdOffset = thresholdOffset,
+                rationale = rationale
+            )
+        }
+    }
 }

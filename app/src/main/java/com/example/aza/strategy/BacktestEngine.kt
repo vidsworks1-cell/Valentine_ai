@@ -1643,7 +1643,8 @@ object BacktestEngine {
         val durationDays = max(1.0, totalDurationMin / 1440.0)
         val annualizedReturn = if (initialBalance > 0) ((netProfit / initialBalance) * (365.0 / durationDays)) * 100.0 else 0.0
 
-        val calmarRatio = if (maxDrawdownPct > 0.0) (annualizedReturn / maxDrawdownPct) else (annualizedReturn / 1.0)
+        val effectiveMaxDrawdownPct = maxDrawdownPct.coerceAtLeast(0.5)
+        val calmarRatio = (annualizedReturn / effectiveMaxDrawdownPct).coerceIn(-10.0, 20.0)
         val expectancyUSD = if (total > 0) netProfit / total else 0.0
 
         return AdvancedPerformanceMetrics(
@@ -2116,7 +2117,8 @@ object BacktestEngine {
         
         val sharpe = if (maxDd > 0) ((returnPct / maxDd) * 1.8).coerceIn(-3.0, 5.0) else 2.5
         val sortino = if (maxDd > 0) ((returnPct / maxDd) * 2.4).coerceIn(-3.0, 6.0) else 3.2
-        val calmar = if (maxDd > 0) (returnPct / maxDd).coerceIn(-5.0, 10.0) else 1.0
+        val effectiveDd = maxDd.coerceAtLeast(0.5)
+        val calmar = (returnPct / effectiveDd).coerceIn(-10.0, 20.0)
 
         val status = when {
             maxDd <= 12.0 && netProfit >= -100.0 -> "PASS - RESILIENT"
