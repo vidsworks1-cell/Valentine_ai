@@ -215,6 +215,20 @@ object LuminaSelfAdaptationEngine {
             
             // Update Strategy Elo rating based on trade performance
             updateStrategyElo(key, isWin, pnlR)
+
+            // Trigger Online SGD Machine Learning Model Weight Update
+            val eloVal = getStrategyElo(key)
+            val totalT = table.sumOf { it.totalTrades }
+            val winsT = table.sumOf { it.winningTrades }
+            val wrPct = if (totalT > 0) (winsT.toDouble() / totalT) * 100.0 else 50.0
+            OnlineConfidenceMLEngine.updateOnlineSGD(
+                rawConfidence = predictedConfidence,
+                metaConviction = 75.0,
+                volatilityRatio = 1.0,
+                eloRating = eloVal,
+                winRatePct = wrPct,
+                actualOutcomeWon = isWin
+            )
         }
     }
 
@@ -487,13 +501,30 @@ object LuminaSelfAdaptationEngine {
             baseCalibratedProb
         }
 
-        // Apply Bayesian Shrinkage dampening for Mean Reversion when recent expectancy is negative or win rate < 50%
+        // Multi-tier Bayesian Shrinkage dampening for Mean Reversion
         val isMeanReversion = strategyName.contains("Mean Reversion", ignoreCase = true)
-        val meanReversionDampener = if (isMeanReversion && (blendedWR < 50.0 || blendedExp <= 0.0)) {
-            -0.08
+        val meanReversionDampener = if (isMeanReversion) {
+            when {
+                blendedWR < 45.0 || blendedExp < -0.10 -> -0.12 // Severe dampening when win rate < 45% or negative expectancy
+                blendedWR < 50.0 || blendedExp <= 0.0 -> -0.08  // Moderate dampening when win rate < 50%
+                marketRegime.contains("TRENDING", ignoreCase = true) && !marketRegime.contains("PULLBACK", ignoreCase = true) -> -0.05 // Gentle dampening in strong trending non-pullback regimes
+                else -> 0.0
+            }
         } else 0.0
 
-        val calibratedProb = (calibratedProbRaw + meanReversionDampener).coerceIn(0.10, 0.98)
+        val empiricalCalibratedProb = (calibratedProbRaw + meanReversionDampener).coerceIn(0.10, 0.98)
+
+        // Online Machine Learning Confidence Model Prediction
+        val currentElo = getStrategyElo(strategyName)
+        val mlProb = OnlineConfidenceMLEngine.predict(
+            rawConfidence = targetConf,
+            metaConviction = metaConviction,
+            volatilityRatio = 1.0,
+            eloRating = currentElo,
+            winRatePct = blendedWR
+        )
+        // Blend Empirical Bayesian probability (70%) with ML Model prediction (30%)
+        val calibratedProb = ((empiricalCalibratedProb * 0.70) + (mlProb * 0.30)).coerceIn(0.10, 0.98)
 
         // Calculate Holistic Strategy Quality (0 to 100)
         // Expectancy E[R] is the primary measure of trading edge rather than raw confidence
@@ -527,6 +558,9 @@ object LuminaSelfAdaptationEngine {
             append("Capital Eligibility: ${String.format(Locale.US, "%.2f", capitalEligibilityScore)} | ")
             append("Uncertainty: $uncertainty (N=$totalTrades, CI Width: ${String.format(Locale.US, "%.2f", ciWidth)}) | ")
             append("Calibrated Conf: ${String.format(Locale.US, "%.2f", calibratedProb)} (Raw: ${String.format(Locale.US, "%.2f", rawConfidence)})")
+            if (isMeanReversion) {
+                append(" | [MEAN REVERSION SAFEGUARD] Wilson Bound (z=2.326): ${String.format(Locale.US, "%.1f%%", wilsonLower * 100)}, Bayesian Shrinkage Dampener: ${String.format(Locale.US, "%.2f", meanReversionDampener)}")
+            }
         }
 
         return CalibrationBreakdown(
@@ -609,5 +643,67 @@ object LuminaSelfAdaptationEngine {
         counterfactualLedger.clear()
         currentStrategyStates.clear()
         lastStateTransitionTradeCounts.clear()
+    }
+
+    /**
+     * Online Stochastic Gradient Descent (SGD) Machine Learning Model for Real-Time Confidence Calibration.
+     * Feature Vector X: [RawConf, MetaConviction, VolatilityRatio, StrategyEloZ, RollingWinRate, Bias]
+     */
+    object OnlineConfidenceMLEngine {
+        // Initial Feature Weights
+        private val weights = doubleArrayOf(0.80, 0.60, -0.20, 0.40, 0.50, -0.30)
+        private const val learningRate = 0.04
+        private const val l2Reg = 0.001
+        private var totalTrainSteps = 0
+        private var recentCumulativeLoss = 0.22
+
+        fun predict(
+            rawConfidence: Double,
+            metaConviction: Double,
+            volatilityRatio: Double = 1.0,
+            eloRating: Double = 1500.0,
+            winRatePct: Double = 50.0
+        ): Double {
+            val eloZ = (eloRating - 1500.0) / 400.0
+            val wr = (winRatePct / 100.0).coerceIn(0.0, 1.0)
+            val z = (rawConfidence * weights[0]) +
+                    ((metaConviction / 100.0) * weights[1]) +
+                    (volatilityRatio * weights[2]) +
+                    (eloZ * weights[3]) +
+                    (wr * weights[4]) +
+                    weights[5]
+            return 1.0 / (1.0 + Math.exp(-z))
+        }
+
+        fun updateOnlineSGD(
+            rawConfidence: Double,
+            metaConviction: Double,
+            volatilityRatio: Double,
+            eloRating: Double,
+            winRatePct: Double,
+            actualOutcomeWon: Boolean
+        ) {
+            val y = if (actualOutcomeWon) 1.0 else 0.0
+            val pHat = predict(rawConfidence, metaConviction, volatilityRatio, eloRating, winRatePct)
+            val error = y - pHat
+            val loss = - (y * Math.log(pHat.coerceAtLeast(1e-6)) + (1 - y) * Math.log((1 - pHat).coerceAtLeast(1e-6)))
+            recentCumulativeLoss = (recentCumulativeLoss * 0.95) + (loss * 0.05)
+
+            val x = doubleArrayOf(
+                rawConfidence,
+                metaConviction / 100.0,
+                volatilityRatio,
+                (eloRating - 1500.0) / 400.0,
+                winRatePct / 100.0,
+                1.0
+            )
+
+            for (i in weights.indices) {
+                weights[i] += learningRate * (error * x[i] - l2Reg * weights[i])
+            }
+            totalTrainSteps++
+        }
+
+        fun getModelMetrics(): Pair<Int, Double> = Pair(totalTrainSteps, recentCumulativeLoss)
     }
 }
