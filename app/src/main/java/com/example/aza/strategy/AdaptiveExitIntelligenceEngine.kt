@@ -483,13 +483,16 @@ object AdaptiveExitIntelligenceEngine {
                 )
             }
             // Scale Out: High unrealized R (>= adjustedScaleOutR) and momentum exhaustion starting to rise
-            unrealizedR >= adjustedScaleOutR && momentumExhaustion > 0.55 -> {
+            unrealizedR >= adjustedScaleOutR && momentumExhaustion > 0.45 -> {
+                val isStrongTrendRunner = trendContinuationProb >= 0.65 && momentumExhaustion <= 0.60
+                val scaleOutPct = if (isStrongTrendRunner) 0.25 else 0.50
+                val scaleLabel = if (isStrongTrendRunner) "25% Partial TP1 Runner Preserved" else "50% Standard Scale Out"
                 ExitAssessmentResult(
                     action = ExitAction.SCALE_OUT,
                     confidencePct = 83.5,
                     metrics = metrics,
-                    scaleOutPercentage = 0.50,
-                    rationale = "[${profile.displayName}] Dynamic Scale Out (50% | ${regime.displayName}): Unrealized profit (${String.format(Locale.US, "%.2f", unrealizedR)}R) crossed target (${String.format(Locale.US, "%.2f", adjustedScaleOutR)}R) with rising exhaustion (${String.format(Locale.US, "%.1f", momentumExhaustion * 100)}%)."
+                    scaleOutPercentage = scaleOutPct,
+                    rationale = "[${profile.displayName}] Dynamic Scale Out ($scaleLabel | ${regime.displayName}): Unrealized profit (${String.format(Locale.US, "%.2f", unrealizedR)}R) crossed target (${String.format(Locale.US, "%.2f", adjustedScaleOutR)}R) with continuation prob (${String.format(Locale.US, "%.1f", trendContinuationProb * 100)}%)."
                 )
             }
             // Trail Stop: Dynamic ATR trailing stop using adjusted trail multiplier

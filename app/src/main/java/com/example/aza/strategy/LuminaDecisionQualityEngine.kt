@@ -40,16 +40,31 @@ data class QualityDimensionScores(
 ) {
     /**
      * Composite Decision Quality Score (DQS) evaluating process rigor independent of outcome.
+     * Category weights are dynamically scaled according to the active market regime.
      */
-    fun calculateDecisionQualityScore(): Double {
-        val weightedScore = (signalQuality * 0.15) +
-                (strategyQuality * 0.15) +
-                (mtfQuality * 0.15) +
-                (liquidityQuality * 0.10) +
-                (metaReasoningQuality * 0.15) +
-                (riskSizingQuality * 0.10) +
-                (portfolioDecisionQuality * 0.15) +
-                (executionQuality * 0.05)
+    fun calculateDecisionQualityScore(marketRegime: String = "RANGE"): Double {
+        val weights = when (marketRegime.uppercase(Locale.US)) {
+            "TRENDING", "TRENDING_UP", "TRENDING_DOWN", "BULL", "BEAR" -> {
+                // HTF Alignment (25%) & Strategy/Momentum (20%) priority
+                doubleArrayOf(0.15, 0.20, 0.25, 0.05, 0.15, 0.08, 0.07, 0.05)
+            }
+            "VOLATILE", "HIGH_VOLATILITY", "ELEVATED_STRESS", "FLASH_CRASH" -> {
+                // Liquidity & Order Flow Absorption (35%) & Risk Sizing (20%) priority
+                doubleArrayOf(0.10, 0.10, 0.05, 0.35, 0.10, 0.20, 0.05, 0.05)
+            }
+            else -> {
+                // Baseline RANGE_BOUND / RANGING weights
+                doubleArrayOf(0.15, 0.15, 0.15, 0.10, 0.15, 0.10, 0.15, 0.05)
+            }
+        }
+        val weightedScore = (signalQuality * weights[0]) +
+                (strategyQuality * weights[1]) +
+                (mtfQuality * weights[2]) +
+                (liquidityQuality * weights[3]) +
+                (metaReasoningQuality * weights[4]) +
+                (riskSizingQuality * weights[5]) +
+                (portfolioDecisionQuality * weights[6]) +
+                (executionQuality * weights[7])
         return weightedScore.coerceIn(0.0, 100.0)
     }
 }
@@ -120,10 +135,11 @@ object LuminaDecisionQualityEngine {
         primarySubsystem: String,
         qualityDimensions: QualityDimensionScores,
         pnlUSD: Double, // Realized PnL if approved, hypothetical PnL if rejected
-        counterfactualOutcome: CounterfactualOutcome? = null
+        counterfactualOutcome: CounterfactualOutcome? = null,
+        marketRegime: String = "RANGE"
     ): DecisionEvaluationRecord {
 
-        val dqsScore = qualityDimensions.calculateDecisionQualityScore()
+        val dqsScore = qualityDimensions.calculateDecisionQualityScore(marketRegime)
         val isTradeWon = pnlUSD > 0.0
 
         // 1. Matrix Classification
@@ -204,6 +220,7 @@ object LuminaDecisionQualityEngine {
             "PortfolioExecutionEngine"
         }
 
+        val marketRegime = context.marketRegime ?: "RANGE"
         return evaluateAndRecordDecision(
             decisionId = context.id,
             symbol = context.symbol,
@@ -211,7 +228,8 @@ object LuminaDecisionQualityEngine {
             primarySubsystem = primarySubsystem,
             qualityDimensions = dimensions,
             pnlUSD = pnlUSD,
-            counterfactualOutcome = counterfactualOutcome
+            counterfactualOutcome = counterfactualOutcome,
+            marketRegime = marketRegime
         )
     }
 

@@ -21,13 +21,13 @@ class MarketRegimeHMMFilter {
         val STATE_NAMES = listOf("BULL", "BEAR", "RANGE", "VOLATILE")
     }
 
-    // --- Calibrated Markov Transition Matrix (High Self-Transition Priors to reflect historical stability) ---
+    // --- Calibrated Markov Transition Matrix (High Self-Transition Priors with Responsive Volatility Off-Diagonals) ---
     private val transitionMatrix = arrayOf(
         // From: BULL, BEAR, RANGE, VOLATILE
-        doubleArrayOf(0.92, 0.02, 0.05, 0.01),     // To BULL
-        doubleArrayOf(0.02, 0.90, 0.05, 0.03),     // To BEAR
-        doubleArrayOf(0.04, 0.03, 0.91, 0.02),     // To RANGE
-        doubleArrayOf(0.02, 0.05, 0.03, 0.90)      // To VOLATILE
+        doubleArrayOf(0.91, 0.02, 0.05, 0.02),     // To BULL
+        doubleArrayOf(0.02, 0.88, 0.05, 0.05),     // To BEAR
+        doubleArrayOf(0.04, 0.03, 0.88, 0.05),     // To RANGE
+        doubleArrayOf(0.03, 0.07, 0.06, 0.88)      // To VOLATILE (Increased transition priors from BEAR/RANGE to capture volatility spikes faster)
     )
 
     // --- State GMM Likelihood Means and Standard Deviations ---
@@ -53,7 +53,11 @@ class MarketRegimeHMMFilter {
     // Configurable parameters
     var exponentialSmoothingAlpha = 0.25  // Exponential filter weight (gamma)
     var medianWindowSize = 5               // Running median window size to eliminate jitter
-    var infoShockThreshold = 0.65          // KL Divergence threshold for Information Shock
+    var infoShockThreshold = 0.45          // Calibrated KL Divergence threshold for Information Shock (Fast-path trigger)
+    
+    // Volatility Exit Hysteresis Counter (prevents micro-quiet whipsaws when exiting VOLATILE)
+    private var volatileCooldownCount = 0
+    private var currentActiveRegime = "RANGE"
     
     // --- Dual-Path Parameters (Adaptive vs Invariant Paths) ---
     var fastAlpha = 0.60                  // Fast path: high-speed tracking (highly responsive alpha)
@@ -215,12 +219,38 @@ class MarketRegimeHMMFilter {
         val fusedCandidateIdx = fusedProbs.indices.maxByOrNull { fusedProbs[it] } ?: STATE_RANGE
         val candidateRegime = STATE_NAMES[fusedCandidateIdx]
 
-        // Keep standard regimeDecisionHistory for backwards compatibility
+        // Keep standard regimeDecisionHistory for running median filter
         regimeDecisionHistory.add(candidateRegime)
         if (regimeDecisionHistory.size > medianWindowSize) {
             regimeDecisionHistory.removeAt(0)
         }
-        val finalRegime = getMajorityVote(regimeDecisionHistory)
+        val medianRegime = getMajorityVote(regimeDecisionHistory)
+
+        // --- SHOCK OVERRIDE & HYSTERESIS RESOLUTION ---
+        val rawRegime = if (isInformationShockDetected || candidateRegime == "VOLATILE" && fastRegime == "VOLATILE") {
+            // Instant Shock Override: Bypass running median delay during high KL shock or dual fast VOLATILE alignment
+            candidateRegime
+        } else {
+            medianRegime
+        }
+
+        // Apply 2-bar Cooldown Hysteresis when transitioning OUT of VOLATILE
+        val finalRegime = if (currentActiveRegime == "VOLATILE" && rawRegime != "VOLATILE") {
+            if (volatileCooldownCount < 2) {
+                volatileCooldownCount++
+                "VOLATILE" // Hold VOLATILE for cooldown buffer to prevent micro-quiet whipsaws
+            } else {
+                volatileCooldownCount = 0
+                currentActiveRegime = rawRegime
+                rawRegime
+            }
+        } else {
+            if (rawRegime == "VOLATILE") {
+                volatileCooldownCount = 0
+            }
+            currentActiveRegime = rawRegime
+            rawRegime
+        }
 
         Log.d(TAG, String.format(
             Locale.US,

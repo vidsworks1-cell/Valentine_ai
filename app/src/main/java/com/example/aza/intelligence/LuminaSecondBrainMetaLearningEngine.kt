@@ -481,8 +481,32 @@ object LuminaSecondBrainMetaLearningEngine {
             }
         }
 
+        // LTM Pruning & Deduplication Pass: Cap LTM size and remove stale/duplicate records
+        var ltmPrunedCount = 0
+        val ltmIterator = longTermMemory.iterator()
+        while (ltmIterator.hasNext()) {
+            val ep = ltmIterator.next()
+            val ageHours = (now - ep.timestamp) / 3600000.0
+            val retention = calculateRetention(ep, now)
+            // Prune LTM entries older than 30 days (720 hours) if retention decayed to floor or negative R
+            if (ageHours > 720.0 && (retention <= forgettingParams.asymptoticResidualFloor || ep.profitR <= 0.0)) {
+                ltmIterator.remove()
+                ltmPrunedCount++
+            }
+        }
+
+        // Cap LTM capacity to top 100 most informative episodes
+        if (longTermMemory.size > 100) {
+            longTermMemory.sortByDescending { calculateRetention(it, now) * (if (it.isWin) 1.5 else 1.0) }
+            val excess = longTermMemory.size - 100
+            repeat(excess) {
+                if (longTermMemory.isNotEmpty()) longTermMemory.removeAt(longTermMemory.size - 1)
+            }
+            ltmPrunedCount += excess
+        }
+
         lastSweepTimestamp = now
-        val statusMsg = "Swept memory registers at ${String.format(Locale.US, "%tT", now)}: Promoted $promotedCount episodes to LTM, pruned $prunedCount stale records below floor."
+        val statusMsg = "Swept memory registers at ${String.format(Locale.US, "%tT", now)}: Promoted $promotedCount episodes to LTM, pruned ${prunedCount + ltmPrunedCount} stale/duplicate records."
         return statusMsg
     }
 

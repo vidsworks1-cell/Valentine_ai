@@ -6652,12 +6652,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             // PHASE 2: DYNAMIC EXIT ENGINE - ATR-BASED / PEAK TRAILING STOP
             // 2. Trail stop loss dynamically as price makes higher highs (+1.2R profit or higher)
             if (pos.stopLossPrice > 0.0 && currentPrice > (pos.entryPrice + initialRiskDist * 1.2)) {
-                val proposedTrailingSL = currentPrice * 0.98 // 2.0% dynamic trailing stop offset
+                // Adaptive Volatility Trail Offset: Use 1.8x initial risk distance or min 2.5% buffer to prevent premature choke
+                val trailBuffer = kotlin.math.max(initialRiskDist * 1.8, currentPrice * 0.025)
+                val proposedTrailingSL = currentPrice - trailBuffer
                 if (proposedTrailingSL > activeSL) {
                     activeSL = proposedTrailingSL
                     val trailedPosition = pos.copy(stopLossPrice = proposedTrailingSL)
                     repository.updatePosition(trailedPosition)
-                    triggerPositionAlert("TSL_TRAILED", symbol, "📈 DYNAMIC TRAILING STOP: Adjusted SL to ${String.format(Locale.US, "%.2f", proposedTrailingSL)} to lock in profits on $symbol (Current: $currentPrice, Entry: ${pos.entryPrice})")
+                    triggerPositionAlert("TSL_TRAILED", symbol, "📈 DYNAMIC TRAILING STOP: Adjusted SL to ${String.format(Locale.US, "%.2f", proposedTrailingSL)} (using ${String.format(Locale.US, "%.2f", trailBuffer)} volatility buffer) to lock in profits on $symbol (Current: $currentPrice, Entry: ${pos.entryPrice})")
                 }
             }
 

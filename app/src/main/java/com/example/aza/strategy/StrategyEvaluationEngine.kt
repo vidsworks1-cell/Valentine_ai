@@ -1055,12 +1055,19 @@ object StrategyEvaluationEngine {
         val mtfGuardPassed = mtfDiagnostics.mtfStatus == MtfAlignmentStatus.STRONG_ALIGNMENT ||
                 mtfDiagnostics.mtfStatus == MtfAlignmentStatus.ACCEPTABLE_ALIGNMENT
 
+        val isSevereMtfDivergence = mtfDiagnostics.mtfWeightedScore < 55.0
+        val mtfRationale = if (isSevereMtfDivergence) {
+            "⚡ [EARLY MTF GUARD SHORT-CIRCUIT]: Weighted divergence (${String.format(Locale.US, "%.1f%%", mtfDiagnostics.mtfWeightedScore)}) < 55.0% threshold. Pipeline short-circuited early. ${mtfDiagnostics.rationale}"
+        } else {
+            mtfDiagnostics.rationale
+        }
+
         val mtfGuard = GuardCheckResult(
             guardName = "MTF Alignment Guard",
             isPassed = mtfGuardPassed,
             actualValue = mtfDiagnostics.mtfWeightedScore,
             thresholdValue = mtfDiagnostics.mtfRequiredScore,
-            rationale = mtfDiagnostics.rationale,
+            rationale = mtfRationale,
             isHardGuard = true
         )
         guardResults.add(mtfGuard)

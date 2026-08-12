@@ -115,6 +115,50 @@ object LuminaSelfAdaptationEngine {
     private val currentStrategyStates = mutableMapOf<String, StrategyState>()
     private val lastStateTransitionTradeCounts = mutableMapOf<String, Int>()
     private val strategyConfidenceTables = mutableMapOf<String, MutableList<ConfidenceBucketRecord>>()
+    private val strategyEloRatings = mutableMapOf<String, Double>()
+
+    fun getStrategyElo(strategyName: String): Double {
+        return strategyEloRatings.getOrDefault(strategyName, 1500.0)
+    }
+
+    /**
+     * Updates strategy Elo rating after trade outcome:
+     * Delta Elo = K * (ActualScore - ExpectedScore)
+     * K = 32.0 (standard Elo K-factor)
+     */
+    fun updateStrategyElo(strategyName: String, isWin: Boolean, profitR: Double = 1.0) {
+        val currentElo = getStrategyElo(strategyName)
+        val expectedScore = 1.0 / (1.0 + Math.pow(10.0, (1500.0 - currentElo) / 400.0))
+        val actualScore = if (isWin) (if (profitR > 1.5) 1.2 else 1.0) else 0.0
+        val kFactor = 32.0
+        val newElo = (currentElo + kFactor * (actualScore - expectedScore)).coerceIn(1000.0, 2200.0)
+        strategyEloRatings[strategyName] = newElo
+    }
+
+    /**
+     * Calculates Elo-Proportional Capital Allocation:
+     * Capital Share_s = exp((Elo_s - 1500) / 400) / sum(exp((Elo_i - 1500) / 400))
+     * Returns a map of strategyName -> recommended risk allowance % (e.g. 0.25% to 2.0%).
+     */
+    fun calculateEloProportionalCapitalAllocation(activeStrategies: List<String>): Map<String, Double> {
+        if (activeStrategies.isEmpty()) return emptyMap()
+
+        val eloMap = activeStrategies.associateWith { getStrategyElo(it) }
+        val expWeights = eloMap.mapValues { (_, elo) ->
+            Math.exp((elo - 1500.0) / 400.0)
+        }
+        val sumExp = expWeights.values.sum().coerceAtLeast(1e-6)
+
+        return eloMap.mapValues { (strat, elo) ->
+            val share = expWeights.getValue(strat) / sumExp
+            val baseRisk = share * 5.0 // total portfolio pool allocation share
+            when {
+                elo >= 1600.0 -> baseRisk.coerceIn(0.0125, 0.0200) // High Elo Champion: up to 2.0% risk
+                elo >= 1450.0 -> baseRisk.coerceIn(0.0075, 0.0125) // Standard Active: 0.75% - 1.25% risk
+                else -> baseRisk.coerceIn(0.0025, 0.0050)          // Low Elo / Probation: restricted to 0.25% - 0.50%
+            }
+        }
+    }
 
     fun createStandardBuckets(): MutableList<ConfidenceBucketRecord> {
         return mutableListOf(
@@ -168,6 +212,9 @@ object LuminaSelfAdaptationEngine {
             if (isWin) bucket.winningTrades++
             bucket.totalPnlR += pnlR
             if (pnlR > 0) bucket.grossProfitsR += pnlR else bucket.grossLossesR += kotlin.math.abs(pnlR)
+            
+            // Update Strategy Elo rating based on trade performance
+            updateStrategyElo(key, isWin, pnlR)
         }
     }
 

@@ -464,11 +464,11 @@ class MeanReversionStrategy(
         val isTrend = isTrendingRegime(prices)
         val isVol = isVolatileRegime(prices)
         // Regime-Tuned ATR Stop Loss:
-        // VOLATILE: Ultra-tight 0.85 ATR SL (cuts erratic losses fast)
-        // RANGING: Balanced 1.10 ATR SL
-        // TRENDING: Roomy 1.40 ATR SL (provides structural maneuverability for trend pullbacks)
-        val multiplier = if (isVol) 0.85 else if (isTrend) 1.40 else 1.10
-        val defaultPct = if (isVol) 0.008 else if (isTrend) 0.015 else 0.012
+        // VOLATILE: Noise-buffered 1.20 ATR SL (prevents premature micro-noise stop-outs during volatility expansion)
+        // RANGING: Balanced 1.25 ATR SL
+        // TRENDING: Roomy 1.50 ATR SL (provides structural maneuverability for trend pullbacks)
+        val multiplier = if (isVol) 1.20 else if (isTrend) 1.50 else 1.25
+        val defaultPct = if (isVol) 0.012 else if (isTrend) 0.018 else 0.015
         val slDist = if (atr > 0.0) atr * multiplier else entryPrice * defaultPct
         return entryPrice - slDist
     }
@@ -477,8 +477,8 @@ class MeanReversionStrategy(
         val atr = StrategyIndicators.calculateATR(prices, 14)
         val isTrend = isTrendingRegime(prices)
         val isVol = isVolatileRegime(prices)
-        val multiplier = if (isVol) 0.85 else if (isTrend) 1.40 else 1.10
-        val defaultPct = if (isVol) 0.008 else if (isTrend) 0.015 else 0.012
+        val multiplier = if (isVol) 1.20 else if (isTrend) 1.50 else 1.25
+        val defaultPct = if (isVol) 0.012 else if (isTrend) 0.018 else 0.015
         val slDist = if (atr > 0.0) atr * multiplier else entryPrice * defaultPct
         // Asymmetric Payoff Structure:
         // 3.20 RRR runner target ensures large gains on trend continuation

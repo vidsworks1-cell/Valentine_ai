@@ -145,4 +145,82 @@ object PaperExecutionSimulator {
 
         return result
     }
+
+    /**
+     * Simulates Adaptive Limit Chasing order execution:
+     * 1. Places limit order at 1.0x ATR inside order book spread to save slippage.
+     * 2. If unfilled after 500ms, chases order by 0.25x ATR or auto-converts to market order if conviction >= 85.0.
+     */
+    fun simulateAdaptiveLimitChaseOrder(
+        symbol: String,
+        isBuy: Boolean,
+        targetSize: Double,
+        signalPrice: Double,
+        atr: Double,
+        convictionScore: Double,
+        exchange: String = "Binance Direct API",
+        strategyId: String = "AdaptiveLimitChase",
+        marketRegime: MarketRegime = MarketRegime.HIGH_VOLATILITY
+    ): LimitChaseOrderResult {
+        // 1. Initial Limit Order placed 1.0x ATR inside the spread
+        val spreadOffset = if (atr > 0.0) (atr * 0.05).coerceAtMost(signalPrice * 0.002) else signalPrice * 0.0005
+        val initialLimitPrice = if (isBuy) signalPrice - spreadOffset else signalPrice + spreadOffset
+        
+        // 2. Chase logic simulation
+        var currentLimitPrice = initialLimitPrice
+        var elapsedMs = 0L
+        var chasesCount = 0
+        var isConvertedToMarket = false
+        
+        // Check if filled inside 500ms
+        val fillProbabilityInside500ms = 0.65
+        if (random.nextDouble() < fillProbabilityInside500ms) {
+            elapsedMs = baseLatencyMs + random.nextInt(300) // filled fast inside spread
+        } else {
+            // Unfilled after 500ms -> evaluate chase vs auto-convert
+            elapsedMs = 500L + random.nextInt(200)
+            if (convictionScore >= 85.0) {
+                // Auto-convert to market order due to high conviction
+                isConvertedToMarket = true
+                currentLimitPrice = signalPrice // market price
+            } else {
+                // Chase by 0.25x ATR inside order book spread
+                chasesCount = 1
+                val chaseOffset = if (atr > 0.0) (atr * 0.25).coerceAtMost(signalPrice * 0.005) else signalPrice * 0.001
+                currentLimitPrice = if (isBuy) currentLimitPrice + chaseOffset else currentLimitPrice - chaseOffset
+            }
+        }
+        
+        val baseResult = simulateMarketOrder(
+            symbol = symbol,
+            isBuy = isBuy,
+            targetSize = targetSize,
+            limitOrSignalPrice = currentLimitPrice,
+            exchange = exchange,
+            strategyId = strategyId,
+            marketRegime = marketRegime
+        )
+        
+        val savedSlippageBps = ((kotlin.math.abs(signalPrice - baseResult.averageExecutionPrice) / signalPrice) * 10000.0)
+        
+        return LimitChaseOrderResult(
+            initialLimitPrice = initialLimitPrice,
+            finalExecutedPrice = baseResult.averageExecutionPrice,
+            fillTimeMs = elapsedMs,
+            chasesCount = chasesCount,
+            isAutoConvertedToMarket = isConvertedToMarket,
+            savedSlippageBps = savedSlippageBps,
+            executionResult = baseResult.copy(latencyMs = elapsedMs)
+        )
+    }
 }
+
+data class LimitChaseOrderResult(
+    val initialLimitPrice: Double,
+    val finalExecutedPrice: Double,
+    val fillTimeMs: Long,
+    val chasesCount: Int,
+    val isAutoConvertedToMarket: Boolean,
+    val savedSlippageBps: Double,
+    val executionResult: ExecutionResult
+)

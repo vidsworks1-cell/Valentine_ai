@@ -54,6 +54,18 @@ class MemoryEvolutionEngine(private val repository: AppRepository) {
                 val winRate = matchingStrategy.paperWinRate
                 val totalTrades = matchingStrategy.totalPaperTrades + matchingStrategy.totalTrades
                 
+                // Rule Demotion: If a permanent rule's strategy drops below 50% WR or has negative expectancy, strip "Rule:" status
+                if (totalTrades >= 5 && winRate < 50.0 && updated.category.startsWith("Rule: ")) {
+                    val demotedCategory = updated.category.removePrefix("Rule: ")
+                    val demotedScore = (updated.confidenceScore - 0.20).coerceAtLeast(0.30)
+                    updated = updated.copy(
+                        category = demotedCategory,
+                        confidenceScore = demotedScore,
+                        evidence = "${updated.evidence} (DEMOTED FROM PERMANENT RULE due to strategy win-rate dropping to ${String.format(Locale.US, "%.1f%%", winRate)})"
+                    )
+                    logs.add("📉 RULE DEMOTED: Demoted permanent rule '${entry.title}' back to hypothesis due to poor win-rate (${String.format(Locale.US, "%.1f%%", winRate)}%).")
+                }
+                
                 // If we have enough sample trades (e.g. > 0) and the win rate is declining or low
                 if (totalTrades > 0 && winRate < 60.0) {
                     // Decay factor: larger drop for worse performance
@@ -121,10 +133,20 @@ class MemoryEvolutionEngine(private val repository: AppRepository) {
                                      (desc1.contains("high") && desc2.contains("low"))
                     
                     if (isConflict) {
-                        logs.add("⚠️ CONTRADICTION DETECTED: [ID ${e1.id}] '${e1.title}' conflicts with [ID ${e2.id}] '${e2.title}'. Recommendation generated to archive or merge them.")
-                        if (!e1.evidence.contains("CONTRADICTION FLAG")) {
-                            repository.updateKnowledge(e1.copy(evidence = "${e1.evidence} (CONTRADICTION FLAG: Conflicts with record ID ${e2.id})"))
-                        }
+                        // Resolve contradiction by decaying older entry e1
+                        val olderEntry = if (e1.dateCreated <= e2.dateCreated) e1 else e2
+                        val newerEntry = if (e1.dateCreated <= e2.dateCreated) e2 else e1
+                        
+                        val newScore = (olderEntry.confidenceScore - 0.20).coerceAtLeast(0.20)
+                        val demotedCategory = if (newScore < 0.50 && olderEntry.category.startsWith("Rule: ")) olderEntry.category.removePrefix("Rule: ") else olderEntry.category
+                        
+                        val resolvedOlder = olderEntry.copy(
+                            confidenceScore = newScore,
+                            category = demotedCategory,
+                            evidence = "${olderEntry.evidence} (CONTRADICTION RESOLVED: Decayed by 20% in favor of newer empirical rule ID ${newerEntry.id})"
+                        )
+                        repository.updateKnowledge(resolvedOlder)
+                        logs.add("⚡ CONTRADICTION RESOLVED: Decayed older rule [ID ${olderEntry.id}] '${olderEntry.title}' (${String.format(Locale.US, "%.0f%%", newScore * 100.0)}) in favor of newer empirical rule [ID ${newerEntry.id}] '${newerEntry.title}'.")
                     }
                 }
             }

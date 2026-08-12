@@ -89,6 +89,8 @@ data class PortfolioGuardState(
     val portfolioVolatilityPct: Double = 12.5,
     val symbolConcentrationPct: Double = 0.15,
     val currentDrawdownUSD: Double = 0.0,
+    val portfolio24hDrawdownPct: Double = -1.2,
+    val orderBookDepthWithin05PctUSD: Double = 120000.0,
     val maxDailyLossUSD: Double = 200.0,
     val portfolioHeatPct: Double = 5.0,
     val maxScaleInsAllowed: Int = 3,
@@ -109,7 +111,9 @@ data class PortfolioGuardEvaluation(
     val dynamicHedgeThreshold: Double = 0.82,
     val netExposureReductionPct: Double = 0.0,
     val hedgeBenefitScore: Double = 0.0,
-    val auditLog: String = ""
+    val auditLog: String = "",
+    val thesisInvalidationAlert: Boolean = false,
+    val thesisInvalidationDetails: String = ""
 )
 
 object PortfolioTradeInteractionEngine {
@@ -141,7 +145,33 @@ object PortfolioTradeInteractionEngine {
 
         val currentLossUSD = if (dailyPnL < 0) abs(dailyPnL) else portfolioState.currentDrawdownUSD
 
-        // 2. Portfolio-Level Guard Checks (Daily Loss Cap, Concentration, Capital)
+        // 2. Portfolio-Level Guard Checks (Daily Loss Cap, Thermal Throttle, Concentration, Capital)
+        if (portfolioState.portfolio24hDrawdownPct <= -3.0 && (actionIntent == TradeActionIntent.NEW_POSITION || actionIntent == TradeActionIntent.SCALE_IN)) {
+            val thermalRiskCap = 0.03 // 3.0% max portfolio risk cap during thermal throttling
+            val currentRiskPct = portfolioState.cumulativeRiskPct / 100.0
+            if (currentRiskPct >= thermalRiskCap) {
+                val reason = "PORTFOLIO_THERMAL_THROTTLE_ACTIVE"
+                val log = buildPortfolioGuardAuditLog(
+                    symbol = symbol,
+                    actionIntent = actionIntent,
+                    signalValidated = true,
+                    capitalEligible = false,
+                    executionAuthorized = false,
+                    portfolioState = portfolioState,
+                    reason = reason,
+                    details = "🔥 PORTFOLIO THERMAL THROTTLE: 24h portfolio drawdown (${String.format(Locale.US, "%.1f", portfolioState.portfolio24hDrawdownPct)}%) crossed -3.0% threshold. Max risk capacity capped at 3.0% (Current: ${String.format(Locale.US, "%.1f", portfolioState.cumulativeRiskPct)}%). New position entries blocked until equity drawdown recovers."
+                )
+                return PortfolioGuardEvaluation(
+                    actionIntent = actionIntent,
+                    isSignalValidated = true,
+                    isCapitalEligible = false,
+                    isExecutionAuthorized = false,
+                    capitalRejectionReason = reason,
+                    auditLog = log
+                )
+            }
+        }
+
         if (currentLossUSD >= portfolioState.maxDailyLossUSD) {
             val reason = "PORTFOLIO_DAILY_LOSS_CAP_EXCEEDED"
             val log = buildPortfolioGuardAuditLog(
@@ -197,11 +227,16 @@ object PortfolioTradeInteractionEngine {
             val dynamicHedgeThreshold = (baseThreshold + regimeBonus + reductBonus).coerceIn(0.68, 0.88)
 
             val passedHedge = incomingConfidence >= dynamicHedgeThreshold
+            val isInvalidationAlert = !passedHedge && incomingConfidence >= 0.70
+            val invalidationMsg = if (isInvalidationAlert) {
+                " 💡 [THESIS INVALIDATION ALERT]: Incoming opposite signal ($symbol $side) conviction (${String.format(Locale.US, "%.2f", incomingConfidence)}) >= 0.70 indicates existing ${portfolioState.existingPositionSide ?: "opposite"} position thesis is deteriorating. Triggering position review to tighten stop-loss or trim position."
+            } else ""
+
             val reason = if (passedHedge) "" else "OPPOSITE_EXPOSURE_BELOW_HEDGE_THRESHOLD"
             val details = if (passedHedge) {
                 "Hedge/Reversal authorized: Incoming confidence (${String.format(Locale.US, "%.2f", incomingConfidence)}) >= dynamic threshold (${String.format(Locale.US, "%.2f", dynamicHedgeThreshold)})."
             } else {
-                "Opposite position exists. Signal confidence (${String.format(Locale.US, "%.2f", incomingConfidence)}) below dynamic hedge threshold (${String.format(Locale.US, "%.2f", dynamicHedgeThreshold)})."
+                "Opposite position exists. Signal confidence (${String.format(Locale.US, "%.2f", incomingConfidence)}) below dynamic hedge threshold (${String.format(Locale.US, "%.2f", dynamicHedgeThreshold)}).$invalidationMsg"
             }
 
             val log = buildPortfolioGuardAuditLog(
@@ -225,7 +260,9 @@ object PortfolioTradeInteractionEngine {
                 capitalRejectionReason = reason,
                 dynamicHedgeThreshold = dynamicHedgeThreshold,
                 netExposureReductionPct = netExposureReductPct,
-                auditLog = log
+                auditLog = log,
+                thesisInvalidationAlert = isInvalidationAlert,
+                thesisInvalidationDetails = invalidationMsg
             )
         } else if (actionIntent == TradeActionIntent.SCALE_IN) {
             var pyramidFailedReason = ""
@@ -507,17 +544,22 @@ object PortfolioTradeInteractionEngine {
         signalConviction: Double = 0.75,
         hasOppositePosition: Boolean = false,
         isPyramidScaleIn: Boolean = false,
-        currentRiskAllocationPct: Double = 0.05
+        currentRiskAllocationPct: Double = 0.05,
+        proposedSide: String = "BUY",
+        activePositions: List<Pair<String, String>> = emptyList() // List of (symbol, side) e.g. ("ETHUSDT", "BUY")
     ): Pair<Double, String> { // Pair(Size Multiplier, Rationale)
         val matrix = getCorrelationMatrix()
 
-        // 1. Portfolio Guard Opposite Position Hedging Check
+        // 1. Portfolio Guard Opposite Position Hedging Check with Smart Invalidation Trigger
         val hedgeThreshold = 0.82
         if (hasOppositePosition) {
             if (signalConviction < hedgeThreshold) {
+                val invalidationMsg = if (signalConviction >= 0.70) {
+                    " 💡 [THESIS INVALIDATION ALERT]: Incoming opposite conviction (${String.format(Locale.US, "%.2f", signalConviction)}) >= 0.70 indicates existing $symbol position thesis is deteriorating. Triggering stop-loss/position review."
+                } else ""
                 return Pair(
                     0.0,
-                    "⛔ Portfolio Guard Rejected: Opposite position currently open for $symbol. Signal conviction (${String.format(Locale.US, "%.2f", signalConviction)}) is below required hedge threshold ($hedgeThreshold). Hedge blocked to protect capital."
+                    "⛔ Portfolio Guard Rejected: Opposite position currently open for $symbol. Signal conviction (${String.format(Locale.US, "%.2f", signalConviction)}) is below required hedge threshold ($hedgeThreshold). Hedge blocked to protect capital.$invalidationMsg"
                 )
             }
         }
@@ -530,21 +572,39 @@ object PortfolioTradeInteractionEngine {
             )
         }
 
-        // 3. Correlation Matrix Risk Scaling
+        // 3. Direction-Aware Correlation Matrix Risk Scaling
         val corrBTC = matrix.getCorrelation(symbol, "BTC")
         val corrETH = matrix.getCorrelation(symbol, "ETH")
-        val avgCorr = (corrBTC + corrETH) / 2.0
+        val rawAvgCorr = (corrBTC + corrETH) / 2.0
 
-        return if (avgCorr > 0.75) {
-            val mult = 0.70
-            val msg = "⚠️ Portfolio Correlation Warning: $symbol has high correlation (${String.format(Locale.US, "%.2f", avgCorr)}) with active BTC/ETH positions. Position size scaled down by 30% to prevent risk concentration."
+        // Check direction alignment with active positions
+        var isSpreadHedge = false
+        if (activePositions.isNotEmpty()) {
+            val oppositeDirectionPositions = activePositions.filter { (activeSym, activeSide) ->
+                activeSym.contains(symbol) == false && !activeSide.equals(proposedSide, ignoreCase = true)
+            }
+            if (oppositeDirectionPositions.isNotEmpty() && rawAvgCorr > 0.60) {
+                isSpreadHedge = true
+            }
+        } else if (proposedSide.equals("SELL", ignoreCase = true) && rawAvgCorr > 0.60) {
+            // Implicit spread hedge if entering short while macro market is long
+            isSpreadHedge = true
+        }
+
+        return if (isSpreadHedge) {
+            val mult = 1.00
+            val msg = "✅ Delta-Neutral Spread Hedge: Proposed $symbol $proposedSide vs active correlated opposite positions creates a market-neutral spread hedge. Correlation risk penalty waived."
             Pair(mult, msg)
-        } else if (avgCorr < 0.0) {
+        } else if (rawAvgCorr > 0.75) {
+            val mult = 0.70
+            val msg = "⚠️ Portfolio Correlation Warning: $symbol has high same-direction correlation (${String.format(Locale.US, "%.2f", rawAvgCorr)}) with active BTC/ETH positions. Position size scaled down by 30% to prevent risk concentration."
+            Pair(mult, msg)
+        } else if (rawAvgCorr < 0.0) {
             val mult = 1.15
-            val msg = "✅ Diversification Enhancer: $symbol provides negative correlation (${String.format(Locale.US, "%.2f", avgCorr)}) with current portfolio. Sizing boosted +15% for portfolio stability."
+            val msg = "✅ Diversification Enhancer: $symbol provides negative correlation (${String.format(Locale.US, "%.2f", rawAvgCorr)}) with current portfolio. Sizing boosted +15% for portfolio stability."
             Pair(mult, msg)
         } else {
-            Pair(1.0, "Balanced Portfolio Correlation (${String.format(Locale.US, "%.2f", avgCorr)}). Standard position sizing approved.")
+            Pair(1.0, "Balanced Portfolio Correlation (${String.format(Locale.US, "%.2f", rawAvgCorr)}). Standard position sizing approved.")
         }
     }
 

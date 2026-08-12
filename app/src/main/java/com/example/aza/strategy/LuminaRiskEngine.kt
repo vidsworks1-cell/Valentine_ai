@@ -82,12 +82,15 @@ object LuminaRiskEngine {
         uncertaintyLevel: UncertaintyLevel = UncertaintyLevel.LOW,
         isProbation: Boolean = false,
         portfolioHeatPct: Double = 4.0,
+        portfolio24hDrawdownPct: Double = 0.0,
         dailyDrawdownUSD: Double = 0.0,
         maxDailyLossUSD: Double = 200.0,
         correlationExposure: Double = 0.0,
+        orderBookDepthWithin05PctUSD: Double = 100000.0,
         actionIntent: TradeActionIntent = TradeActionIntent.NEW_POSITION,
         portfolioVolatilityPct: Double = 12.0,
         symbolConcentrationPct: Double = 0.15,
+        isSpreadHedge: Boolean = false,
         explicitStrategyMult: Double? = null,
         explicitRegimeMult: Double? = null,
         explicitVolMult: Double? = null,
@@ -259,9 +262,11 @@ object LuminaRiskEngine {
         stages.add(stage6)
         currentRisk = stage6.boundedOutputRiskPct
 
-        // Stage 7: PORTFOLIO_HEAT_ADJUSTMENT (Double-counting check against performance/daily loss)
+        // Stage 7: PORTFOLIO_HEAT_ADJUSTMENT & THERMAL THROTTLING
         val lossRatio = if (maxDailyLossUSD > 0) dailyDrawdownUSD / maxDailyLossUSD else 0.0
+        val isThermalThrottleActive = portfolio24hDrawdownPct <= -3.0
         val baseHeatMult = explicitPortfolioHeatMult ?: when {
+            isThermalThrottleActive -> 0.50 // Thermal Throttle drops max risk cap from 6.0% to 3.0%
             lossRatio >= 0.75 -> 0.50
             portfolioHeatPct > 10.0 -> 0.70
             portfolioHeatPct > 5.0 -> 0.85
@@ -272,7 +277,7 @@ object LuminaRiskEngine {
         var effectiveHeatMult = baseHeatMult
 
         // If Performance Adjustment or Strategy Adjustment already penalized to <= 0.3x, cap heat penalty
-        if (perfMult <= 0.60 && baseHeatMult < 1.0) {
+        if (perfMult <= 0.60 && baseHeatMult < 1.0 && !isThermalThrottleActive) {
             effectiveHeatMult = max(baseHeatMult, 0.80)
             heatDoubleCountPrevented = true
         }
@@ -281,10 +286,10 @@ object LuminaRiskEngine {
         val heatMax = 1.00
         val rawHeatOutput = currentRisk * effectiveHeatMult
         val boundedHeatOutput = rawHeatOutput.coerceIn(currentRisk * heatMin, currentRisk * heatMax)
-        val stage7Reason = if (heatDoubleCountPrevented) {
-            "Portfolio heat (${String.format(Locale.US, "%.1f", portfolioHeatPct)}%) multiplier adjusted to ${String.format(Locale.US, "%.2f", effectiveHeatMult)} (DAMPENED: Performance adjustment already penalized account drawdown)."
-        } else {
-            "Portfolio heat (${String.format(Locale.US, "%.1f", portfolioHeatPct)}%), daily loss ratio (${String.format(Locale.US, "%.1f", lossRatio * 100)}%) multiplier: ${String.format(Locale.US, "%.2f", effectiveHeatMult)}"
+        val stage7Reason = when {
+            isThermalThrottleActive -> "🔥 PORTFOLIO THERMAL THROTTLE ACTIVATED: 24h drawdown (${String.format(Locale.US, "%.1f", portfolio24hDrawdownPct)}%) crossed -3.0% threshold. Capped total portfolio risk allowance from 6.0% down to 3.0%."
+            heatDoubleCountPrevented -> "Portfolio heat (${String.format(Locale.US, "%.1f", portfolioHeatPct)}%) multiplier adjusted to ${String.format(Locale.US, "%.2f", effectiveHeatMult)} (DAMPENED: Performance adjustment already penalized account drawdown)."
+            else -> "Portfolio heat (${String.format(Locale.US, "%.1f", portfolioHeatPct)}%), daily loss ratio (${String.format(Locale.US, "%.1f", lossRatio * 100)}%) multiplier: ${String.format(Locale.US, "%.2f", effectiveHeatMult)}"
         }
         val stage7 = RiskWaterfallStage(
             stageName = "PORTFOLIO_HEAT_ADJUSTMENT",
@@ -302,6 +307,7 @@ object LuminaRiskEngine {
 
         // Stage 8: CORRELATION_ADJUSTMENT
         val corrMult = explicitCorrelationMult ?: when {
+            isSpreadHedge -> 1.00 // Waive correlation penalty for spread hedges
             correlationExposure > 0.80 -> 0.50
             correlationExposure > 0.60 -> 0.75
             else -> 1.00
@@ -310,6 +316,11 @@ object LuminaRiskEngine {
         val corrMax = 1.00
         val rawCorrOutput = currentRisk * corrMult
         val boundedCorrOutput = rawCorrOutput.coerceIn(currentRisk * corrMin, currentRisk * corrMax)
+        val stage8Reason = if (isSpreadHedge) {
+            "Delta-neutral spread hedge detected. Same-direction correlation penalty waived (multiplier: 1.00x)."
+        } else {
+            "Correlation exposure (${String.format(Locale.US, "%.2f", correlationExposure)}) multiplier: ${String.format(Locale.US, "%.2f", corrMult)}"
+        }
         val stage8 = RiskWaterfallStage(
             stageName = "CORRELATION_ADJUSTMENT",
             inputRiskPct = currentRisk,
@@ -318,12 +329,12 @@ object LuminaRiskEngine {
             boundedOutputRiskPct = boundedCorrOutput,
             minBound = corrMin,
             maxBound = corrMax,
-            reason = "Correlation exposure (${String.format(Locale.US, "%.2f", correlationExposure)}) multiplier: ${String.format(Locale.US, "%.2f", corrMult)}"
+            reason = stage8Reason
         )
         stages.add(stage8)
         currentRisk = stage8.boundedOutputRiskPct
 
-        // Stage 9: POSITION_EXPOSURE_ADJUSTMENT
+        // Stage 9: POSITION_EXPOSURE_ADJUSTMENT & MICROSTRUCTURE LIQUIDITY GUARD
         var intentMult = explicitPositionMult ?: when (actionIntent) {
             TradeActionIntent.NEW_POSITION -> 1.00
             TradeActionIntent.SCALE_IN -> 0.50
@@ -334,6 +345,20 @@ object LuminaRiskEngine {
         if (symbolConcentrationPct > 0.25) {
             intentMult *= 0.80
         }
+
+        // Microstructure Liquidity Guard: Check if depth within 0.5% of mid-price can absorb position size without > 2 bps market impact
+        val estimatedNotionalUSD = safeEquity * currentRisk / stopLossDistancePct
+        var liquidityScaleMult = 1.0
+        var liquidityGuardReason = ""
+        if (orderBookDepthWithin05PctUSD > 0.0) {
+            val estimatedImpactBps = (estimatedNotionalUSD / orderBookDepthWithin05PctUSD) * 10000.0 * 0.05
+            if (estimatedImpactBps > 2.0 || estimatedNotionalUSD > orderBookDepthWithin05PctUSD) {
+                liquidityScaleMult = (orderBookDepthWithin05PctUSD / max(1.0, estimatedNotionalUSD)).coerceIn(0.25, 0.90)
+                intentMult *= liquidityScaleMult
+                liquidityGuardReason = " | 💧 LIQUIDITY GUARD ACTIVATED: Order book depth ($${String.format(Locale.US, "%.0f", orderBookDepthWithin05PctUSD)} within 0.5%) cannot absorb $${String.format(Locale.US, "%.0f", estimatedNotionalUSD)} position without > 2.0 bps impact (${String.format(Locale.US, "%.1f", estimatedImpactBps)} bps est.). Sizing scaled by ${String.format(Locale.US, "%.2f", liquidityScaleMult)}x."
+            }
+        }
+
         val posMin = 0.10
         val posMax = 1.00
         val rawPosOutput = currentRisk * intentMult
@@ -346,7 +371,7 @@ object LuminaRiskEngine {
             boundedOutputRiskPct = boundedPosOutput,
             minBound = posMin,
             maxBound = posMax,
-            reason = "Action intent (${actionIntent.name}), concentration (${String.format(Locale.US, "%.1f", symbolConcentrationPct * 100)}%) multiplier: ${String.format(Locale.US, "%.2f", intentMult)}"
+            reason = "Action intent (${actionIntent.name}), concentration (${String.format(Locale.US, "%.1f", symbolConcentrationPct * 100)}%) multiplier: ${String.format(Locale.US, "%.2f", intentMult)}$liquidityGuardReason"
         )
         stages.add(stage9)
         currentRisk = stage9.boundedOutputRiskPct
