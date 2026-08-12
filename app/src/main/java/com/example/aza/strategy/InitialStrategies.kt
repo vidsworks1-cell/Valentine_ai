@@ -422,20 +422,20 @@ class MeanReversionStrategy(
             return pullbackOversold && volumeAbsorptionConfirmed
         } else {
             // RANGING / VOLATILE REGIME ENTRY:
-            val strictOversold = rsi < 28.0
-            val bbTouched = lastPrice <= (lower * 1.002)
+            val strictOversold = rsi < 25.0
+            val bbTouched = lastPrice <= (lower * 1.001)
             val reversalTick = lastPrice > prevPrice
             
             val maxInLookback = prices.takeLast(20).maxOrNull() ?: lastPrice
             val minInLookback = prices.takeLast(20).minOrNull() ?: lastPrice
             val rangeSpanRatio = if (atr > 0.0) (maxInLookback - minInLookback) / atr else 10.0
-            val tightSpan = rangeSpanRatio <= (if (isVol) 4.0 else 4.8) && adx < 22.0
+            val tightSpan = rangeSpanRatio <= (if (isVol) 3.5 else 4.5) && adx < 20.0
 
             // TRADE VOLUME & LIQUIDITY ABSORPTION FILTER:
             // Weed out weak signals during low-volume fakeouts or panic liquidations
             val barSpread = kotlin.math.abs(lastPrice - prevPrice)
             val normalBarSpread = if (atr > 0.0) barSpread / atr else 1.0
-            val liquidityAbsorptionConfirmed = normalBarSpread < 2.0 && reversalTick
+            val liquidityAbsorptionConfirmed = normalBarSpread < 1.8 && reversalTick
 
             return strictOversold && bbTouched && tightSpan && liquidityAbsorptionConfirmed
         }

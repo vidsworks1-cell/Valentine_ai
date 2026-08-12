@@ -359,20 +359,35 @@ object StrategyEvaluationEngine {
         historicalWinRatePct: Double,
         totalTrades: Int,
         profitFactor: Double,
-        maxDrawdownPct: Double = 0.0
+        maxDrawdownPct: Double = 0.0,
+        strategyName: String = ""
     ): Double {
         if (totalTrades < 3) {
             return (declaredConfidence * 0.90).coerceIn(0.10, 0.98)
         }
 
         val wins = ((historicalWinRatePct / 100.0) * totalTrades).toInt()
-        val wilsonLowerBound = calculateWilsonLowerBound(wins, totalTrades)
+        val zScore = if (strategyName.contains("Mean Reversion", ignoreCase = true)) 2.326 else 1.96
+        val wilsonLowerBound = calculateWilsonLowerBound(wins, totalTrades, zScore)
+
+        // Bayesian Posterior Win Rate with empirical Beta(4.0, 6.0) prior (prior mean = 40.0%)
+        val bayesPriorAlpha = 4.0
+        val bayesPriorBeta = 6.0
+        val bayesPosterior = (wins + bayesPriorAlpha) / (totalTrades + bayesPriorAlpha + bayesPriorBeta)
+
         val sampleWeight = (totalTrades / 25.0).coerceAtMost(1.0)
-        val empiricalTarget = (wilsonLowerBound * 0.70) + ((profitFactor / 3.5).coerceAtMost(0.30))
+        val empiricalTarget = (wilsonLowerBound * 0.45) + (bayesPosterior * 0.35) + ((profitFactor / 3.5).coerceAtMost(0.20))
         val blended = (declaredConfidence * (1.0 - (sampleWeight * 0.65))) + (empiricalTarget * (sampleWeight * 0.65))
         val ddPenalty = if (maxDrawdownPct > 10.0) ((maxDrawdownPct - 10.0) * 0.01) else 0.0
 
-        return (blended - ddPenalty).coerceIn(0.10, 0.98)
+        val calibrated = (blended - ddPenalty).coerceIn(0.10, 0.98)
+
+        // Special Bayesian dampening for Mean Reversion if win rate is under 52.0%
+        if (strategyName.contains("Mean Reversion", ignoreCase = true) && historicalWinRatePct < 52.0) {
+            return kotlin.math.min(calibrated, 0.68).coerceIn(0.10, 0.98)
+        }
+
+        return calibrated
     }
 
     /**
@@ -979,7 +994,8 @@ object StrategyEvaluationEngine {
         )
 
         val wins = ((effectiveWinRatePct / 100.0) * effectiveSampleSize).toInt()
-        val wilsonBound = calculateWilsonLowerBound(wins, effectiveSampleSize)
+        val zScore = if (effectiveStratName.contains("Mean Reversion", ignoreCase = true)) 2.326 else 1.96
+        val wilsonBound = calculateWilsonLowerBound(wins, effectiveSampleSize, zScore)
         confidenceContribs.add(
             ConfidenceContribution(
                 source = "Wilson Lower Bound Calibration",
@@ -994,7 +1010,8 @@ object StrategyEvaluationEngine {
             historicalWinRatePct = effectiveWinRatePct,
             totalTrades = effectiveSampleSize,
             profitFactor = 1.85,
-            maxDrawdownPct = 4.2
+            maxDrawdownPct = 4.2,
+            strategyName = effectiveStratName
         )
 
         // Step 4: Evaluate Institutional MTF Diagnostics

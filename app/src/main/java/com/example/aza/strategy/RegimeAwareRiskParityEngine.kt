@@ -141,14 +141,14 @@ object RegimeAwareRiskParityEngine {
                     when (strat) {
                         "Breakout Momentum" -> 1.45
                         "Volatility Expansion Breakout" -> 1.35
-                        "Mean Reversion" -> 0.85
+                        "Mean Reversion" -> 0.60
                         "Liquidity Sweep" -> 1.10
                         else -> 1.00
                     }
                 }
                 "RANGING", "LOW_VOLATILITY_RANGING", "ACCUMULATION" -> {
                     when (strat) {
-                        "Mean Reversion" -> 1.40
+                        "Mean Reversion" -> 0.80
                         "Liquidity Sweep" -> 1.25
                         "Breakout Momentum" -> 0.70
                         "Volatility Expansion Breakout" -> 0.75
@@ -158,7 +158,7 @@ object RegimeAwareRiskParityEngine {
                 "HIGH_VOLATILITY", "HIGH_VOLATILITY_RANGING", "VOLATILE" -> {
                     when (strat) {
                         "Volatility Expansion Breakout" -> 1.30
-                        "Mean Reversion" -> 0.65
+                        "Mean Reversion" -> 0.45
                         "Breakout Momentum" -> 0.90
                         "Liquidity Sweep" -> 1.15
                         else -> 0.80

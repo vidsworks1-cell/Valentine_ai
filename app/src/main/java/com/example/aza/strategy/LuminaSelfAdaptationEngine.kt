@@ -208,6 +208,22 @@ object LuminaSelfAdaptationEngine {
     }
 
     /**
+     * Calculates Bayesian Posterior Win Rate with empirical Beta(4.0, 6.0) prior (prior mean = 40.0%).
+     * Shrinks raw confidence towards empirical posterior when sample size is small or performance decays.
+     */
+    fun calculateBayesianPosteriorWinRate(
+        wins: Int,
+        totalTrades: Int,
+        priorAlpha: Double = 4.0,
+        priorBeta: Double = 6.0
+    ): Double {
+        if (totalTrades <= 0) return priorAlpha / (priorAlpha + priorBeta)
+        val posteriorAlpha = priorAlpha + wins
+        val posteriorBeta = priorBeta + (totalTrades - wins)
+        return (posteriorAlpha / (posteriorAlpha + posteriorBeta)).coerceIn(0.05, 0.95)
+    }
+
+    /**
      * Controlled recency weighting.
      * Prevents last few trades from completely rewriting long-term strategy beliefs.
      */
@@ -373,7 +389,9 @@ object LuminaSelfAdaptationEngine {
         val effectiveKey = buildStrategySymbolKey(strategyName, symbol)
         val wins = ((longTermWinRatePct / 100.0) * totalTrades).toInt()
         val (uncertainty, ciWidth) = calculateUncertaintyDetails(wins, totalTrades)
-        val wilsonLower = calculateWilsonLowerBound(wins, totalTrades)
+        val zScore = if (strategyName.contains("Mean Reversion", ignoreCase = true)) 2.326 else 1.96
+        val wilsonLower = calculateWilsonLowerBound(wins, totalTrades, zScore)
+        val bayesWinRate = calculateBayesianPosteriorWinRate(wins, totalTrades)
 
         val (blendedWR, blendedExp) = calculateBlendedPerformance(
             longTermWinRatePct, recentWinRatePct,
@@ -397,18 +415,18 @@ object LuminaSelfAdaptationEngine {
         val bucket = table.find { targetConf >= it.minConfidence && targetConf < it.maxConfidence } ?: table.last()
 
         val baseCalibratedProb = if (uncertainty == UncertaintyLevel.HIGH) {
-            // High uncertainty: Cap adjustment at max +/- 0.05 from raw confidence
-            val target = (wilsonLower * 0.50) + (rawConfidence * 0.50)
-            val delta = (target - rawConfidence).coerceIn(-0.05, 0.05)
+            // High uncertainty: Bayesian Shrinkage blend towards Wilson lower bound & Beta prior
+            val target = (wilsonLower * 0.40) + (bayesWinRate * 0.35) + (rawConfidence * 0.25)
+            val delta = (target - rawConfidence).coerceIn(-0.08, 0.05)
             (rawConfidence + delta).coerceIn(0.10, 0.95)
         } else {
             val sampleWeight = (totalTrades / 50.0).coerceAtMost(1.0)
-            val empiricalTarget = (wilsonLower * 0.60) + (blendedExp.coerceIn(0.0, 1.0) * 0.40)
-            val blended = (rawConfidence * (1.0 - (sampleWeight * 0.60))) + (empiricalTarget * (sampleWeight * 0.60)) + regimeAdj
+            val empiricalTarget = (wilsonLower * 0.45) + (bayesWinRate * 0.35) + (blendedExp.coerceIn(0.0, 1.0) * 0.20)
+            val blended = (rawConfidence * (1.0 - (sampleWeight * 0.65))) + (empiricalTarget * (sampleWeight * 0.65)) + regimeAdj
             blended.coerceIn(0.10, 0.98)
         }
 
-        val calibratedProb = if (bucket.totalTrades >= 5) {
+        val calibratedProbRaw = if (bucket.totalTrades >= 5) {
             val empiricalWR = bucket.winRatePct / 100.0
             val bucketWeight = (bucket.totalTrades / 25.0).coerceAtMost(0.70)
             val bucketAdjusted = (baseCalibratedProb * (1.0 - bucketWeight)) + (empiricalWR * bucketWeight)
@@ -421,6 +439,14 @@ object LuminaSelfAdaptationEngine {
         } else {
             baseCalibratedProb
         }
+
+        // Apply Bayesian Shrinkage dampening for Mean Reversion when recent expectancy is negative or win rate < 50%
+        val isMeanReversion = strategyName.contains("Mean Reversion", ignoreCase = true)
+        val meanReversionDampener = if (isMeanReversion && (blendedWR < 50.0 || blendedExp <= 0.0)) {
+            -0.08
+        } else 0.0
+
+        val calibratedProb = (calibratedProbRaw + meanReversionDampener).coerceIn(0.10, 0.98)
 
         // Calculate Holistic Strategy Quality (0 to 100)
         // Expectancy E[R] is the primary measure of trading edge rather than raw confidence
