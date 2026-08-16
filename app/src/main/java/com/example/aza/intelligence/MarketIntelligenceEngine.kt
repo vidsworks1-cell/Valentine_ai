@@ -395,15 +395,22 @@ class MarketIntelligenceEngine(
                 // 4. Position Size Valid
                 val positionSizeValid = topOp.expectedReward > 0.0
                 
-                // 5. PHASE 3: PORTFOLIO BETA GUARD (Limit correlated exposure across assets)
+                // 5. PHASE 3: PORTFOLIO BETA GUARD (Limit correlated exposure across assets & support delta-neutral pairs)
                 val activePositions = repository.getAllPositionsDirect()
                 val cryptoSymbols = listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT")
                 val isCrypto = cryptoSymbols.contains(topOp.symbol)
                 val activeCryptoPositions = activePositions.filter { it.status == "OPEN" && cryptoSymbols.contains(it.symbol) }
                 
-                // Hard Gate: Max 2 active positions total, max 1 correlated crypto position if existing trade present
-                val portfolioExposureAcceptable = activePositions.count { it.status == "OPEN" } < 3 && 
-                        (!isCrypto || activeCryptoPositions.size < 2)
+                // Check directional exposure:
+                val activeLongCount = activeCryptoPositions.count { it.amountOwned >= 0.0 }
+                val activeShortCount = activeCryptoPositions.count { it.amountOwned < 0.0 }
+                val isIncomingLong = true // spot/perp market opportunity
+                
+                // Allow up to 3 total active positions. For crypto: allow if total crypto < 3 AND either:
+                // a) Incoming trade is opposite side of existing exposure (creating delta-neutral / hedged pair), OR
+                // b) Directional side count is < 2 (preventing > 2 correlated one-way bets)
+                val portfolioExposureAcceptable = activePositions.count { it.status == "OPEN" } < 4 && 
+                        (!isCrypto || (activeCryptoPositions.size < 3 && (if (isIncomingLong) activeLongCount < 2 else activeShortCount < 2)))
                 
                 // 6. PHASE 1 & ROLLING HEALTH FEATURE: STRICT EXPECTANCY & HEALTH GATE (NO HIGH CONVICTION OVERRIDES FOR FAILING STRATEGIES)
                 val healthScore = calculateRollingStrategyHealth(topOp.strategy)

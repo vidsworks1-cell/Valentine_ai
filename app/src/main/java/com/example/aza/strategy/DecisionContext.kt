@@ -104,7 +104,7 @@ enum class TradeActionIntent {
  * Single immutable Decision Context carrying full state for a trade candidate.
  */
 data class DecisionContext(
-    val id: String = "DEC-${System.currentTimeMillis() % 1000000}",
+    val id: String = "DEC-${java.util.UUID.randomUUID().toString().take(8).uppercase(java.util.Locale.US)}",
     val timestamp: Long = System.currentTimeMillis(),
     val symbol: String,
     val side: String, // "BUY", "SELL", "HOLD"

@@ -900,16 +900,17 @@ object EngineValidationSuite {
         val multiRegimeCandles = mutableListOf<MarketCandle>()
         var currentPrice = 65000.0
         val baseTime = System.currentTimeMillis() - (400L * 3600 * 1000)
+        val simRandom = kotlin.random.Random(4242)
 
         // Phase 1: Strong Bull Trend (100 candles, ADX ~32)
         for (i in 0 until 100) {
-            val drift = (0.0035 + (kotlin.random.Random.nextDouble() - 0.45) * 0.008) * currentPrice
+            val drift = (0.0035 + (simRandom.nextDouble() - 0.45) * 0.008) * currentPrice
             val open = currentPrice
             val close = open + drift
-            val high = kotlin.math.max(open, close) + (kotlin.random.Random.nextDouble() * 0.004 * open)
-            val low = kotlin.math.min(open, close) - (kotlin.random.Random.nextDouble() * 0.004 * open)
+            val high = kotlin.math.max(open, close) + (simRandom.nextDouble() * 0.004 * open)
+            val low = kotlin.math.min(open, close) - (simRandom.nextDouble() * 0.004 * open)
             currentPrice = close
-            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 1200.0 + kotlin.random.Random.nextDouble() * 800))
+            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 1200.0 + simRandom.nextDouble() * 800))
         }
 
         // Phase 2: Trend Exhaustion & Transition to Range (100 candles, ADX decay 30 -> 16)
@@ -917,11 +918,11 @@ object EngineValidationSuite {
             val meanCenter = currentPrice
             val oscillation = kotlin.math.sin((i - 100) * 0.25) * (0.012 * meanCenter)
             val open = currentPrice
-            val close = meanCenter + oscillation + ((kotlin.random.Random.nextDouble() - 0.5) * 0.004 * meanCenter)
-            val high = kotlin.math.max(open, close) + (kotlin.random.Random.nextDouble() * 0.003 * open)
-            val low = kotlin.math.min(open, close) - (kotlin.random.Random.nextDouble() * 0.003 * open)
+            val close = meanCenter + oscillation + ((simRandom.nextDouble() - 0.5) * 0.004 * meanCenter)
+            val high = kotlin.math.max(open, close) + (simRandom.nextDouble() * 0.003 * open)
+            val low = kotlin.math.min(open, close) - (simRandom.nextDouble() * 0.003 * open)
             currentPrice = close
-            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 750.0 + kotlin.random.Random.nextDouble() * 400))
+            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 750.0 + simRandom.nextDouble() * 400))
         }
 
         // Phase 3: Established Ranging / Consolidation (100 candles, ADX < 18)
@@ -929,22 +930,22 @@ object EngineValidationSuite {
             val meanCenter = 68000.0
             val oscillation = kotlin.math.sin((i - 200) * 0.35) * (0.008 * meanCenter)
             val open = currentPrice
-            val close = meanCenter + oscillation + ((kotlin.random.Random.nextDouble() - 0.5) * 0.002 * meanCenter)
-            val high = kotlin.math.max(open, close) + (kotlin.random.Random.nextDouble() * 0.002 * open)
-            val low = kotlin.math.min(open, close) - (kotlin.random.Random.nextDouble() * 0.002 * open)
+            val close = meanCenter + oscillation + ((simRandom.nextDouble() - 0.5) * 0.002 * meanCenter)
+            val high = kotlin.math.max(open, close) + (simRandom.nextDouble() * 0.002 * open)
+            val low = kotlin.math.min(open, close) - (simRandom.nextDouble() * 0.002 * open)
             currentPrice = close
-            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 500.0 + kotlin.random.Random.nextDouble() * 250))
+            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 500.0 + simRandom.nextDouble() * 250))
         }
 
         // Phase 4: Volatility Explosion & Trend Resumption (100 candles, ADX > 28)
         for (i in 300 until 400) {
-            val drift = (0.0045 + (kotlin.random.Random.nextDouble() - 0.40) * 0.010) * currentPrice
+            val drift = (0.0045 + (simRandom.nextDouble() - 0.40) * 0.010) * currentPrice
             val open = currentPrice
             val close = open + drift
-            val high = kotlin.math.max(open, close) + (kotlin.random.Random.nextDouble() * 0.006 * open)
-            val low = kotlin.math.min(open, close) - (kotlin.random.Random.nextDouble() * 0.003 * open)
+            val high = kotlin.math.max(open, close) + (simRandom.nextDouble() * 0.006 * open)
+            val low = kotlin.math.min(open, close) - (simRandom.nextDouble() * 0.003 * open)
             currentPrice = close
-            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 1800.0 + kotlin.random.Random.nextDouble() * 1200))
+            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 1800.0 + simRandom.nextDouble() * 1200))
         }
 
         val breakoutWFO = BacktestEngine.runWalkForwardOptimization(breakout, symbol, multiRegimeCandles, windowCount = 4)

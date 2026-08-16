@@ -478,7 +478,7 @@ object LuminaSelfAdaptationEngine {
         val baseCalibratedProb = if (uncertainty == UncertaintyLevel.HIGH) {
             // High uncertainty: Bayesian Shrinkage blend towards Wilson lower bound & Beta prior
             val target = (wilsonLower * 0.40) + (bayesWinRate * 0.35) + (rawConfidence * 0.25)
-            val delta = (target - rawConfidence).coerceIn(-0.08, 0.05)
+            val delta = (target - rawConfidence).coerceIn(-0.05, 0.05)
             (rawConfidence + delta).coerceIn(0.10, 0.95)
         } else {
             val sampleWeight = (totalTrades / 50.0).coerceAtMost(1.0)
@@ -524,7 +524,12 @@ object LuminaSelfAdaptationEngine {
             winRatePct = blendedWR
         )
         // Blend Empirical Bayesian probability (70%) with ML Model prediction (30%)
-        val calibratedProb = ((empiricalCalibratedProb * 0.70) + (mlProb * 0.30)).coerceIn(0.10, 0.98)
+        val rawBlendedCalibratedProb = ((empiricalCalibratedProb * 0.70) + (mlProb * 0.30)).coerceIn(0.10, 0.98)
+        val calibratedProb = if (uncertainty == UncertaintyLevel.HIGH) {
+            (rawConfidence + (rawBlendedCalibratedProb - rawConfidence).coerceIn(-0.05, 0.05)).coerceIn(0.10, 0.95)
+        } else {
+            rawBlendedCalibratedProb
+        }
 
         // Calculate Holistic Strategy Quality (0 to 100)
         // Expectancy E[R] is the primary measure of trading edge rather than raw confidence

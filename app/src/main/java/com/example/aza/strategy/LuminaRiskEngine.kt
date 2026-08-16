@@ -342,20 +342,20 @@ object LuminaRiskEngine {
             TradeActionIntent.REVERSAL -> 0.70
             TradeActionIntent.REDUCE_POSITION -> 0.50
         }
-        if (symbolConcentrationPct > 0.25) {
+        if (explicitPositionMult == null && symbolConcentrationPct > 0.25) {
             intentMult *= 0.80
         }
 
-        // Microstructure Liquidity Guard: Check if depth within 0.5% of mid-price can absorb position size without > 2 bps market impact
+        // Microstructure Liquidity Guard: Check if depth within 0.5% of mid-price can absorb position size without excessive market impact
         val estimatedNotionalUSD = safeEquity * currentRisk / stopLossDistancePct
         var liquidityScaleMult = 1.0
         var liquidityGuardReason = ""
-        if (orderBookDepthWithin05PctUSD > 0.0) {
-            val estimatedImpactBps = (estimatedNotionalUSD / orderBookDepthWithin05PctUSD) * 10000.0 * 0.05
-            if (estimatedImpactBps > 2.0 || estimatedNotionalUSD > orderBookDepthWithin05PctUSD) {
+        if (explicitPositionMult == null && orderBookDepthWithin05PctUSD > 0.0) {
+            val estimatedImpactBps = (estimatedNotionalUSD / orderBookDepthWithin05PctUSD) * 50.0
+            if (estimatedNotionalUSD > orderBookDepthWithin05PctUSD * 0.80 || estimatedImpactBps > 20.0) {
                 liquidityScaleMult = (orderBookDepthWithin05PctUSD / max(1.0, estimatedNotionalUSD)).coerceIn(0.25, 0.90)
                 intentMult *= liquidityScaleMult
-                liquidityGuardReason = " | 💧 LIQUIDITY GUARD ACTIVATED: Order book depth ($${String.format(Locale.US, "%.0f", orderBookDepthWithin05PctUSD)} within 0.5%) cannot absorb $${String.format(Locale.US, "%.0f", estimatedNotionalUSD)} position without > 2.0 bps impact (${String.format(Locale.US, "%.1f", estimatedImpactBps)} bps est.). Sizing scaled by ${String.format(Locale.US, "%.2f", liquidityScaleMult)}x."
+                liquidityGuardReason = " | 💧 LIQUIDITY GUARD ACTIVATED: Order book depth ($${String.format(Locale.US, "%.0f", orderBookDepthWithin05PctUSD)} within 0.5%) cannot absorb $${String.format(Locale.US, "%.0f", estimatedNotionalUSD)} position without > 20.0 bps impact (${String.format(Locale.US, "%.1f", estimatedImpactBps)} bps est.). Sizing scaled by ${String.format(Locale.US, "%.2f", liquidityScaleMult)}x."
             }
         }
 

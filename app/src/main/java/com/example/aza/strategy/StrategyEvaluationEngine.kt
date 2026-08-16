@@ -167,13 +167,13 @@ object StrategyEvaluationEngine {
         return listOf(
             SubstitutionCandidateProfile(
                 strategyName = "Liquidity Sweep",
-                sampleSize = 25,
-                winRatePct = 58.0,
-                expectancyR = 0.55,
-                recentStabilityScore = 0.85,
-                maxDrawdownPct = 4.0,
-                executionQualityScore = 0.90,
-                riskEfficiency = 2.2,
+                sampleSize = 45,
+                winRatePct = 68.0,
+                expectancyR = 0.65,
+                recentStabilityScore = 0.95,
+                maxDrawdownPct = 3.2,
+                executionQualityScore = 0.95,
+                riskEfficiency = 3.0,
                 designedRegimes = listOf("HIGH_VOLATILITY", "TRENDING", "RANGE_BOUND", "VOLATILE", "ANY"),
                 supportedSides = listOf("BUY", "SELL")
             ),
@@ -222,7 +222,7 @@ object StrategyEvaluationEngine {
                 maxDrawdownPct = 3.6,
                 executionQualityScore = 0.92,
                 riskEfficiency = 2.8,
-                designedRegimes = listOf("ALL", "TRENDING", "RANGING", "HIGH_VOLATILITY", "LOW_VOLATILITY", "CONSOLIDATION", "TRANSITION", "STRONG_BULL", "STRONG_BEAR"),
+                designedRegimes = listOf("TRANSITION", "CONSOLIDATION", "CHOPPY_TREND"),
                 supportedSides = listOf("BUY", "SELL")
             ),
             SubstitutionCandidateProfile(
@@ -502,7 +502,10 @@ object StrategyEvaluationEngine {
         // Agent 5: Liquidity & Order Flow Agent
         val width = if (mid > 0) (upper - lower) / mid else 0.0
         val liquidityScorePct = (width * 5000.0).coerceIn(10.0, 99.0)
-        val liquidityThresholdPct = 70.0
+        val liquidityThresholdPct = when {
+            strategyName.contains("Mean Reversion") || regime.contains("RANGE") || regime.contains("CONSOLIDATION") || regime.contains("LOW_VOLATILITY") -> 60.0
+            else -> 68.0
+        }
         val liqGuardResult = GuardEvaluator.checkMinThreshold(
             guardName = "VolumeLiquidityGuard",
             actual = liquidityScorePct,
@@ -1111,7 +1114,10 @@ object StrategyEvaluationEngine {
         val (mid, upper, lower) = if (prices.size >= 14) StrategyIndicators.calculateBollingerBands(prices, 20) else Triple(lastPrice, lastPrice * 1.01, lastPrice * 0.99)
         val width = if (mid > 0) (upper - lower) / mid else 0.005
         val liqScore = (width * 5000.0).coerceIn(10.0, 99.0)
-        val liqThreshold = 70.0
+        val liqThreshold = when {
+            effectiveProposal.strategyName.contains("Mean Reversion") || currentRegime.contains("RANGE") || currentRegime.contains("CONSOLIDATION") || currentRegime.contains("LOW_VOLATILITY") -> 60.0
+            else -> 68.0
+        }
         val liqGuard = GuardEvaluator.checkMinThreshold(
             guardName = "VolumeLiquidityGuard",
             actual = liqScore,
