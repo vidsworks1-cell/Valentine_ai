@@ -410,6 +410,22 @@ object EngineValidationSuite {
                     }
                 }
             }
+            is MeanReversionGridStrategy -> {
+                for (spacing in listOf(0.50, 0.60, 0.75)) {
+                    for (levels in listOf(3.0, 4.0, 5.0)) {
+                        strategy.setParameters(mapOf("gridLevels" to levels, "gridSpacingAtr" to spacing))
+                        val (trades, _) = simulateWithExecutionModel(strategy, trainingCandles)
+                        val netProfit = trades.sumOf { it.profit }
+                        val es = calculateExpectedShortfall(trades, 0.90)
+                        val objectiveScore = netProfit - (dynamicPenaltyWeight * es)
+
+                        if (objectiveScore > bestObjectiveScore) {
+                            bestObjectiveScore = objectiveScore
+                            bestParams = mapOf("gridLevels" to levels, "gridSpacingAtr" to spacing)
+                        }
+                    }
+                }
+            }
         }
 
         if (bestParams.isNotEmpty()) {
@@ -853,4 +869,107 @@ object EngineValidationSuite {
         )
     }
 
+    /**
+     * Executes Walk-Forward Simulation across diverse market regimes comparing:
+     * 1. Standalone Breakout Momentum
+     * 2. Standalone Mean Reversion Grid
+     * 3. Combined Hybrid (Breakout + Mean Reversion Grid with dynamic ADX Transition trigger)
+     */
+    fun runHybridBreakoutGridWalkForwardSimulation(symbol: String = "BTCUSDT"): Map<String, Any> {
+        val breakout = BreakoutStrategy()
+        val grid = MeanReversionGridStrategy()
+        val hybrid = BreakoutGridHybridStrategy(breakoutStrategy = breakout, gridStrategy = grid)
+
+        // Generate synthetic multi-regime series (400 candles spanning Trending -> Transition -> Range -> Expansion)
+        val multiRegimeCandles = mutableListOf<MarketCandle>()
+        var currentPrice = 65000.0
+        val baseTime = System.currentTimeMillis() - (400L * 3600 * 1000)
+
+        // Phase 1: Strong Bull Trend (100 candles, ADX ~32)
+        for (i in 0 until 100) {
+            val drift = (0.0035 + (kotlin.random.Random.nextDouble() - 0.45) * 0.008) * currentPrice
+            val open = currentPrice
+            val close = open + drift
+            val high = kotlin.math.max(open, close) + (kotlin.random.Random.nextDouble() * 0.004 * open)
+            val low = kotlin.math.min(open, close) - (kotlin.random.Random.nextDouble() * 0.004 * open)
+            currentPrice = close
+            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 1200.0 + kotlin.random.Random.nextDouble() * 800))
+        }
+
+        // Phase 2: Trend Exhaustion & Transition to Range (100 candles, ADX decay 30 -> 16)
+        for (i in 100 until 200) {
+            val meanCenter = currentPrice
+            val oscillation = kotlin.math.sin((i - 100) * 0.25) * (0.012 * meanCenter)
+            val open = currentPrice
+            val close = meanCenter + oscillation + ((kotlin.random.Random.nextDouble() - 0.5) * 0.004 * meanCenter)
+            val high = kotlin.math.max(open, close) + (kotlin.random.Random.nextDouble() * 0.003 * open)
+            val low = kotlin.math.min(open, close) - (kotlin.random.Random.nextDouble() * 0.003 * open)
+            currentPrice = close
+            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 750.0 + kotlin.random.Random.nextDouble() * 400))
+        }
+
+        // Phase 3: Established Ranging / Consolidation (100 candles, ADX < 18)
+        for (i in 200 until 300) {
+            val meanCenter = 68000.0
+            val oscillation = kotlin.math.sin((i - 200) * 0.35) * (0.008 * meanCenter)
+            val open = currentPrice
+            val close = meanCenter + oscillation + ((kotlin.random.Random.nextDouble() - 0.5) * 0.002 * meanCenter)
+            val high = kotlin.math.max(open, close) + (kotlin.random.Random.nextDouble() * 0.002 * open)
+            val low = kotlin.math.min(open, close) - (kotlin.random.Random.nextDouble() * 0.002 * open)
+            currentPrice = close
+            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 500.0 + kotlin.random.Random.nextDouble() * 250))
+        }
+
+        // Phase 4: Volatility Explosion & Trend Resumption (100 candles, ADX > 28)
+        for (i in 300 until 400) {
+            val drift = (0.0045 + (kotlin.random.Random.nextDouble() - 0.40) * 0.010) * currentPrice
+            val open = currentPrice
+            val close = open + drift
+            val high = kotlin.math.max(open, close) + (kotlin.random.Random.nextDouble() * 0.006 * open)
+            val low = kotlin.math.min(open, close) - (kotlin.random.Random.nextDouble() * 0.003 * open)
+            currentPrice = close
+            multiRegimeCandles.add(MarketCandle(baseTime + (i * 3600 * 1000L), open, high, low, close, 1800.0 + kotlin.random.Random.nextDouble() * 1200))
+        }
+
+        val breakoutWFO = BacktestEngine.runWalkForwardOptimization(breakout, symbol, multiRegimeCandles, windowCount = 4)
+        val gridWFO = BacktestEngine.runWalkForwardOptimization(grid, symbol, multiRegimeCandles, windowCount = 4)
+        val hybridWFO = BacktestEngine.runWalkForwardOptimization(hybrid, symbol, multiRegimeCandles, windowCount = 4)
+
+        val breakoutBacktest = BacktestEngine.runBacktest(breakout, symbol, multiRegimeCandles)
+        val gridBacktest = BacktestEngine.runBacktest(grid, symbol, multiRegimeCandles)
+        val hybridBacktest = BacktestEngine.runBacktest(hybrid, symbol, multiRegimeCandles)
+
+        return mapOf(
+            "symbol" to symbol,
+            "totalCandlesTested" to multiRegimeCandles.size,
+            "regimesEvaluated" to listOf("Strong Trend Expansion", "Trend-to-Range Transition", "Established Ranging Consolidation", "Volatility Resumption"),
+            "breakoutStandalone" to mapOf(
+                "strategy" to breakout.name,
+                "netProfitUsd" to breakoutBacktest.netProfit,
+                "winRatePct" to breakoutBacktest.winRate,
+                "profitFactor" to breakoutBacktest.profitFactor,
+                "maxDrawdownPct" to breakoutBacktest.maxDrawdown,
+                "wfePct" to breakoutWFO.aggregateWalkForwardEfficiencyPct,
+                "robustness" to breakoutWFO.robustnessRating
+            ),
+            "gridStandalone" to mapOf(
+                "strategy" to grid.name,
+                "netProfitUsd" to gridBacktest.netProfit,
+                "winRatePct" to gridBacktest.winRate,
+                "profitFactor" to gridBacktest.profitFactor,
+                "maxDrawdownPct" to gridBacktest.maxDrawdown,
+                "wfePct" to gridWFO.aggregateWalkForwardEfficiencyPct,
+                "robustness" to gridWFO.robustnessRating
+            ),
+            "hybridSystem" to mapOf(
+                "strategy" to hybrid.name,
+                "netProfitUsd" to hybridBacktest.netProfit,
+                "winRatePct" to hybridBacktest.winRate,
+                "profitFactor" to hybridBacktest.profitFactor,
+                "maxDrawdownPct" to hybridBacktest.maxDrawdown,
+                "wfePct" to hybridWFO.aggregateWalkForwardEfficiencyPct,
+                "robustness" to hybridWFO.robustnessRating
+            )
+        )
+    }
 }

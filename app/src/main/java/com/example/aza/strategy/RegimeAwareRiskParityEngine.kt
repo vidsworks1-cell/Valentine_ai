@@ -142,16 +142,18 @@ object RegimeAwareRiskParityEngine {
                         "Breakout Momentum" -> 1.45
                         "Volatility Expansion Breakout" -> 1.35
                         "Mean Reversion" -> 0.60
+                        "Mean Reversion Grid" -> 0.50
                         "Liquidity Sweep" -> 1.10
                         else -> 1.00
                     }
                 }
-                "RANGING", "LOW_VOLATILITY_RANGING", "ACCUMULATION" -> {
+                "RANGING", "LOW_VOLATILITY_RANGING", "ACCUMULATION", "CONSOLIDATION" -> {
                     when (strat) {
-                        "Mean Reversion" -> 0.80
+                        "Mean Reversion Grid" -> 1.45
+                        "Mean Reversion" -> 0.85
                         "Liquidity Sweep" -> 1.25
-                        "Breakout Momentum" -> 0.70
-                        "Volatility Expansion Breakout" -> 0.75
+                        "Breakout Momentum" -> 0.65
+                        "Volatility Expansion Breakout" -> 0.70
                         else -> 1.00
                     }
                 }
@@ -159,6 +161,7 @@ object RegimeAwareRiskParityEngine {
                     when (strat) {
                         "Volatility Expansion Breakout" -> 1.30
                         "Mean Reversion" -> 0.45
+                        "Mean Reversion Grid" -> 0.40
                         "Breakout Momentum" -> 0.90
                         "Liquidity Sweep" -> 1.15
                         else -> 0.80
@@ -351,6 +354,7 @@ object RegimeAwareRiskParityEngine {
             Triple("BTCUSDT", "Breakout Momentum", "CRYPTO"),
             Triple("ETHUSDT", "Mean Reversion", "CRYPTO"),
             Triple("SOLUSDT", "Volatility Expansion Breakout", "CRYPTO"),
+            Triple("BNBUSDT", "Mean Reversion Grid", "CRYPTO"),
             Triple("AVAXUSDT", "Liquidity Sweep", "CRYPTO"),
             Triple("USDCUSD", "Defensive Cash Yield", "DEFENSIVE")
         )
@@ -363,6 +367,7 @@ object RegimeAwareRiskParityEngine {
                 "Breakout Momentum" -> 0.00065
                 "Volatility Expansion Breakout" -> 0.00072
                 "Mean Reversion" -> 0.00052
+                "Mean Reversion Grid" -> 0.00060
                 "Liquidity Sweep" -> 0.00058
                 else -> 0.00012
             }
@@ -370,6 +375,7 @@ object RegimeAwareRiskParityEngine {
                 "Breakout Momentum" -> 0.022
                 "Volatility Expansion Breakout" -> 0.025
                 "Mean Reversion" -> 0.016
+                "Mean Reversion Grid" -> 0.014
                 "Liquidity Sweep" -> 0.019
                 else -> 0.001
             }

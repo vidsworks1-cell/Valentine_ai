@@ -202,6 +202,18 @@ object StrategyEvaluationEngine {
                 supportedSides = listOf("BUY", "SELL")
             ),
             SubstitutionCandidateProfile(
+                strategyName = "Mean Reversion Grid",
+                sampleSize = 35,
+                winRatePct = 63.5,
+                expectancyR = 0.48,
+                recentStabilityScore = 0.88,
+                maxDrawdownPct = 4.2,
+                executionQualityScore = 0.90,
+                riskEfficiency = 2.4,
+                designedRegimes = listOf("RANGING", "RANGE_BOUND", "CYCLIC", "ACCUMULATION", "DISTRIBUTION", "LOW_VOLATILITY", "CONSOLIDATION", "TREND_TO_RANGE_TRANSITION", "TRANSITION"),
+                supportedSides = listOf("BUY", "SELL")
+            ),
+            SubstitutionCandidateProfile(
                 strategyName = "Breakout Momentum",
                 sampleSize = 20,
                 winRatePct = 48.0,
@@ -437,6 +449,7 @@ object StrategyEvaluationEngine {
         } else {
             when (strategyName) {
                 "Mean Reversion" -> regime.contains("RANGE") || regime.contains("CYCLIC") || regime.contains("ACCUMULATION") || regime.contains("DISTRIBUTION") || regime.contains("TREND")
+                "Mean Reversion Grid" -> regime.contains("RANGE") || regime.contains("CYCLIC") || regime.contains("ACCUMULATION") || regime.contains("DISTRIBUTION") || regime.contains("CONSOLIDATION") || regime.contains("LOW_VOLATILITY") || regime.contains("TRANSITION")
                 "Breakout Momentum", "Breakout" -> regime.contains("TREND") || regime.contains("BULL") || regime.contains("BEAR") || regime.contains("HIGH_VOLATILITY") || regime.contains("CRASH")
                 "Liquidity Sweep" -> true
                 "Volatility Expansion Breakout" -> regime.contains("VOLATILITY") || regime.contains("TREND") || regime.contains("BULL")
@@ -551,6 +564,10 @@ object StrategyEvaluationEngine {
             "Mean Reversion" -> mapOf(
                 "rsiPeriod" to listOf(10.0, 14.0, 18.0),
                 "oversoldThreshold" to listOf(25.0, 30.0, 35.0)
+            )
+            "Mean Reversion Grid" -> mapOf(
+                "gridLevels" to listOf(3.0, 4.0, 5.0),
+                "gridSpacingAtr" to listOf(0.50, 0.60, 0.75)
             )
             else -> emptyMap()
         }

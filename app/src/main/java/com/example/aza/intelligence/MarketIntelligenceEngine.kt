@@ -496,12 +496,12 @@ class MarketIntelligenceEngine(
     fun isStrategyStrictlyCompatibleWithRegime(strategyName: String, regime: String): Boolean {
         val cleanRegime = regime.uppercase(Locale.US)
         return when (strategyName) {
-            "Mean Reversion" -> {
-                // Hard Gate: Allowed in ranging, accumulation/distribution, low volatility AND trending pullbacks as requested
+            "Mean Reversion", "Mean Reversion Grid" -> {
+                // Hard Gate: Allowed in ranging, accumulation/distribution, low volatility, consolidation, cyclic
                 cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || 
                 cleanRegime.contains("TREND") || cleanRegime.contains("TRENDING") ||
                 cleanRegime == "ACCUMULATION" || cleanRegime == "DISTRIBUTION" || 
-                cleanRegime == "LOW_VOLATILITY"
+                cleanRegime == "LOW_VOLATILITY" || cleanRegime == "CONSOLIDATION" || cleanRegime == "CYCLIC"
             }
             "Breakout", "Volatility Expansion Breakout" -> {
                 // Hard Gate: ONLY allowed in trending / volatile expansion regimes
@@ -624,8 +624,8 @@ class MarketIntelligenceEngine(
                 if (volumeScore > 4.5) base += 0.15
                 if (srScore > 0.8) base += 0.10
             }
-            "Mean Reversion" -> {
-                if (cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || cleanRegime == "ACCUMULATION" || cleanRegime == "DISTRIBUTION" || cleanRegime == "LOW_VOLATILITY" || cleanRegime == "CYCLIC") base += 0.25
+            "Mean Reversion", "Mean Reversion Grid" -> {
+                if (cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || cleanRegime == "ACCUMULATION" || cleanRegime == "DISTRIBUTION" || cleanRegime == "LOW_VOLATILITY" || cleanRegime == "CYCLIC" || cleanRegime == "CONSOLIDATION") base += 0.25
                 if (momentumScore < -0.8) base += 0.16
                 if (volatilityScore < 2.5) base += 0.12
                 if (srScore > 0.5) base += 0.08

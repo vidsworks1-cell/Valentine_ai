@@ -7,6 +7,8 @@ object StrategyRegistry {
         register(TrendFollowingStrategy())
         register(BreakoutStrategy())
         register(MeanReversionStrategy())
+        register(MeanReversionGridStrategy())
+        register(BreakoutGridHybridStrategy())
         register(LiquiditySweepStrategy())
         register(VolatilityExpansionBreakoutStrategy())
     }

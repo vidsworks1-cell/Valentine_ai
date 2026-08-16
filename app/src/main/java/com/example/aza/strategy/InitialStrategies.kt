@@ -1,5 +1,6 @@
 package com.example.aza.strategy
 
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
@@ -198,33 +199,57 @@ class BreakoutStrategy(
 
     override fun analyzeMarket(market: String, prices: List<Double>): String {
         if (prices.size < 2) return "Insufficient data"
-        val (_, upper, lower) = StrategyIndicators.calculateBollingerBands(prices, period)
+        val (mid, upper, lower) = StrategyIndicators.calculateBollingerBands(prices, period)
         val rsi = StrategyIndicators.calculateRSI(prices, 14)
         val adx = StrategyIndicators.calculateADX(prices, 14)
-        return "BB Upper: ${String.format("%.2f", upper)}, RSI: ${String.format("%.1f", rsi)}, ADX: ${String.format("%.1f", adx)}"
+        val bbWidth = if (mid > 0) (upper - lower) / mid else 0.0
+        val adxState = when {
+            adx >= 30.0 -> "Strong Trend (ADX: ${String.format(Locale.US, "%.1f", adx)})"
+            adx >= 22.0 -> "Moderate Trend (ADX: ${String.format(Locale.US, "%.1f", adx)})"
+            else -> "Low ADX / Choppy (ADX: ${String.format(Locale.US, "%.1f", adx)})"
+        }
+        return "BB Upper: ${String.format(Locale.US, "%.2f", upper)}, BBW: ${String.format(Locale.US, "%.3f", bbWidth)}, RSI: ${String.format(Locale.US, "%.1f", rsi)}, $adxState"
     }
 
     override fun shouldEnter(market: String, prices: List<Double>): Boolean {
-        if (prices.size < period) return false
+        if (prices.size < period + 2) return false
         val lastPrice = prices.last()
-        val (_, upper, _) = StrategyIndicators.calculateBollingerBands(prices.dropLast(1), period)
+        val (mid, upper, lower) = StrategyIndicators.calculateBollingerBands(prices.dropLast(1), period)
         val rsi = StrategyIndicators.calculateRSI(prices, 14)
         val atr = StrategyIndicators.calculateATR(prices, 14)
         val adx = StrategyIndicators.calculateADX(prices, 14)
+        val prevAdx = StrategyIndicators.calculateADX(prices.dropLast(1), 14)
         val recentDiff = if (prices.size >= 2) kotlin.math.abs(prices.last() - prices[prices.size - 2]) else 0.0
         val donchianHigh = prices.takeLast(period).dropLast(1).maxOrNull() ?: upper
+        val bbWidth = if (mid > 0) (upper - lower) / mid else 0.0
         
-        // Refined Breakout Momentum Entry Rules for Consistent Profitability:
-        // 1. Price breaks above upper Bollinger Band OR 20-period Donchian High
-        // 2. RSI in strong momentum corridor (52.0 <= RSI <= 75.0 to avoid overbought exhaustion)
-        // 3. Volatility expansion confirmation: recent bar movement >= 0.80 * ATR
-        // 4. Trend strength confirmation: ADX >= 20.0 (prevents false breakouts in choppy ranges)
+        // Refined Breakout Momentum Entry Rules with Adaptive WFO Actionable Improvements:
+        // 1. Dynamic Regime ADX: ADX >= 26.0 in chop/squeeze, ADX >= 22.0 in established trend
+        // 2. Volatility Squeeze: Bollinger Bandwidth (BBW <= 0.050) + Expansion >= 1.10x ATR
+        // 3. Price breaks above upper Bollinger Band OR 20-period Donchian High
         val priceBreakout = lastPrice > upper || lastPrice > donchianHigh
-        val momentumConfirmed = rsi in 52.0..75.0
-        val volatilityExpanded = atr > 0.0 && recentDiff >= (atr * 0.80)
-        val trendConfirmed = adx >= 20.0
-        
-        return priceBreakout && momentumConfirmed && volatilityExpanded && trendConfirmed
+        if (!priceBreakout || atr <= 0.0) return false
+
+        return when {
+            // Tier 1: Low ADX Regime (< 22.0) - Hard Gate: Sideways Chop / Consolidation -> Block false breakouts
+            adx < 22.0 -> false
+
+            // Tier 2: Low-to-Moderate / Squeeze Regime (22.0 <= ADX < 26.0) - Requires strict Volatility Squeeze (BBW <= 0.050) & Strong Expansion (>= 1.10x ATR)
+            adx < 26.0 -> {
+                val tightSqueeze = bbWidth <= 0.050 || lastPrice > donchianHigh
+                val strongExpansion = recentDiff >= (atr * 1.10)
+                val tightMomentumCorridor = rsi in 54.0..74.0
+                val adxAccelerating = adx >= prevAdx
+                tightSqueeze && strongExpansion && tightMomentumCorridor && adxAccelerating
+            }
+
+            // Tier 3: Established Trend Regime (ADX >= 26.0) - High-Conviction Trend Breakout
+            else -> {
+                val momentumConfirmed = rsi in 52.0..76.0
+                val volatilityExpanded = recentDiff >= (atr * 0.90)
+                momentumConfirmed && volatilityExpanded
+            }
+        }
     }
 
     override fun shouldExit(market: String, prices: List<Double>, currentPosition: Double): Boolean {
@@ -232,31 +257,46 @@ class BreakoutStrategy(
         val lastPrice = prices.last()
         val (mid, _, lower) = StrategyIndicators.calculateBollingerBands(prices, period)
         val rsi = StrategyIndicators.calculateRSI(prices, 14)
-        // Exit on mid-band drop or extreme overbought RSI divergence (> 80)
-        return lastPrice < mid || lastPrice < lower || rsi > 80.0
+        val adx = StrategyIndicators.calculateADX(prices, 14)
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val highestSinceEntry = prices.takeLast(10).maxOrNull() ?: lastPrice
+        
+        // Chandelier ATR Trailing Stop Exit: If price drops 1.1x ATR below recent 10-bar highest peak
+        val chandelierExit = atr > 0.0 && lastPrice <= (highestSinceEntry - (atr * 1.1))
+        
+        // Exit on Chandelier Stop, mid-band drop, extreme overbought RSI divergence (> 80), or momentum stall
+        return chandelierExit || lastPrice < mid || lastPrice < lower || rsi > 80.0 || (rsi < 48.0 && adx < 22.0)
     }
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val multiplier = 1.2 // Calibrated 1.2 ATR tight stop loss for breakout momentum
+        val adx = StrategyIndicators.calculateADX(prices, 14)
+        // Tighter stop loss in lower ADX regimes to cut false breakouts early
+        val multiplier = if (adx < 25.0) 1.0 else 1.2
         val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.015
         return entryPrice - slDist
     }
 
     override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val multiplier = 1.2
+        val adx = StrategyIndicators.calculateADX(prices, 14)
+        val multiplier = if (adx < 25.0) 1.0 else 1.2
         val slDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.015
-        val rewardRatio = 3.2 // Asymmetric 3.2 RRR payoff structure to maximize trend gains
+        val rewardRatio = if (adx >= 30.0) 3.2 else 2.5 // Adapt RRR target based on trend persistence
         return entryPrice + (slDist * rewardRatio)
     }
 
     override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double>): Double {
         val adx = StrategyIndicators.calculateADX(prices, 14)
-        val boost = if (adx > 30.0) 1.15 else 1.0
+        val boost = when {
+            adx >= 30.0 -> 1.15
+            adx < 25.0 -> 0.75 // Scaled down sizing in low-ADX breakout regimes
+            else -> 1.0
+        }
         val amountToRisk = accountBalance * (riskPercent / 100.0) * boost
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val stopLossDist = if (atr > 0.0) atr * 1.2 else entryPrice * 0.015
+        val multiplier = if (adx < 25.0) 1.0 else 1.2
+        val stopLossDist = if (atr > 0.0) atr * multiplier else entryPrice * 0.015
         val rawSize = amountToRisk / stopLossDist
         val maxUnits = (accountBalance * 0.08) / entryPrice
         val minUnits = (accountBalance * 0.005) / entryPrice
@@ -265,11 +305,13 @@ class BreakoutStrategy(
 
     override fun calculateTrailingStop(market: String, entryPrice: Double, currentPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val trailDist = if (atr > 0.0) atr * 0.85 else currentPrice * 0.010
+        val adx = StrategyIndicators.calculateADX(prices, 14)
+        val trailDist = if (atr > 0.0) (if (adx < 25.0) atr * 0.75 else atr * 0.85) else currentPrice * 0.010
         val favorableMove = currentPrice - entryPrice
         val moveInAtr = if (atr > 0) favorableMove / atr else 0.0
+        val activationThreshold = if (adx < 25.0) 0.45 else 0.60 // Earlier breakeven activation in low ADX
 
-        return if (moveInAtr >= 0.6) {
+        return if (moveInAtr >= activationThreshold) {
             val breakevenLevel = entryPrice * 1.0015
             kotlin.math.max(breakevenLevel, currentPrice - trailDist)
         } else {
@@ -283,6 +325,7 @@ class BreakoutStrategy(
         val isExit = shouldExit(market, prices, 1.0)
         val (_, upper, lower) = StrategyIndicators.calculateBollingerBands(prices, period)
         val rsi = StrategyIndicators.calculateRSI(prices, 14)
+        val adx = StrategyIndicators.calculateADX(prices, 14)
 
         val signal = when {
             isEnter -> SignalType.BUY
@@ -291,7 +334,12 @@ class BreakoutStrategy(
         }
 
         val dynamicConfidence = when (signal) {
-            SignalType.BUY -> if (rsi in 58.0..72.0) 0.86 else if (rsi >= 52.0) 0.80 else 0.72
+            SignalType.BUY -> when {
+                adx >= 30.0 && rsi in 58.0..72.0 -> 0.88
+                adx >= 25.0 -> 0.82
+                adx in 20.0..25.0 -> 0.76
+                else -> 0.65
+            }
             SignalType.SELL -> 0.74
             SignalType.HOLD -> 0.50
         }
@@ -299,12 +347,18 @@ class BreakoutStrategy(
         val sl = calculateStopLoss(market, entry, prices)
         val tp = calculateTakeProfit(market, entry, prices)
         val size = calculatePositionSize(market, accountBalance, entry, riskPercent, prices)
-        val rrr = 3.2
+        val rrr = if (adx >= 30.0) 3.2 else 2.5
 
         val explanation = when (signal) {
-            SignalType.BUY -> "High-conviction Breakout Momentum confirmed. Last price ${String.format("%.2f", lastPrice)} expanded above resistance (${String.format("%.2f", upper)}) with healthy RSI (${String.format("%.1f", rsi)})."
-            SignalType.SELL -> "Breakout momentum waning. Price dropped below midline channel."
-            SignalType.HOLD -> "Price is consolidating within Bollinger Band channels (${String.format("%.2f", lower)} - ${String.format("%.2f", upper)})."
+            SignalType.BUY -> {
+                val adxTag = if (adx >= 25.0) "Strong ADX (${String.format(Locale.US, "%.1f", adx)})" else "Squeeze-Confirmed Low ADX (${String.format(Locale.US, "%.1f", adx)})"
+                "High-conviction Breakout Momentum confirmed ($adxTag). Last price ${String.format(Locale.US, "%.2f", lastPrice)} expanded above resistance (${String.format(Locale.US, "%.2f", upper)}) with RSI (${String.format(Locale.US, "%.1f", rsi)})."
+            }
+            SignalType.SELL -> "Breakout momentum waning. Price dropped below midline channel or ADX stalled."
+            SignalType.HOLD -> {
+                val holdReason = if (adx < 20.0) "ADX too low (${String.format(Locale.US, "%.1f", adx)} < 20.0; chop gate active)" else "Price consolidating within channels (${String.format(Locale.US, "%.2f", lower)} - ${String.format(Locale.US, "%.2f", upper)})"
+                "Awaiting high-probability breakout setup. $holdReason."
+            }
         }
 
         return TradeProposal(name, market, signal, dynamicConfidence, entry, sl, tp, size, rrr, explanation)
@@ -782,42 +836,65 @@ class VolatilityExpansionBreakoutStrategy(
     }
 
     override fun shouldEnter(market: String, prices: List<Double>): Boolean {
-        if (prices.size < period + 1) return false
+        if (prices.size < period + 2) return false
         val lastPrice = prices.last()
         val prevPrice = prices[prices.size - 2]
         val (mid, upper, lower) = StrategyIndicators.calculateBollingerBands(prices.dropLast(1), period)
         val atr = StrategyIndicators.calculateATR(prices, 14)
         val adx = StrategyIndicators.calculateADX(prices, 14)
+        val prevAdx = StrategyIndicators.calculateADX(prices.dropLast(1), 14)
+        val bandwidth = if (mid > 0) (upper - lower) / mid else 0.0
         
-        // Volatility Expansion Entry Rules:
-        // 1. Breakout tick exceeds upper Bollinger Band OR 20-period Donchian High
-        // 2. Volatility Expansion: Recent bar move >= 1.1 * ATR
-        // 3. ADX trend acceleration: ADX >= 22.0
+        // Volatility Expansion Entry Rules with Adaptive WFO Actionable Improvements:
+        // 1. Dynamic Regime ADX: ADX >= 26.0 in chop, ADX >= 22.0 in established trend
+        // 2. Volatility Squeeze: Bollinger Bandwidth (BBW <= 0.050) + Expansion >= 1.10x ATR
+        // 3. Breakout tick exceeds upper Bollinger Band OR 20-period Donchian High
         val donchianHigh = prices.takeLast(period).dropLast(1).maxOrNull() ?: upper
         val priceBreakout = lastPrice > upper || lastPrice > donchianHigh
-        val candleMove = kotlin.math.abs(lastPrice - prevPrice)
-        val expansionConfirmed = atr > 0.0 && candleMove >= (atr * 1.1)
-        val trendAccelerating = adx >= 22.0
+        if (!priceBreakout || atr <= 0.0) return false
 
-        return priceBreakout && expansionConfirmed && trendAccelerating
+        val candleMove = kotlin.math.abs(lastPrice - prevPrice)
+
+        return when {
+            // Tier 1: Low ADX Regime (< 22.0) - Hard Gate: Chop / False Breakouts -> Reject
+            adx < 22.0 -> false
+
+            // Tier 2: Low-to-Moderate ADX Regime (22.0 <= ADX < 26.0) - Requires Tight Pre-Squeeze (BBW <= 0.050) & Heavy Expansion (>= 1.10x ATR)
+            adx < 26.0 -> {
+                val tightSqueeze = bandwidth <= 0.050 || lastPrice > donchianHigh
+                val heavyExpansion = candleMove >= (atr * 1.10)
+                val adxRising = adx >= prevAdx
+                tightSqueeze && heavyExpansion && adxRising
+            }
+
+            // Tier 3: Established Trend Regime (ADX >= 26.0) - Standard High-Conviction Volatility Expansion
+            else -> {
+                candleMove >= (atr * 0.95)
+            }
+        }
     }
 
     override fun shouldExit(market: String, prices: List<Double>, currentPosition: Double): Boolean {
         if (currentPosition <= 0 || prices.size < 5) return false
         val lastPrice = prices.last()
         val (mid, _, lower) = StrategyIndicators.calculateBollingerBands(prices, period)
-        return lastPrice < mid || lastPrice < lower
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val highestSinceEntry = prices.takeLast(10).maxOrNull() ?: lastPrice
+        
+        // Chandelier ATR Trailing Stop Exit: Protect profits when price drops 1.1x ATR from recent peak
+        val chandelierExit = atr > 0.0 && lastPrice <= (highestSinceEntry - (atr * 1.1))
+        return chandelierExit || lastPrice < mid || lastPrice < lower
     }
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val slDist = if (atr > 0.0) atr * 1.5 else entryPrice * 0.02
+        val slDist = if (atr > 0.0) atr * 1.2 else entryPrice * 0.02
         return entryPrice - slDist
     }
 
     override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val slDist = if (atr > 0.0) atr * 1.5 else entryPrice * 0.02
+        val slDist = if (atr > 0.0) atr * 1.2 else entryPrice * 0.02
         val rewardRatio = 3.0 // 3.0 RRR for volatility expansion breakouts
         return entryPrice + (slDist * rewardRatio)
     }
@@ -825,7 +902,7 @@ class VolatilityExpansionBreakoutStrategy(
     override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double>): Double {
         val amountToRisk = accountBalance * (riskPercent / 100.0) * 1.10 // 1.10x risk scale in high conviction breakout
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val stopLossDist = if (atr > 0.0) atr * 1.5 else entryPrice * 0.020
+        val stopLossDist = if (atr > 0.0) atr * 1.2 else entryPrice * 0.020
         val rawSize = amountToRisk / stopLossDist
         val maxUnits = (accountBalance * 0.08) / entryPrice
         val minUnits = (accountBalance * 0.005) / entryPrice
@@ -838,7 +915,8 @@ class VolatilityExpansionBreakoutStrategy(
         val favorableMove = currentPrice - entryPrice
         val moveInAtr = if (atr > 0) favorableMove / atr else 0.0
 
-        return if (moveInAtr >= 0.8) {
+        // Chandelier ATR Trailing Stop (1.1x ATR activated at +1.0R / 1.0x ATR profit)
+        return if (moveInAtr >= 1.0) {
             val breakevenLevel = entryPrice * 1.002
             kotlin.math.max(breakevenLevel, currentPrice - trailDist)
         } else {
@@ -873,11 +951,378 @@ class VolatilityExpansionBreakoutStrategy(
         val rrr = 3.0
 
         val explanation = when (signal) {
-            SignalType.BUY -> "Volatility Expansion Breakout confirmed! Candle move expanded past 1.1x ATR. Bucket: [$confidenceBucket], ADX: ${String.format("%.1f", adx)}."
+            SignalType.BUY -> "Volatility Expansion Breakout confirmed! Candle move expanded past 1.1x ATR. Bucket: [$confidenceBucket], ADX: ${String.format(Locale.US, "%.1f", adx)}."
             SignalType.SELL -> "Breakout momentum lost. Trailing stop / mid-band breached."
             SignalType.HOLD -> "Awaiting squeeze expansion breakout. Bucket: [$confidenceBucket]."
         }
 
         return TradeProposal(name, market, signal, confidence, entry, sl, tp, size, rrr, explanation)
+    }
+}
+
+class MeanReversionGridStrategy(
+    var gridLevels: Int = 4,
+    var gridSpacingAtr: Double = 0.60,
+    var rsiPeriod: Int = 14,
+    var oversoldThreshold: Double = 36.0,
+    var overboughtThreshold: Double = 64.0,
+    var adxTransitionThreshold: Double = 22.0,
+    var adxTrendCeiling: Double = 25.0
+) : TradingStrategy {
+    override val name = "Mean Reversion Grid"
+    override val version = "1.1.0"
+    override val description = "Conditionally activates dynamic statistical grid tranches when ADX confirms a trend-to-range exhaustion transition (< 22.0), fine-tuning grid density and ATR buffer spacing to capture mean-reversion oscillations while guarding against trend re-acceleration."
+
+    override val designedRegimes = listOf(
+        "Ranging", "RANGE_BOUND", "Low volatility", "LOW_VOLATILITY_RANGING",
+        "ACCUMULATION", "DISTRIBUTION", "CYCLIC", "CONSOLIDATION", "TREND_TO_RANGE_TRANSITION"
+    )
+
+    override fun getParameters(): Map<String, Double> = mapOf(
+        "gridLevels" to gridLevels.toDouble(),
+        "gridSpacingAtr" to gridSpacingAtr,
+        "rsiPeriod" to rsiPeriod.toDouble(),
+        "oversoldThreshold" to oversoldThreshold,
+        "overboughtThreshold" to overboughtThreshold,
+        "adxTransitionThreshold" to adxTransitionThreshold,
+        "adxTrendCeiling" to adxTrendCeiling
+    )
+
+    override fun setParameters(params: Map<String, Double>) {
+        params["gridLevels"]?.let { gridLevels = it.toInt() }
+        params["gridSpacingAtr"]?.let { gridSpacingAtr = it }
+        params["rsiPeriod"]?.let { rsiPeriod = it.toInt() }
+        params["oversoldThreshold"]?.let { oversoldThreshold = it }
+        params["overboughtThreshold"]?.let { overboughtThreshold = it }
+        params["adxTransitionThreshold"]?.let { adxTransitionThreshold = it }
+        params["adxTrendCeiling"]?.let { adxTrendCeiling = it }
+    }
+
+    override val supportedMarkets = listOf("BTC", "ETH", "SOL", "BNB", "AAPL", "NVDA")
+    override val riskProfile = "Conservative"
+    override val timeframe = "15M/30M"
+    override val requiredIndicators = listOf("Bollinger Bands (20, 2.0)", "RSI (14)", "ADX (14)", "ATR (14)")
+
+    data class TransitionAnalysis(
+        val isTransitionTriggered: Boolean,
+        val isEstablishedRange: Boolean,
+        val currentAdx: Double,
+        val priorPeakAdx: Double,
+        val adxDecayVelocity: Double,
+        val effectiveGridSpacingAtr: Double,
+        val effectiveGridLevels: Int,
+        val statusMessage: String
+    )
+
+    fun evaluateTransitionContext(prices: List<Double>): TransitionAnalysis {
+        if (prices.size < 20) {
+            return TransitionAnalysis(
+                isTransitionTriggered = false,
+                isEstablishedRange = false,
+                currentAdx = 20.0,
+                priorPeakAdx = 20.0,
+                adxDecayVelocity = 0.0,
+                effectiveGridSpacingAtr = gridSpacingAtr,
+                effectiveGridLevels = gridLevels,
+                statusMessage = "Insufficient data"
+            )
+        }
+
+        val currentAdx = StrategyIndicators.calculateADX(prices, 14)
+        
+        // Calculate ADX trend over past 8 bars to detect transition from trend
+        val lookbackBars = 8
+        var priorPeakAdx = currentAdx
+        if (prices.size >= 14 + lookbackBars) {
+            for (offset in 1..lookbackBars) {
+                val subPrices = prices.dropLast(offset)
+                val pastAdx = StrategyIndicators.calculateADX(subPrices, 14)
+                if (pastAdx > priorPeakAdx) {
+                    priorPeakAdx = pastAdx
+                }
+            }
+        }
+
+        val adxDecayVelocity = priorPeakAdx - currentAdx
+        val isDecayingFromTrend = priorPeakAdx >= adxTrendCeiling && currentAdx < adxTransitionThreshold
+        val isEstablishedRange = currentAdx < 18.0 && priorPeakAdx < 23.0
+        val isTransitionTriggered = currentAdx < adxTransitionThreshold && (isDecayingFromTrend || isEstablishedRange)
+
+        // Fine-tuned settings within transition vs established range context:
+        // Transition Mode (residual volatility): Widen grid spacing to 0.75 ATR, 3 levels
+        // Established Range Mode (tight channel): Narrow spacing to 0.50 ATR, 4 tranches
+        val (effectiveSpacing, effectiveLevels, msg) = when {
+            isDecayingFromTrend -> Triple(
+                0.75,
+                3,
+                "ACTIVE TREND-TO-RANGE TRANSITION: ADX cooled from ${String.format(Locale.US, "%.1f", priorPeakAdx)} to ${String.format(Locale.US, "%.1f", currentAdx)} (Decay: ${String.format(Locale.US, "%.1f", adxDecayVelocity)}). Using wide 0.75x ATR grid buffer."
+            )
+            isEstablishedRange -> Triple(
+                0.50,
+                4,
+                "ESTABLISHED RANGE: ADX low at ${String.format(Locale.US, "%.1f", currentAdx)}. Using dense 0.50x ATR grid with 4 tranches."
+            )
+            currentAdx < adxTransitionThreshold -> Triple(
+                gridSpacingAtr,
+                gridLevels,
+                "MODERATE RANGE: ADX ${String.format(Locale.US, "%.1f", currentAdx)} < $adxTransitionThreshold. Standard grid active."
+            )
+            else -> Triple(
+                gridSpacingAtr,
+                gridLevels,
+                "TRENDING/UNSTABLE: ADX ${String.format(Locale.US, "%.1f", currentAdx)} >= $adxTransitionThreshold threshold. Grid inactive."
+            )
+        }
+
+        return TransitionAnalysis(
+            isTransitionTriggered = isTransitionTriggered,
+            isEstablishedRange = isEstablishedRange,
+            currentAdx = currentAdx,
+            priorPeakAdx = priorPeakAdx,
+            adxDecayVelocity = adxDecayVelocity,
+            effectiveGridSpacingAtr = effectiveSpacing,
+            effectiveGridLevels = effectiveLevels,
+            statusMessage = msg
+        )
+    }
+
+    override fun analyzeMarket(market: String, prices: List<Double>): String {
+        if (prices.size < 20) return "Insufficient data"
+        val (mid, upper, lower) = StrategyIndicators.calculateBollingerBands(prices, 20)
+        val rsi = StrategyIndicators.calculateRSI(prices, rsiPeriod)
+        val bbw = if (mid > 0) (upper - lower) / mid else 0.0
+        val analysis = evaluateTransitionContext(prices)
+        return "Mid: ${String.format(Locale.US, "%.2f", mid)}, BBW: ${String.format(Locale.US, "%.3f", bbw)}, RSI: ${String.format(Locale.US, "%.1f", rsi)}, ADX: ${String.format(Locale.US, "%.1f", analysis.currentAdx)} | ${analysis.statusMessage}"
+    }
+
+    override fun shouldEnter(market: String, prices: List<Double>): Boolean {
+        if (prices.size < 20) return false
+        val lastPrice = prices.last()
+        val prevPrice = prices[prices.size - 2]
+        val (mid, _, lower) = StrategyIndicators.calculateBollingerBands(prices, 20)
+        val rsi = StrategyIndicators.calculateRSI(prices, rsiPeriod)
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val (midB, upperB, lowerB) = StrategyIndicators.calculateBollingerBands(prices, 20)
+        val bbw = if (midB > 0) (upperB - lowerB) / midB else 0.0
+
+        val transition = evaluateTransitionContext(prices)
+
+        // 1. CONDITIONAL ADX TRANSITION TRIGGER:
+        // Must be in a validated transition or low-ADX range (ADX < adxTransitionThreshold)
+        if (!transition.isTransitionTriggered || bbw > 0.095 || atr <= 0.0) {
+            return false
+        }
+
+        // 2. CONTEXT-ADAPTIVE DISCOUNT TIERS:
+        // In active transition, require price at lower band or below (Mid - 1.5 * effectiveSpacing * ATR)
+        val gridDiscountLevel = kotlin.math.min(lower, mid - (atr * transition.effectiveGridSpacingAtr * 1.5))
+        val inDiscountZone = lastPrice <= gridDiscountLevel || rsi <= oversoldThreshold
+
+        // 3. STRUCTURAL BREAKDOWN & KNIFE CATCH GUARD:
+        val fourBarDrop = if (prices.size >= 5) (prices[prices.size - 5] - lastPrice) / atr else 0.0
+        val maxAllowableDrop = if (transition.effectiveGridSpacingAtr >= 0.70) 2.2 else 2.6
+        if (fourBarDrop > maxAllowableDrop) return false
+
+        // 4. VOLUME ABSORPTION & STABILIZATION CONFIRMATION:
+        val bounceTick = lastPrice >= prevPrice || rsi >= 28.0
+        val normalBarSpread = kotlin.math.abs(lastPrice - prevPrice) / atr
+        val absorptionConfirmed = normalBarSpread < 1.8 && bounceTick
+
+        return inDiscountZone && absorptionConfirmed
+    }
+
+    override fun shouldExit(market: String, prices: List<Double>, currentPosition: Double): Boolean {
+        if (currentPosition <= 0 || prices.size < 5) return false
+        val lastPrice = prices.last()
+        val (mid, upper, _) = StrategyIndicators.calculateBollingerBands(prices, 20)
+        val rsi = StrategyIndicators.calculateRSI(prices, rsiPeriod)
+        val transition = evaluateTransitionContext(prices)
+
+        // Target Exits:
+        // 1. Equilibrium midline reach: In transition regime, reaching the 20 SMA midline takes profit
+        val equilibriumReached = lastPrice >= mid || rsi >= 58.0
+        // 2. Channel ceiling target: Upper Bollinger Band touch or overbought RSI
+        val upperBandTarget = lastPrice >= upper || rsi >= overboughtThreshold
+        // 3. Emergency Trend Re-acceleration Guard: If ADX rebounds above ceiling (> 25.0) and price drops below lower band, exit to protect capital
+        val trendResumptionBreakout = transition.currentAdx >= adxTrendCeiling && lastPrice < mid
+
+        return equilibriumReached || upperBandTarget || trendResumptionBreakout
+    }
+
+    override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val transition = evaluateTransitionContext(prices)
+        // Outer grid invalidation: Buffer scales with effective spacing
+        val bufferMultiplier = if (transition.effectiveGridSpacingAtr >= 0.70) 1.60 else 1.35
+        val slDist = if (atr > 0.0) atr * bufferMultiplier else entryPrice * 0.018
+        return entryPrice - slDist
+    }
+
+    override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val (mid, _, _) = StrategyIndicators.calculateBollingerBands(prices, 20)
+        val transition = evaluateTransitionContext(prices)
+        val bufferMultiplier = if (transition.effectiveGridSpacingAtr >= 0.70) 1.60 else 1.35
+        val slDist = if (atr > 0.0) atr * bufferMultiplier else entryPrice * 0.018
+        // Asymmetric Mean Reversion Payoff (2.4R in transition, 2.0R in established range)
+        val rrr = if (transition.effectiveGridSpacingAtr >= 0.70) 2.4 else 2.0
+        val targetPrice = if (mid > entryPrice) kotlin.math.max(mid, entryPrice + (slDist * rrr)) else entryPrice + (slDist * rrr)
+        return targetPrice
+    }
+
+    override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double>): Double {
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val transition = evaluateTransitionContext(prices)
+        // Capital allocation scaling:
+        // Transition Mode: 1.00x base risk (prudent while momentum settles)
+        // Established Range: 1.25x base risk (high edge)
+        val regimeBoost = when {
+            transition.isEstablishedRange -> 1.25
+            transition.isTransitionTriggered -> 1.00
+            else -> 0.75
+        }
+        val amountToRisk = accountBalance * (riskPercent / 100.0) * regimeBoost
+        val stopLossDist = if (atr > 0.0) atr * (if (transition.effectiveGridSpacingAtr >= 0.70) 1.60 else 1.35) else entryPrice * 0.018
+        val rawSize = if (stopLossDist > 0) amountToRisk / stopLossDist else 0.0
+        val maxUnits = (accountBalance * 0.065) / entryPrice // 6.5% max allocation
+        val minUnits = (accountBalance * 0.005) / entryPrice
+        return rawSize.coerceIn(minUnits, maxUnits)
+    }
+
+    override fun calculateTrailingStop(market: String, entryPrice: Double, currentPrice: Double, prices: List<Double>): Double {
+        val atr = StrategyIndicators.calculateATR(prices, 14)
+        val favorableMove = currentPrice - entryPrice
+        val moveInAtr = if (atr > 0) favorableMove / atr else 0.0
+
+        return if (moveInAtr >= 0.65) {
+            val breakevenLevel = entryPrice * 1.0015
+            val trailDist = if (atr > 0) atr * 0.75 else currentPrice * 0.009
+            kotlin.math.max(breakevenLevel, currentPrice - trailDist)
+        } else {
+            calculateStopLoss(market, entryPrice, prices)
+        }
+    }
+
+    override fun evaluate(market: String, prices: List<Double>, accountBalance: Double, riskPercent: Double): TradeProposal {
+        val lastPrice = prices.lastOrNull() ?: 0.0
+        val isEnter = shouldEnter(market, prices)
+        val isExit = shouldExit(market, prices, 1.0)
+        val (mid, upper, lower) = StrategyIndicators.calculateBollingerBands(prices, 20)
+        val rsi = StrategyIndicators.calculateRSI(prices, rsiPeriod)
+        val transition = evaluateTransitionContext(prices)
+
+        val signal = when {
+            isEnter -> SignalType.BUY
+            isExit -> SignalType.SELL
+            else -> SignalType.HOLD
+        }
+
+        val confidence = when (signal) {
+            SignalType.BUY -> when {
+                transition.isEstablishedRange && rsi < 32.0 -> 0.88
+                transition.isTransitionTriggered -> 0.84
+                else -> 0.75
+            }
+            SignalType.SELL -> 0.78
+            SignalType.HOLD -> 0.50
+        }
+
+        val entry = lastPrice
+        val sl = calculateStopLoss(market, entry, prices)
+        val tp = calculateTakeProfit(market, entry, prices)
+        val size = calculatePositionSize(market, accountBalance, entry, riskPercent, prices)
+        val rrr = if (transition.effectiveGridSpacingAtr >= 0.70) 2.4 else 2.0
+
+        val explanation = when (signal) {
+            SignalType.BUY -> "Mean Reversion Grid triggered via ADX Transition Gate (< ${String.format(Locale.US, "%.1f", transition.currentAdx)}). ${transition.statusMessage} Buying at ${String.format(Locale.US, "%.2f", lastPrice)} (RSI ${String.format(Locale.US, "%.1f", rsi)}) targeting midline ${String.format(Locale.US, "%.2f", mid)}."
+            SignalType.SELL -> "Grid tranche take-profit executed at mean equilibrium midline / channel edge."
+            SignalType.HOLD -> "Awaiting transition deviation. ${transition.statusMessage} Corridor: [${String.format(Locale.US, "%.2f", lower)} - ${String.format(Locale.US, "%.2f", upper)}]."
+        }
+
+        return TradeProposal(name, market, signal, confidence, entry, sl, tp, size, rrr, explanation)
+    }
+}
+
+/**
+ * Breakout & Mean Reversion Grid Hybrid Strategy.
+ * Dynamically arbitrates execution between Breakout Momentum in trending regimes (ADX >= 22.0)
+ * and Mean Reversion Grid in ranging/transition regimes (ADX < 22.0).
+ */
+class BreakoutGridHybridStrategy(
+    val breakoutStrategy: BreakoutStrategy = BreakoutStrategy(),
+    val gridStrategy: MeanReversionGridStrategy = MeanReversionGridStrategy(),
+    var transitionAdxThreshold: Double = 22.0
+) : TradingStrategy {
+    override val name = "Breakout & Mean Reversion Grid Hybrid"
+    override val version = "1.0.0"
+    override val description = "Adaptive hybrid framework integrating Breakout Momentum during expansion/trending regimes (ADX >= 22.0) and dynamically transitioning to Mean Reversion Grid during ranging/consolidation regimes (ADX < 22.0)."
+
+    override val designedRegimes = listOf(
+        "TRENDING", "RANGING", "HIGH_VOLATILITY", "LOW_VOLATILITY", "ACCUMULATION", "DISTRIBUTION", "CYCLIC", "CONSOLIDATION", "TREND_TO_RANGE_TRANSITION", "ALL"
+    )
+
+    override fun getParameters(): Map<String, Double> = mapOf(
+        "transitionAdxThreshold" to transitionAdxThreshold,
+        "gridSpacingAtr" to gridStrategy.gridSpacingAtr,
+        "gridLevels" to gridStrategy.gridLevels.toDouble(),
+        "breakoutPeriod" to breakoutStrategy.period.toDouble()
+    )
+
+    override fun setParameters(params: Map<String, Double>) {
+        params["transitionAdxThreshold"]?.let { transitionAdxThreshold = it }
+        gridStrategy.setParameters(params)
+        breakoutStrategy.setParameters(params)
+    }
+
+    override val supportedMarkets = listOf("BTC", "ETH", "SOL", "BNB", "AAPL", "NVDA")
+    override val riskProfile = "Adaptive / Multi-Regime"
+    override val timeframe = "15M/1H"
+    override val requiredIndicators = listOf("Bollinger Bands (20, 2.0)", "RSI (14)", "ADX (14)", "ATR (14)", "Donchian Channels (20)")
+
+    fun getActiveSubStrategy(prices: List<Double>): TradingStrategy {
+        val adx = if (prices.size >= 14) StrategyIndicators.calculateADX(prices, 14) else 20.0
+        return if (adx >= transitionAdxThreshold) breakoutStrategy else gridStrategy
+    }
+
+    override fun analyzeMarket(market: String, prices: List<Double>): String {
+        val adx = if (prices.size >= 14) StrategyIndicators.calculateADX(prices, 14) else 20.0
+        val active = getActiveSubStrategy(prices)
+        val modeLabel = if (adx >= transitionAdxThreshold) "EXPANSION/TRENDING -> Breakout Momentum Active" else "RANGING/TRANSITION -> Mean Reversion Grid Active"
+        return "ADX: ${String.format(Locale.US, "%.1f", adx)} | Mode: $modeLabel | ${active.analyzeMarket(market, prices)}"
+    }
+
+    override fun shouldEnter(market: String, prices: List<Double>): Boolean {
+        return getActiveSubStrategy(prices).shouldEnter(market, prices)
+    }
+
+    override fun shouldExit(market: String, prices: List<Double>, currentPosition: Double): Boolean {
+        return getActiveSubStrategy(prices).shouldExit(market, prices, currentPosition)
+    }
+
+    override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
+        return getActiveSubStrategy(prices).calculateStopLoss(market, entryPrice, prices)
+    }
+
+    override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
+        return getActiveSubStrategy(prices).calculateTakeProfit(market, entryPrice, prices)
+    }
+
+    override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double>): Double {
+        return getActiveSubStrategy(prices).calculatePositionSize(market, accountBalance, entryPrice, riskPercent, prices)
+    }
+
+    override fun calculateTrailingStop(market: String, entryPrice: Double, currentPrice: Double, prices: List<Double>): Double {
+        return getActiveSubStrategy(prices).calculateTrailingStop(market, entryPrice, currentPrice, prices)
+    }
+
+    override fun evaluate(market: String, prices: List<Double>, accountBalance: Double, riskPercent: Double): TradeProposal {
+        val adx = if (prices.size >= 14) StrategyIndicators.calculateADX(prices, 14) else 20.0
+        val active = getActiveSubStrategy(prices)
+        val proposal = active.evaluate(market, prices, accountBalance, riskPercent)
+        val mode = if (adx >= transitionAdxThreshold) "Breakout Mode" else "Grid Mode"
+        return proposal.copy(
+            strategyName = this.name,
+            explanation = "[$mode] ${proposal.explanation}"
+        )
     }
 }
