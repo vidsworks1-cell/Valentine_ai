@@ -426,6 +426,22 @@ object EngineValidationSuite {
                     }
                 }
             }
+            is BreakoutGridHybridStrategy -> {
+                for (transThresh in listOf(20.0, 22.0, 24.0)) {
+                    for (spacing in listOf(0.50, 0.60, 0.75)) {
+                        strategy.setParameters(mapOf("transitionAdxThreshold" to transThresh, "gridSpacingAtr" to spacing))
+                        val (trades, _) = simulateWithExecutionModel(strategy, trainingCandles)
+                        val netProfit = trades.sumOf { it.profit }
+                        val es = calculateExpectedShortfall(trades, 0.90)
+                        val objectiveScore = netProfit - (dynamicPenaltyWeight * es)
+
+                        if (objectiveScore > bestObjectiveScore) {
+                            bestObjectiveScore = objectiveScore
+                            bestParams = mapOf("transitionAdxThreshold" to transThresh, "gridSpacingAtr" to spacing)
+                        }
+                    }
+                }
+            }
         }
 
         if (bestParams.isNotEmpty()) {

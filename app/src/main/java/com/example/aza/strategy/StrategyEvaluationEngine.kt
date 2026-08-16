@@ -214,6 +214,18 @@ object StrategyEvaluationEngine {
                 supportedSides = listOf("BUY", "SELL")
             ),
             SubstitutionCandidateProfile(
+                strategyName = "Breakout & Mean Reversion Grid Hybrid",
+                sampleSize = 40,
+                winRatePct = 64.3,
+                expectancyR = 0.52,
+                recentStabilityScore = 0.92,
+                maxDrawdownPct = 3.6,
+                executionQualityScore = 0.92,
+                riskEfficiency = 2.8,
+                designedRegimes = listOf("ALL", "TRENDING", "RANGING", "HIGH_VOLATILITY", "LOW_VOLATILITY", "CONSOLIDATION", "TRANSITION", "STRONG_BULL", "STRONG_BEAR"),
+                supportedSides = listOf("BUY", "SELL")
+            ),
+            SubstitutionCandidateProfile(
                 strategyName = "Breakout Momentum",
                 sampleSize = 20,
                 winRatePct = 48.0,
@@ -451,6 +463,7 @@ object StrategyEvaluationEngine {
                 "Mean Reversion" -> regime.contains("RANGE") || regime.contains("CYCLIC") || regime.contains("ACCUMULATION") || regime.contains("DISTRIBUTION") || regime.contains("TREND")
                 "Mean Reversion Grid" -> regime.contains("RANGE") || regime.contains("CYCLIC") || regime.contains("ACCUMULATION") || regime.contains("DISTRIBUTION") || regime.contains("CONSOLIDATION") || regime.contains("LOW_VOLATILITY") || regime.contains("TRANSITION")
                 "Breakout Momentum", "Breakout" -> regime.contains("TREND") || regime.contains("BULL") || regime.contains("BEAR") || regime.contains("HIGH_VOLATILITY") || regime.contains("CRASH")
+                "Breakout & Mean Reversion Grid Hybrid" -> true
                 "Liquidity Sweep" -> true
                 "Volatility Expansion Breakout" -> regime.contains("VOLATILITY") || regime.contains("TREND") || regime.contains("BULL")
                 else -> true
@@ -567,6 +580,10 @@ object StrategyEvaluationEngine {
             )
             "Mean Reversion Grid" -> mapOf(
                 "gridLevels" to listOf(3.0, 4.0, 5.0),
+                "gridSpacingAtr" to listOf(0.50, 0.60, 0.75)
+            )
+            "Breakout & Mean Reversion Grid Hybrid" -> mapOf(
+                "transitionAdxThreshold" to listOf(20.0, 22.0, 24.0),
                 "gridSpacingAtr" to listOf(0.50, 0.60, 0.75)
             )
             else -> emptyMap()

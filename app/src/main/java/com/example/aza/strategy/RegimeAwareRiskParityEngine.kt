@@ -139,6 +139,7 @@ object RegimeAwareRiskParityEngine {
                 }
                 "TRENDING", "STRONG_BULL", "HIGH_VOLATILITY_TRENDING" -> {
                     when (strat) {
+                        "Breakout & Mean Reversion Grid Hybrid" -> 1.30
                         "Breakout Momentum" -> 1.45
                         "Volatility Expansion Breakout" -> 1.35
                         "Mean Reversion" -> 0.60
@@ -149,6 +150,7 @@ object RegimeAwareRiskParityEngine {
                 }
                 "RANGING", "LOW_VOLATILITY_RANGING", "ACCUMULATION", "CONSOLIDATION" -> {
                     when (strat) {
+                        "Breakout & Mean Reversion Grid Hybrid" -> 1.35
                         "Mean Reversion Grid" -> 1.45
                         "Mean Reversion" -> 0.85
                         "Liquidity Sweep" -> 1.25
@@ -159,6 +161,7 @@ object RegimeAwareRiskParityEngine {
                 }
                 "HIGH_VOLATILITY", "HIGH_VOLATILITY_RANGING", "VOLATILE" -> {
                     when (strat) {
+                        "Breakout & Mean Reversion Grid Hybrid" -> 1.10
                         "Volatility Expansion Breakout" -> 1.30
                         "Mean Reversion" -> 0.45
                         "Mean Reversion Grid" -> 0.40

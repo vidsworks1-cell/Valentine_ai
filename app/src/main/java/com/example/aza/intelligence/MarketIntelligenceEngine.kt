@@ -630,6 +630,12 @@ class MarketIntelligenceEngine(
                 if (volatilityScore < 2.5) base += 0.12
                 if (srScore > 0.5) base += 0.08
             }
+            "Breakout & Mean Reversion Grid Hybrid" -> {
+                base += 0.22
+                if (cleanRegime.contains("TREND") || cleanRegime.contains("RANGE") || cleanRegime.contains("CONSOLIDATION")) base += 0.10
+                if (trendScore > 1.0 || momentumScore < -0.6) base += 0.12
+                if (srScore > 0.5) base += 0.08
+            }
             "Liquidity Sweep" -> {
                 if (cleanRegime.contains("RANGE") || cleanRegime.contains("ACCUMULATION") || cleanRegime == "CYCLIC") base += 0.24
                 if (momentumScore < -0.6) base += 0.15
