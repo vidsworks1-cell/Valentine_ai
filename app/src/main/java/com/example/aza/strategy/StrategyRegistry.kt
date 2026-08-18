@@ -28,8 +28,13 @@ object StrategyRegistry {
     fun applyParameters(strategy: TradingStrategy, bestConfigParams: String) {
         if (bestConfigParams.isEmpty()) return
         val params = mutableMapOf<String, Double>()
-        bestConfigParams.split(",").forEach { pair ->
-            val parts = pair.split("=")
+        // Normalize brackets and pipes if compound serialization is used
+        val cleanConfig = bestConfigParams.replace("[", "").replace("]", "")
+        val rawTokens = cleanConfig.split(Regex("[,|]"))
+        for (token in rawTokens) {
+            val trimmed = token.trim()
+            if (trimmed.isEmpty()) continue
+            val parts = trimmed.split("=")
             if (parts.size == 2) {
                 val key = parts[0].trim()
                 val value = parts[1].trim().toDoubleOrNull()

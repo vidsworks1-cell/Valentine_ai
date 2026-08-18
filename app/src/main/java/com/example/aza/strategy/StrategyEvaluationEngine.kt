@@ -589,6 +589,15 @@ object StrategyEvaluationEngine {
                 "transitionAdxThreshold" to listOf(20.0, 22.0, 24.0),
                 "gridSpacingAtr" to listOf(0.50, 0.60, 0.75)
             )
+            "Volatility Expansion Breakout" -> {
+                val normSymbol = VolatilityBreakoutProfileRegistry.normalizeSymbol(market)
+                mapOf(
+                    "${normSymbol}:atrMultiplier" to listOf(1.50, 1.80, 2.10),
+                    "${normSymbol}:squeezeThreshold" to listOf(0.038, 0.048, 0.060),
+                    "${normSymbol}:stopLossMultiplier" to listOf(1.10, 1.30, 1.50),
+                    "${normSymbol}:takeProfitMultiplier" to listOf(2.80, 3.20, 3.60)
+                )
+            }
             else -> emptyMap()
         }
 

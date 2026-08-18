@@ -226,12 +226,15 @@ class AzaLearningEngine(private val repository: AppRepository) {
             repository.updateStrategy(updated)
 
             val pnlR = if (kotlin.math.abs(profit) > 1e-5) profit / 100.0 else (if (isWin) 1.0 else -1.0)
+            val holdTimeMin = if (latencyMs > 0) (latencyMs / 60000.0).coerceIn(1.0, 360.0) else 30.0
             com.example.aza.strategy.LuminaSelfAdaptationEngine.recordTradeOutcomeForCalibration(
                 strategyName = strategyName,
                 predictedConfidence = existing.confidence,
                 isWin = isWin,
                 pnlR = pnlR,
-                symbol = market
+                symbol = market,
+                marketRegime = "TRENDING",
+                holdTimeMinutes = holdTimeMin
             )
             com.example.aza.strategy.LuminaSelfAdaptationEngine.recordRegimeOutcome(
                 strategyName = strategyName,

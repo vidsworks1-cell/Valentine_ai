@@ -620,16 +620,16 @@ fun BacktestLabSection(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             MetricCard(
-                                title = "Champion Strategy",
-                                value = championChallengerHysteresisState.championStrategyName,
-                                subtitle = "Active Live Execution",
+                                title = "Champion Profile",
+                                value = "${championChallengerHysteresisState.championProfileKey} (${championChallengerHysteresisState.championWinRatePct}% WR)",
+                                subtitle = "Expectancy: +${String.format(Locale.US, "%.2f", championChallengerHysteresisState.championExpectancyR)}R • Live",
                                 valueColor = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.weight(1f)
                             )
                             MetricCard(
-                                title = "Challenger Strategy",
-                                value = championChallengerHysteresisState.challengerStrategyName,
-                                subtitle = "Shadow Mode Testing",
+                                title = "Challenger Profile",
+                                value = "${championChallengerHysteresisState.challengerProfileKey} (${championChallengerHysteresisState.challengerWinRatePct}% WR)",
+                                subtitle = "Expectancy: +${String.format(Locale.US, "%.2f", championChallengerHysteresisState.challengerExpectancyR)}R • Shadow",
                                 valueColor = Color(0xFFE65100),
                                 modifier = Modifier.weight(1f)
                             )

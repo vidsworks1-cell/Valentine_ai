@@ -811,98 +811,169 @@ class VolatilityExpansionBreakoutStrategy(
     var atrMultiplier: Double = 1.8
 ) : TradingStrategy {
     override val name = "Volatility Expansion Breakout"
-    override val version = "1.4.0"
-    override val description = "Captures high-conviction volatility expansion breakouts out of tight squeeze consolidations with ATR stop protection."
+    override val version = "2.0.0-adaptive"
+    override val description = "Asset-adaptive volatility expansion breakout strategy family with independent execution profiles (BTC, ETH, BNB, SOL) for dynamic squeeze thresholding, ATR sizing, confirmation bars, regime adjustments, and cooldown management."
 
     override val designedRegimes = listOf("HIGH_VOLATILITY_TRENDING", "VOLATILITY_EXPANSION", "BREAKOUT", "TRENDING", "STRONG_BULL", "STRONG_BEAR")
-    override fun getParameters(): Map<String, Double> = mapOf("period" to period.toDouble(), "atrMultiplier" to atrMultiplier)
+
+    val supportedProfiles: List<VolatilityBreakoutProfile>
+        get() = VolatilityBreakoutProfileRegistry.getAllProfiles().values.toList()
+
+    fun getProfile(market: String): VolatilityBreakoutProfile {
+        return VolatilityBreakoutProfileRegistry.getProfile(market)
+    }
+
+    override fun getParameters(): Map<String, Double> {
+        val map = mutableMapOf<String, Double>()
+        map["period"] = period.toDouble()
+        map["atrMultiplier"] = atrMultiplier
+        // Export symbol-specific parameters for self-adaptation and optimization
+        VolatilityBreakoutProfileRegistry.getAllProfiles().forEach { (sym, profile) ->
+            map["${sym}:atrMultiplier"] = profile.atrMultiplier
+            map["${sym}:squeezeThreshold"] = profile.squeezeThreshold
+            map["${sym}:breakoutConfirmationBars"] = profile.breakoutConfirmationBars.toDouble()
+            map["${sym}:volumeThreshold"] = profile.volumeThreshold
+            map["${sym}:stopLossMultiplier"] = profile.stopLossMultiplier
+            map["${sym}:takeProfitMultiplier"] = profile.takeProfitMultiplier
+            map["${sym}:confidenceBonus"] = profile.confidenceBonus
+            map["${sym}:cooldownDurationSeconds"] = profile.cooldownDurationSeconds.toDouble()
+        }
+        return map
+    }
+
     override fun setParameters(params: Map<String, Double>) {
         params["period"]?.let { period = it.toInt() }
         params["atrMultiplier"]?.let { atrMultiplier = it }
+
+        // Route namespaced params to corresponding symbol profiles
+        val symbolParamGroups = mutableMapOf<String, MutableMap<String, Double>>()
+        params.forEach { (rawKey, value) ->
+            if (rawKey.contains(":") || rawKey.contains("_")) {
+                val delimiter = if (rawKey.contains(":")) ":" else "_"
+                val parts = rawKey.split(delimiter, limit = 2)
+                if (parts.size == 2) {
+                    val symbol = parts[0].trim().uppercase()
+                    val paramName = parts[1].trim()
+                    symbolParamGroups.getOrPut(symbol) { mutableMapOf() }[paramName] = value
+                }
+            }
+        }
+
+        symbolParamGroups.forEach { (symbol, symParams) ->
+            VolatilityBreakoutProfileRegistry.updateProfileParams(symbol, symParams)
+        }
+
+        // Also if generic params without prefix are passed, update fallback / default profile
+        val defaultProfile = VolatilityBreakoutProfileRegistry.getProfile("DEFAULT")
+        defaultProfile.updateFromParamMap(params)
     }
 
-    override val supportedMarkets = listOf("BTC", "ETH", "SOL", "NVDA", "AAPL")
+    override val supportedMarkets = listOf("BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "BTC", "ETH", "SOL", "BNB", "NVDA", "AAPL")
     override val riskProfile = "Aggressive"
     override val timeframe = "1H"
-    override val requiredIndicators = listOf("Bollinger Bands (20, 2.0)", "ATR (14)", "ADX (14)", "Donchian Channels")
+    override val requiredIndicators = listOf("Bollinger Bands (20, 2.0)", "ATR (14)", "ADX (14)", "Donchian Channels", "Volume Moving Average (20)")
 
     override fun analyzeMarket(market: String, prices: List<Double>): String {
         if (prices.size < 2) return "Insufficient data"
+        val profile = getProfile(market)
+        val effPeriod = profile.period.coerceAtLeast(5)
         val atr = StrategyIndicators.calculateATR(prices, 14)
         val adx = StrategyIndicators.calculateADX(prices, 14)
-        val (_, upper, lower) = StrategyIndicators.calculateBollingerBands(prices, period)
+        val (_, upper, lower) = StrategyIndicators.calculateBollingerBands(prices, effPeriod)
         val bandwidth = if (prices.last() > 0) (upper - lower) / prices.last() else 0.0
-        return "ATR: ${String.format("%.2f", atr)}, ADX: ${String.format("%.1f", adx)}, BB Width: ${String.format("%.3f", bandwidth)}"
+        val isSqueezed = bandwidth <= profile.squeezeThreshold
+        val squeezeStatus = if (isSqueezed) "SQUEEZED (<= ${String.format(Locale.US, "%.3f", profile.squeezeThreshold)})" else "EXPANDED (${String.format(Locale.US, "%.3f", bandwidth)})"
+        return "Asset: ${profile.symbol} | ATR: ${String.format(Locale.US, "%.2f", atr)} (Mult: ${profile.atrMultiplier}x) | ADX: ${String.format(Locale.US, "%.1f", adx)} | BB Width: ${String.format(Locale.US, "%.3f", bandwidth)} [$squeezeStatus] | ConfBars: ${profile.breakoutConfirmationBars} | SL: ${profile.stopLossMultiplier}x | TP: ${profile.takeProfitMultiplier}x | Bonus: +${String.format(Locale.US, "%.2f", profile.confidenceBonus)}"
     }
 
     override fun shouldEnter(market: String, prices: List<Double>): Boolean {
-        if (prices.size < period + 2) return false
+        val profile = getProfile(market)
+        val effPeriod = profile.period.coerceAtLeast(5)
+        val requiredBars = effPeriod + profile.breakoutConfirmationBars + 1
+        if (prices.size < requiredBars) return false
+
         val lastPrice = prices.last()
         val prevPrice = prices[prices.size - 2]
-        val (mid, upper, lower) = StrategyIndicators.calculateBollingerBands(prices.dropLast(1), period)
+        val (mid, upper, lower) = StrategyIndicators.calculateBollingerBands(prices.dropLast(1), effPeriod)
         val atr = StrategyIndicators.calculateATR(prices, 14)
         val adx = StrategyIndicators.calculateADX(prices, 14)
         val prevAdx = StrategyIndicators.calculateADX(prices.dropLast(1), 14)
         val bandwidth = if (mid > 0) (upper - lower) / mid else 0.0
         
-        // Volatility Expansion Entry Rules with Adaptive WFO Actionable Improvements:
-        // 1. Dynamic Regime ADX: ADX >= 26.0 in chop, ADX >= 22.0 in established trend
-        // 2. Volatility Squeeze: Bollinger Bandwidth (BBW <= 0.050) + Expansion >= 1.10x ATR
-        // 3. Breakout tick exceeds upper Bollinger Band OR 20-period Donchian High
-        val donchianHigh = prices.takeLast(period).dropLast(1).maxOrNull() ?: upper
+        // Volatility Expansion Entry Rules using Asset-Adaptive Profile:
+        // 1. Breakout tick exceeds upper Bollinger Band OR effPeriod Donchian High
+        val donchianHigh = prices.takeLast(effPeriod).dropLast(1).maxOrNull() ?: upper
         val priceBreakout = lastPrice > upper || lastPrice > donchianHigh
         if (!priceBreakout || atr <= 0.0) return false
 
         val candleMove = kotlin.math.abs(lastPrice - prevPrice)
 
+        // Asset-Adaptive confirmation bars check
+        val confirmationBarsSatisfied = if (profile.breakoutConfirmationBars > 1 && prices.size >= profile.breakoutConfirmationBars + 1) {
+            val recentCandles = prices.takeLast(profile.breakoutConfirmationBars)
+            recentCandles.all { it >= mid }
+        } else {
+            true
+        }
+
+        if (!confirmationBarsSatisfied) return false
+
+        // Dynamic Regime ADX and Squeeze gating with Profile-Specific Squeeze Threshold & ATR Multiplier
         return when {
             // Tier 1: Low ADX Regime (< 22.0) - Hard Gate: Chop / False Breakouts -> Reject
             adx < 22.0 -> false
 
-            // Tier 2: Low-to-Moderate ADX Regime (22.0 <= ADX < 26.0) - Requires Tight Pre-Squeeze (BBW <= 0.050) & Heavy Expansion (>= 1.10x ATR)
+            // Tier 2: Low-to-Moderate ADX Regime (22.0 <= ADX < 26.0) - Requires Tight Pre-Squeeze & Expansion
             adx < 26.0 -> {
-                val tightSqueeze = bandwidth <= 0.050 || lastPrice > donchianHigh
-                val heavyExpansion = candleMove >= (atr * 1.10)
+                val tightSqueeze = bandwidth <= profile.squeezeThreshold || lastPrice > donchianHigh
+                val expansionRequired = atr * (profile.atrMultiplier * 0.60)
+                val heavyExpansion = candleMove >= expansionRequired
                 val adxRising = adx >= prevAdx
                 tightSqueeze && heavyExpansion && adxRising
             }
 
             // Tier 3: Established Trend Regime (ADX >= 26.0) - Standard High-Conviction Volatility Expansion
             else -> {
-                candleMove >= (atr * 0.95)
+                candleMove >= (atr * (profile.atrMultiplier * 0.50))
             }
         }
     }
 
     override fun shouldExit(market: String, prices: List<Double>, currentPosition: Double): Boolean {
         if (currentPosition <= 0 || prices.size < 5) return false
+        val profile = getProfile(market)
+        val effPeriod = profile.period.coerceAtLeast(5)
         val lastPrice = prices.last()
-        val (mid, _, lower) = StrategyIndicators.calculateBollingerBands(prices, period)
+        val (mid, _, lower) = StrategyIndicators.calculateBollingerBands(prices, effPeriod)
         val atr = StrategyIndicators.calculateATR(prices, 14)
         val highestSinceEntry = prices.takeLast(10).maxOrNull() ?: lastPrice
         
-        // Chandelier ATR Trailing Stop Exit: Protect profits when price drops 1.1x ATR from recent peak
-        val chandelierExit = atr > 0.0 && lastPrice <= (highestSinceEntry - (atr * 1.1))
+        // Chandelier ATR Trailing Stop Exit: Protect profits when price drops by profile SL Multiplier * ATR from peak
+        val exitDist = atr * (profile.stopLossMultiplier * 0.90)
+        val chandelierExit = atr > 0.0 && lastPrice <= (highestSinceEntry - exitDist)
         return chandelierExit || lastPrice < mid || lastPrice < lower
     }
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
+        val profile = getProfile(market)
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val slDist = if (atr > 0.0) atr * 1.2 else entryPrice * 0.02
+        val slDist = if (atr > 0.0) atr * profile.stopLossMultiplier else entryPrice * 0.02
         return entryPrice - slDist
     }
 
     override fun calculateTakeProfit(market: String, entryPrice: Double, prices: List<Double>): Double {
+        val profile = getProfile(market)
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val slDist = if (atr > 0.0) atr * 1.2 else entryPrice * 0.02
-        val rewardRatio = 3.0 // 3.0 RRR for volatility expansion breakouts
-        return entryPrice + (slDist * rewardRatio)
+        val slDist = if (atr > 0.0) atr * profile.stopLossMultiplier else entryPrice * 0.02
+        return entryPrice + (slDist * profile.takeProfitMultiplier)
     }
 
     override fun calculatePositionSize(market: String, accountBalance: Double, entryPrice: Double, riskPercent: Double, prices: List<Double>): Double {
-        val amountToRisk = accountBalance * (riskPercent / 100.0) * 1.10 // 1.10x risk scale in high conviction breakout
+        val profile = getProfile(market)
+        val convictionScale = 1.0 + profile.confidenceBonus
+        val amountToRisk = accountBalance * (riskPercent / 100.0) * convictionScale
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val stopLossDist = if (atr > 0.0) atr * 1.2 else entryPrice * 0.020
+        val stopLossDist = if (atr > 0.0) atr * profile.stopLossMultiplier else entryPrice * 0.020
         val rawSize = amountToRisk / stopLossDist
         val maxUnits = (accountBalance * 0.08) / entryPrice
         val minUnits = (accountBalance * 0.005) / entryPrice
@@ -910,12 +981,13 @@ class VolatilityExpansionBreakoutStrategy(
     }
 
     override fun calculateTrailingStop(market: String, entryPrice: Double, currentPrice: Double, prices: List<Double>): Double {
+        val profile = getProfile(market)
         val atr = StrategyIndicators.calculateATR(prices, 14)
-        val trailDist = if (atr > 0.0) atr * 1.1 else currentPrice * 0.012
+        val trailDist = if (atr > 0.0) atr * (profile.stopLossMultiplier * 0.90) else currentPrice * 0.012
         val favorableMove = currentPrice - entryPrice
         val moveInAtr = if (atr > 0) favorableMove / atr else 0.0
 
-        // Chandelier ATR Trailing Stop (1.1x ATR activated at +1.0R / 1.0x ATR profit)
+        // Chandelier ATR Trailing Stop (Activated at +1.0R / 1.0x ATR profit)
         return if (moveInAtr >= 1.0) {
             val breakevenLevel = entryPrice * 1.002
             kotlin.math.max(breakevenLevel, currentPrice - trailDist)
@@ -925,6 +997,7 @@ class VolatilityExpansionBreakoutStrategy(
     }
 
     override fun evaluate(market: String, prices: List<Double>, accountBalance: Double, riskPercent: Double): TradeProposal {
+        val profile = getProfile(market)
         val lastPrice = prices.lastOrNull() ?: 0.0
         val isEnter = shouldEnter(market, prices)
         val isExit = shouldExit(market, prices, 1.0)
@@ -937,7 +1010,14 @@ class VolatilityExpansionBreakoutStrategy(
             else -> SignalType.HOLD
         }
 
-        val confidence = if (signal == SignalType.BUY) (if (adx > 30) 0.88 else 0.81) else if (signal == SignalType.SELL) 0.75 else 0.50
+        // Base confidence + Asset-adaptive confidence bonus
+        val baseConf = if (signal == SignalType.BUY) (if (adx > 30) 0.88 else 0.81) else if (signal == SignalType.SELL) 0.75 else 0.50
+        val confidence = if (signal == SignalType.BUY) {
+            (baseConf + profile.confidenceBonus).coerceIn(0.10, 0.98)
+        } else {
+            baseConf
+        }
+
         val confidenceBucket = when {
             confidence >= 0.85 -> "HIGH_CONFIDENCE (1.25x Sizing, Win Rate ~78.5%)"
             confidence >= 0.75 -> "MEDIUM_CONFIDENCE (1.00x Sizing, Win Rate ~62.1%)"
@@ -948,12 +1028,12 @@ class VolatilityExpansionBreakoutStrategy(
         val sl = calculateStopLoss(market, entry, prices)
         val tp = calculateTakeProfit(market, entry, prices)
         val size = calculatePositionSize(market, accountBalance, entry, riskPercent, prices)
-        val rrr = 3.0
+        val rrr = profile.takeProfitMultiplier
 
         val explanation = when (signal) {
-            SignalType.BUY -> "Volatility Expansion Breakout confirmed! Candle move expanded past 1.1x ATR. Bucket: [$confidenceBucket], ADX: ${String.format(Locale.US, "%.1f", adx)}."
-            SignalType.SELL -> "Breakout momentum lost. Trailing stop / mid-band breached."
-            SignalType.HOLD -> "Awaiting squeeze expansion breakout. Bucket: [$confidenceBucket]."
+            SignalType.BUY -> "Volatility Expansion Breakout confirmed for ${profile.symbol}! [Profile: ATR Mult ${profile.atrMultiplier}x, Squeeze Thresh ${profile.squeezeThreshold}, Conf Bars: ${profile.breakoutConfirmationBars}, SL: ${profile.stopLossMultiplier}x, RRR: ${profile.takeProfitMultiplier}x, Bonus: +${String.format(Locale.US, "%.2f", profile.confidenceBonus)}, Cooldown: ${profile.cooldownDurationSeconds}s]. ADX: ${String.format(Locale.US, "%.1f", adx)}."
+            SignalType.SELL -> "Breakout momentum lost for ${profile.symbol}. Trailing stop (${profile.stopLossMultiplier}x ATR) / mid-band breached."
+            SignalType.HOLD -> "Awaiting squeeze expansion breakout on ${profile.symbol} [Squeeze Thresh: ${profile.squeezeThreshold}, Vol Thresh: ${profile.volumeThreshold}x]. Bucket: [$confidenceBucket]."
         }
 
         return TradeProposal(name, market, signal, confidence, entry, sl, tp, size, rrr, explanation)

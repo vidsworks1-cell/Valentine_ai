@@ -66,6 +66,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     val confidenceCalibrationReport = marketIntelligenceEngine.confidenceCalibrationReport
     val strategyCapitalAllocations = marketIntelligenceEngine.strategyCapitalAllocations
     val selfEvaluationReport = marketIntelligenceEngine.selfEvaluationReport
+    val learningMatrixCells = marketIntelligenceEngine.learningMatrixCells
     val marketOpportunities: StateFlow<List<com.example.data.database.OpportunityEntity>> = repository.marketOpportunities
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val tradeProposals: StateFlow<List<com.example.data.database.TradeProposalEntity>> = repository.tradeProposals

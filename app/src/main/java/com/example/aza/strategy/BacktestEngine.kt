@@ -243,8 +243,18 @@ data class MultiDayVolLockoutState(
 )
 
 data class ChampionChallengerHysteresisState(
-    val championStrategyName: String = "ETH Confidence Model v2.1",
-    val challengerStrategyName: String = "BNB Reversion Engine v3.0",
+    val championProfileKey: String = "VEB_BTC",
+    val championStrategyName: String = "VEB_BTC (Volatility Expansion)",
+    val championSymbol: String = "BTC",
+    val championWinRatePct: Double = 59.2,
+    val championExpectancyR: Double = 0.18,
+    val championSharpeRatio: Double = 2.48,
+    val challengerProfileKey: String = "VEB_BNB",
+    val challengerStrategyName: String = "VEB_BNB (Volatility Expansion)",
+    val challengerSymbol: String = "BNB",
+    val challengerWinRatePct: Double = 57.8,
+    val challengerExpectancyR: Double = 0.12,
+    val challengerSharpeRatio: Double = 2.15,
     val promotionHurdlePct: Double = 15.0, // Challenger must outperform Champion by +15.0% over shadow window
     val demotionHurdlePct: Double = -10.0, // Champion demoted if underperforming by -10.0%
     val rawChallengerOutperformancePct: Double = 18.4,
@@ -253,7 +263,7 @@ data class ChampionChallengerHysteresisState(
     val netAdjustedOutperformancePct: Double = 14.8, // After microstructure drag: 18.4% - 3.6% = 14.8%
     val isPromotionTriggered: Boolean = true,
     val hysteresisGuardrailActive: Boolean = true,
-    val statusSummary: String = "🛡️ HYSTERESIS GUARDRAIL ACTIVE: Raw Challenger outperformance (+18.4%) penalized to +14.8% net after microstructure friction (-4.5 bps slippage & 0.88x liquidity scale). Exceeds +15% hurdle -> Promotion Approved!",
+    val statusSummary: String = "🛡️ HYSTERESIS GUARDRAIL ACTIVE: Challenger Profile VEB_BNB (57.8% WR, +0.12R) raw outperformance (+18.4%) penalized to +14.8% net after microstructure friction (-4.5 bps slippage & 0.88x liquidity scale). Champion Profile VEB_BTC (59.2% WR, +0.18R) holds active live execution.",
     val regimeWeightSharpePct: Int = 35,
     val regimeWeightVarPct: Int = 30,
     val regimeWeightPnlPct: Int = 20,
@@ -2769,15 +2779,28 @@ object BacktestEngine {
             else -> Tuple4(30, 25, 25, 20)
         }
 
+        val champ = StrategyAlphaMemory.getChampionProfile()
+        val chal = StrategyAlphaMemory.getChallengerProfile()
+
         val summary = if (isPromoted) {
-            "🛡️ HYSTERESIS PROMOTION APPROVED: Raw outperformance (+${String.format(Locale.US, "%.1f", rawChallengerOutperformancePct)}%) penalized to +${String.format(Locale.US, "%.1f", netAdjustedPct)}% net after microstructure drag (-${slippageDragBps} bps slippage & ${liquidityScaleFactor}x liquidity scale). Clears +${promotionHurdle}% hurdle!"
+            "🛡️ HYSTERESIS PROMOTION APPROVED: Challenger Profile ${chal.profileKey} (${String.format(Locale.US, "%.1f", chal.winRatePct)}% WR, ${if (chal.expectancyR >= 0) "+" else ""}${String.format(Locale.US, "%.2f", chal.expectancyR)}R) raw outperformance (+${String.format(Locale.US, "%.1f", rawChallengerOutperformancePct)}%) penalized to +${String.format(Locale.US, "%.1f", netAdjustedPct)}% net after microstructure drag (-${slippageDragBps} bps slippage & ${liquidityScaleFactor}x liquidity scale). Clears +${promotionHurdle}% hurdle!"
         } else {
-            "🛡️ HYSTERESIS GUARDRAIL LOCKED: Net outperformance (+${String.format(Locale.US, "%.1f", netAdjustedPct)}%) fell short of +${promotionHurdle}% hurdle due to microstructure friction (-${slippageDragBps} bps drag). Challenger remains in Shadow Mode."
+            "🛡️ HYSTERESIS GUARDRAIL LOCKED: Challenger Profile ${chal.profileKey} net outperformance (+${String.format(Locale.US, "%.1f", netAdjustedPct)}%) fell short of +${promotionHurdle}% hurdle over Champion Profile ${champ.profileKey} due to microstructure friction (-${slippageDragBps} bps drag). Challenger remains in Shadow Mode."
         }
 
         return ChampionChallengerHysteresisState(
-            championStrategyName = "ETH Confidence Model v2.1",
-            challengerStrategyName = "BNB Reversion Engine v3.0",
+            championProfileKey = champ.profileKey,
+            championStrategyName = "${champ.profileKey} (${champ.strategyName})",
+            championSymbol = champ.symbol,
+            championWinRatePct = champ.winRatePct,
+            championExpectancyR = champ.expectancyR,
+            championSharpeRatio = champ.sharpeRatio,
+            challengerProfileKey = chal.profileKey,
+            challengerStrategyName = "${chal.profileKey} (${chal.strategyName})",
+            challengerSymbol = chal.symbol,
+            challengerWinRatePct = chal.winRatePct,
+            challengerExpectancyR = chal.expectancyR,
+            challengerSharpeRatio = chal.sharpeRatio,
             promotionHurdlePct = promotionHurdle,
             demotionHurdlePct = -10.0,
             rawChallengerOutperformancePct = rawChallengerOutperformancePct,

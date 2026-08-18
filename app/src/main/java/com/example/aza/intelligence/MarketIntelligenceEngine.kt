@@ -45,6 +45,17 @@ class MarketIntelligenceEngine(
     private val _selfEvaluationReport = MutableStateFlow<SelfEvaluationReport?>(null)
     val selfEvaluationReport = _selfEvaluationReport.asStateFlow()
 
+    private val _learningMatrixCells = MutableStateFlow<List<com.example.aza.strategy.RegimeSymbolStrategyCell>>(
+        com.example.aza.strategy.RegimeSymbolStrategyLearningMatrix.getAllCells()
+    )
+    val learningMatrixCells = _learningMatrixCells.asStateFlow()
+
+    fun refreshLearningMatrix(): List<com.example.aza.strategy.RegimeSymbolStrategyCell> {
+        val list = com.example.aza.strategy.RegimeSymbolStrategyLearningMatrix.getAllCells()
+        _learningMatrixCells.value = list
+        return list
+    }
+
     val watchlist = listOf("BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT")
     private val defaultWatchlist = listOf(
         "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT",
@@ -471,6 +482,7 @@ class MarketIntelligenceEngine(
         getConfidenceCalibrationReport()
         calculateStrategyCapitalAllocations()
         generateContinuousSelfEvaluationReport()
+        refreshLearningMatrix()
     }
 
     fun calculateRegimeAwareConfidenceThreshold(

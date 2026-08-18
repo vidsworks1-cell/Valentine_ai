@@ -91,6 +91,7 @@ object LuminaRiskEngine {
         portfolioVolatilityPct: Double = 12.0,
         symbolConcentrationPct: Double = 0.15,
         isSpreadHedge: Boolean = false,
+        strategyName: String = "",
         explicitStrategyMult: Double? = null,
         explicitRegimeMult: Double? = null,
         explicitVolMult: Double? = null,
@@ -214,17 +215,34 @@ object LuminaRiskEngine {
         stages.add(stage4)
         currentRisk = stage4.boundedOutputRiskPct
 
-        // Stage 5: PERFORMANCE_ADJUSTMENT
-        val perfMult = explicitPerfMult ?: when {
+        // Stage 5: PERFORMANCE_ADJUSTMENT (with Regime × Symbol × Strategy Learning Matrix Integration)
+        val matrixAdapt = if (strategyName.isNotBlank()) {
+            RegimeSymbolStrategyLearningMatrix.getAdaptation(
+                symbol = symbol,
+                regime = marketRegime,
+                strategy = strategyName
+            )
+        } else null
+
+        val basePerfMult = explicitPerfMult ?: when {
             recentWinRatePct >= 60.0 && recentExpectancyR >= 0.60 -> 1.10
             recentWinRatePct >= 50.0 && recentExpectancyR >= 0.30 -> 1.00
             recentWinRatePct >= 40.0 -> 0.85
             else -> 0.60
         }
+        val perfMult = if (matrixAdapt != null) {
+            (basePerfMult * matrixAdapt.riskMultiplier).coerceIn(0.20, 1.25)
+        } else basePerfMult
+
         val perfMin = 0.20
         val perfMax = 1.25
         val rawPerfOutput = currentRisk * perfMult
         val boundedPerfOutput = rawPerfOutput.coerceIn(currentRisk * perfMin, currentRisk * perfMax)
+        val stage5Reason = if (matrixAdapt != null) {
+            "Performance & Learning Matrix (${matrixAdapt.tier.displayName}, WR: ${String.format(Locale.US, "%.1f", recentWinRatePct)}%, Exp: ${String.format(Locale.US, "%.2f", recentExpectancyR)}R, MatrixRisk: x${String.format(Locale.US, "%.2f", matrixAdapt.riskMultiplier)}) multiplier: ${String.format(Locale.US, "%.2f", perfMult)}"
+        } else {
+            "Recent performance (WR: ${String.format(Locale.US, "%.1f", recentWinRatePct)}%, Exp: ${String.format(Locale.US, "%.2f", recentExpectancyR)}R) multiplier: ${String.format(Locale.US, "%.2f", perfMult)}"
+        }
         val stage5 = RiskWaterfallStage(
             stageName = "PERFORMANCE_ADJUSTMENT",
             inputRiskPct = currentRisk,
@@ -233,7 +251,7 @@ object LuminaRiskEngine {
             boundedOutputRiskPct = boundedPerfOutput,
             minBound = perfMin,
             maxBound = perfMax,
-            reason = "Recent performance (WR: ${String.format(Locale.US, "%.1f", recentWinRatePct)}%, Exp: ${String.format(Locale.US, "%.2f", recentExpectancyR)}R) multiplier: ${String.format(Locale.US, "%.2f", perfMult)}"
+            reason = stage5Reason
         )
         stages.add(stage5)
         currentRisk = stage5.boundedOutputRiskPct
