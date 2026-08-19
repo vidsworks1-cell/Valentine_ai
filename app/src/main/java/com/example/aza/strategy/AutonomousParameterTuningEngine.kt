@@ -389,7 +389,7 @@ object AutonomousParameterTuningEngine {
         val baselineParams = currentActiveVersion?.parameters ?: ProfileParameters.fromProfile(profile)
 
         // Retrieve historical closed trades for this profile
-        val profileAlpha = StrategyAlphaMemory.getProfileAlpha(profileKey)
+        val profileAlpha = StrategyAlphaMemory.getProfileByKey(profileKey)
         val baselineTradeCount = max(profileAlpha?.trades ?: 50, 50)
 
         val baselineMetrics = WalkForwardMetrics(
@@ -708,6 +708,15 @@ object AutonomousParameterTuningEngine {
 
     fun getActiveVersion(profileKey: String): ProfileParameterVersion? {
         return activeVersions[profileKey] ?: profileVersions[profileKey]?.lastOrNull()
+    }
+
+    fun getActiveParameters(profileKey: String): ProfileParameters {
+        val ver = getActiveVersion(profileKey)
+        if (ver != null) return ver.parameters
+        val parts = profileKey.split("_")
+        val sym = if (parts.size > 1) parts[1] else "BTC"
+        val prof = VolatilityBreakoutProfileRegistry.getProfile(sym)
+        return ProfileParameters.fromProfile(prof)
     }
 
     fun getVersionHistory(profileKey: String): List<ProfileParameterVersion> {

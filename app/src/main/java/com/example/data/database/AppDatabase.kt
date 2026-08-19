@@ -53,9 +53,11 @@ import kotlinx.coroutines.launch
         YouTubeUploadDraft::class,
         GraphNodeEntity::class,
         GraphEdgeEntity::class,
-        WeeklyAutonomousReviewEntity::class
+        WeeklyAutonomousReviewEntity::class,
+        CounterfactualEvaluationEntity::class,
+        TradeReviewEntity::class
     ],
-    version = 27,
+    version = 29,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -82,6 +84,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun portfolioPositionDao(): PortfolioPositionDao
     abstract fun youtubeDao(): YouTubeDao
     abstract fun graphDao(): GraphDao
+    abstract fun counterfactualDao(): CounterfactualDao
+    abstract fun tradeReviewDao(): TradeReviewDao
 
 
     companion object {
@@ -743,6 +747,14 @@ abstract class AppDatabase : RoomDatabase() {
             )
             for (cap in initialCapabilities) {
                 db.capabilityDao().insertOrUpdateCapabilityState(cap)
+            }
+
+            // Seed initial trade reviews library
+            try {
+                val seedReviews = com.example.aza.strategy.TradeReviewAgent.generateSeedReviews()
+                db.tradeReviewDao().insertReviews(seedReviews)
+            } catch (e: Exception) {
+                // Ignore if already present
             }
         }
     }

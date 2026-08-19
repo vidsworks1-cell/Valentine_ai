@@ -225,8 +225,12 @@ class AppRepository(private val db: AppDatabase) {
     val portfolioPositionDao = db.portfolioPositionDao()
     val youtubeDao = db.youtubeDao()
     private val graphDao = db.graphDao()
+    val counterfactualDao = db.counterfactualDao()
+    val tradeReviewDao = db.tradeReviewDao()
  
     // Observables (Flows)
+    val tradeReviews: Flow<List<TradeReviewEntity>> = tradeReviewDao.getAllReviewsFlow()
+    val counterfactualEvaluations: Flow<List<CounterfactualEvaluationEntity>> = counterfactualDao.getAllEvaluationsFlow()
     val graphNodes: Flow<List<GraphNodeEntity>> = graphDao.getAllNodesFlow()
     val graphEdges: Flow<List<GraphEdgeEntity>> = graphDao.getAllEdgesFlow()
     val youtubeChannel: Flow<YouTubeChannelEntity?> = youtubeDao.getChannelFlow()
@@ -1446,5 +1450,47 @@ class AppRepository(private val db: AppDatabase) {
 
     suspend fun clearGraphEdges() = withContext(Dispatchers.IO) {
         graphDao.clearEdges()
+    }
+
+    // --- Counterfactual Learning Methods ---
+    suspend fun getAllCounterfactualEvaluationsDirect(): List<CounterfactualEvaluationEntity> = withContext(Dispatchers.IO) {
+        counterfactualDao.getAllEvaluationsDirect()
+    }
+
+    suspend fun getCounterfactualByTradeIdDirect(tradeId: String): CounterfactualEvaluationEntity? = withContext(Dispatchers.IO) {
+        counterfactualDao.getEvaluationByTradeId(tradeId)
+    }
+
+    suspend fun getCounterfactualEvaluationsBySymbolDirect(symbol: String): List<CounterfactualEvaluationEntity> = withContext(Dispatchers.IO) {
+        counterfactualDao.getEvaluationsBySymbol(symbol)
+    }
+
+    suspend fun insertCounterfactualEvaluation(entity: CounterfactualEvaluationEntity): Long = withContext(Dispatchers.IO) {
+        counterfactualDao.insertEvaluation(entity)
+    }
+
+    suspend fun insertCounterfactualEvaluations(list: List<CounterfactualEvaluationEntity>) = withContext(Dispatchers.IO) {
+        counterfactualDao.insertEvaluations(list)
+    }
+
+    suspend fun clearCounterfactualEvaluations() = withContext(Dispatchers.IO) {
+        counterfactualDao.clearAll()
+    }
+
+    // --- Trade Review Agent & Lessons Library Methods ---
+    suspend fun getAllTradeReviewsDirect(): List<TradeReviewEntity> = withContext(Dispatchers.IO) {
+        tradeReviewDao.getAllReviewsDirect()
+    }
+
+    suspend fun insertTradeReview(review: TradeReviewEntity): Long = withContext(Dispatchers.IO) {
+        tradeReviewDao.insertReview(review)
+    }
+
+    suspend fun insertTradeReviews(reviews: List<TradeReviewEntity>) = withContext(Dispatchers.IO) {
+        tradeReviewDao.insertReviews(reviews)
+    }
+
+    suspend fun clearTradeReviews() = withContext(Dispatchers.IO) {
+        tradeReviewDao.clearAllReviews()
     }
 }

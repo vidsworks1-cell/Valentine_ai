@@ -133,6 +133,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     val weeklyAutonomousReviews: StateFlow<List<com.example.data.database.WeeklyAutonomousReviewEntity>> = repository.weeklyReviews
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val counterfactualEvaluations: StateFlow<List<com.example.data.database.CounterfactualEvaluationEntity>> = repository.counterfactualEvaluations
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val counterfactualSummary: StateFlow<com.example.aza.strategy.CounterfactualSummaryState> = com.example.aza.strategy.LuminaCounterfactualLearningEngine.summaryState
+
+    val tradeReviews: StateFlow<List<com.example.data.database.TradeReviewEntity>> = repository.tradeReviews
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // --- Contabo VPS Integration States ---
     private val _contaboHealthStatus = MutableStateFlow("UNKNOWN")
     val contaboHealthStatus = _contaboHealthStatus.asStateFlow()
@@ -365,6 +373,20 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
             fetchLayeredVpsStatus()
             fetchBinanceData()
+        }
+    }
+
+    fun runCounterfactualEvaluationForTrade(log: com.example.data.database.TradeAuditLog) {
+        viewModelScope.launch {
+            com.example.aza.strategy.LuminaCounterfactualLearningEngine.evaluateTradeCounterfactuals(log, repository)
+            onAppEventOccurred("COUNTERFACTUAL_SIMULATION_COMPLETED", "Shadow evaluation completed for trade ${log.id} (${log.strategyName} on ${log.signal}).")
+        }
+    }
+
+    fun batchSimulateAllCounterfactuals() {
+        viewModelScope.launch {
+            com.example.aza.strategy.LuminaCounterfactualLearningEngine.batchSimulateRecentTrades(repository)
+            onAppEventOccurred("COUNTERFACTUAL_BATCH_COMPLETED", "Simulated all 6 counterfactual scenarios across recent trades.")
         }
     }
 
@@ -2350,6 +2372,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 }
                 runWeeklyAutonomousReview()
             }
+        }
+
+        // Initialize Counterfactual Learning Shadow Simulations
+        viewModelScope.launch {
+            com.example.aza.strategy.LuminaCounterfactualLearningEngine.batchSimulateRecentTrades(repository)
         }
 
         // Start Autonomous Market Intelligence Engine
@@ -6801,6 +6828,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             entryReason = entryReasonVal
         )
         repository.insertReview(review)
+
+        // Generate Structured Trade Review & Continuous Improvement Lesson
+        try {
+            val tradeReview = com.example.aza.strategy.TradeReviewAgent.fromPositionReview(review)
+            repository.insertTradeReview(tradeReview)
+        } catch (e: Exception) {
+            // Ignore failure
+        }
 
         // Persist Trade Audit Log for Rolling Strategy Health & Performance Engine
         val auditLog = com.example.data.database.TradeAuditLog(

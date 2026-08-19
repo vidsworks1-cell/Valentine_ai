@@ -319,10 +319,11 @@ class MarketIntelligenceEngine(
             val trendSentiment = if (totalTrendScore > 0) "BULLISH" else "BEARISH"
             val combinedRegime = detectMarketRegime(totalTrendScore, totalVolatilityScore)
             
-            // Score strategies against this asset
+            // Score strategies against this asset using empirical probability calibration
             val strategies = repository.getAllStrategiesDirect()
             strategies.forEach { strategy ->
-                val strategyConfidence = calculateStrategyConfidence(
+                val finalEmpiricalConfidence = calculateEmpiricalConfidence(
+                    symbol = symbol,
                     strategyName = strategy.strategyName,
                     trendScore = totalTrendScore,
                     momentumScore = totalMomentumScore,
@@ -332,43 +333,9 @@ class MarketIntelligenceEngine(
                     regime = combinedRegime
                 )
 
-                // Retrieve calibrated confidence from the Backtest Engine / DB
-                val dbStrategy = repository.getStrategyByNameDirect(strategy.strategyName)
-                val calibratedConfidence = dbStrategy?.currentConfidenceScore ?: 0.75
-
-                // Incorporate Knowledge Base lessons
-                val knowledgeBase = repository.getAllKnowledgeDirect()
-                var knowledgeAdjustment = 0.0
-                val conflictLessons = knowledgeBase.filter { 
-                    it.category == "REGIME" && it.title.contains(combinedRegime, ignoreCase = true) && it.description.contains("fail", ignoreCase = true)
-                }
-                if (conflictLessons.isNotEmpty()) {
-                    knowledgeAdjustment -= 0.15 * conflictLessons.size
-                }
-
-                // Incorporate recent live/paper performance
-                var performanceAdjustment = 0.0
-                if (dbStrategy != null && dbStrategy.totalPaperTrades > 0) {
-                    val recentWinRate = dbStrategy.paperWinRate / 100.0
-                    performanceAdjustment = (recentWinRate - 0.5) * 0.2
-                }
-
-                // Fetch real/simulated asset sentiment score
-                val sentimentScore = fetchAssetSentimentScore(symbol)
-                val sentimentAdjustment = sentimentScore * 0.10 // adjust confidence by up to +0.10 or -0.10
-
-                // Final confidence combines: Technical, Historical, Regime, KB lessons, Recent performance, and Sentiment
-                val finalCombinedConfidence = (
-                    (strategyConfidence * 0.3) + 
-                    (calibratedConfidence * 0.3) + 
-                    (performanceAdjustment + 0.1) + 
-                    sentimentAdjustment +
-                    knowledgeAdjustment
-                ).coerceIn(0.1, 0.98)
-
                 val opportunity = OpportunityEntity(
                     symbol = symbol,
-                    confidence = finalCombinedConfidence,
+                    confidence = finalEmpiricalConfidence,
                     strategy = strategy.strategyName,
                     risk = latestATR / latestClosePrice, // proportional volatility risk
                     expectedReward = (latestATR * 3.0) / latestClosePrice,
@@ -624,7 +591,13 @@ class MarketIntelligenceEngine(
         }
     }
 
-    private suspend fun calculateStrategyConfidence(
+    /**
+     * Empirical Probability Calibration Engine:
+     * Replaces static heuristic confidence with empirical multiplicative probability:
+     * Final Confidence = Model Prediction × Historical Calibration × Regime Performance × Symbol Performance × Strategy Performance × Recent Rolling Performance
+     */
+    suspend fun calculateEmpiricalConfidence(
+        symbol: String,
         strategyName: String,
         trendScore: Double,
         momentumScore: Double,
@@ -633,81 +606,124 @@ class MarketIntelligenceEngine(
         srScore: Double,
         regime: String
     ): Double {
-        var base = 0.45
+        // 1. Model Prediction (Base technical confluence probability)
+        var rawModel = 0.52
         val cleanRegime = regime.uppercase(Locale.US)
-
         when (strategyName) {
             "Breakout", "Breakout Momentum", "Trend Breakout" -> {
-                if (cleanRegime.contains("TREND") || cleanRegime.contains("VOLATILE") || cleanRegime.startsWith("STRONG_")) base += 0.20
-                if (trendScore > 1.2) base += 0.12
-                if (volumeScore > 4.5) base += 0.15
-                if (srScore > 0.8) base += 0.10
+                if (cleanRegime.contains("TREND") || cleanRegime.contains("VOLATILE") || cleanRegime.startsWith("STRONG_")) rawModel += 0.18
+                if (trendScore > 1.2) rawModel += 0.10
+                if (volumeScore > 4.5) rawModel += 0.12
+                if (srScore > 0.8) rawModel += 0.08
             }
             "Mean Reversion", "Mean Reversion Grid" -> {
-                if (cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || cleanRegime == "ACCUMULATION" || cleanRegime == "DISTRIBUTION" || cleanRegime == "LOW_VOLATILITY" || cleanRegime == "CYCLIC" || cleanRegime == "CONSOLIDATION") base += 0.25
-                if (momentumScore < -0.8) base += 0.16
-                if (volatilityScore < 2.5) base += 0.12
-                if (srScore > 0.5) base += 0.08
+                if (cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || cleanRegime == "ACCUMULATION" || cleanRegime == "DISTRIBUTION" || cleanRegime == "LOW_VOLATILITY" || cleanRegime == "CYCLIC" || cleanRegime == "CONSOLIDATION") rawModel += 0.20
+                if (momentumScore < -0.8) rawModel += 0.14
+                if (volatilityScore < 2.5) rawModel += 0.10
+                if (srScore > 0.5) rawModel += 0.06
             }
             "Breakout & Mean Reversion Grid Hybrid" -> {
-                base += 0.22
-                if (cleanRegime.contains("TREND") || cleanRegime.contains("RANGE") || cleanRegime.contains("CONSOLIDATION")) base += 0.10
-                if (trendScore > 1.0 || momentumScore < -0.6) base += 0.12
-                if (srScore > 0.5) base += 0.08
+                rawModel += 0.18
+                if (cleanRegime.contains("TREND") || cleanRegime.contains("RANGE") || cleanRegime.contains("CONSOLIDATION")) rawModel += 0.08
+                if (trendScore > 1.0 || momentumScore < -0.6) rawModel += 0.10
+                if (srScore > 0.5) rawModel += 0.06
             }
             "Liquidity Sweep" -> {
-                if (cleanRegime.contains("RANGE") || cleanRegime.contains("ACCUMULATION") || cleanRegime == "CYCLIC") base += 0.24
-                if (momentumScore < -0.6) base += 0.15
-                if (srScore != 0.0) base += 0.12
+                if (cleanRegime.contains("RANGE") || cleanRegime.contains("ACCUMULATION") || cleanRegime == "CYCLIC") rawModel += 0.20
+                if (momentumScore < -0.6) rawModel += 0.12
+                if (srScore != 0.0) rawModel += 0.10
             }
             "Trend Following", "EMA Cross Ribbon" -> {
-                if (cleanRegime.contains("TREND") || cleanRegime.startsWith("STRONG_")) base += 0.24
-                if (trendScore > 2.0) base += 0.15
-                if (volumeScore > 3.0) base += 0.08
+                if (cleanRegime.contains("TREND") || cleanRegime.startsWith("STRONG_")) rawModel += 0.20
+                if (trendScore > 2.0) rawModel += 0.12
+                if (volumeScore > 3.0) rawModel += 0.06
+            }
+            else -> {
+                if (trendScore > 1.0) rawModel += 0.10
+                if (volumeScore > 3.0) rawModel += 0.08
             }
         }
+        val modelPrediction = rawModel.coerceIn(0.40, 0.95)
 
-        val rawConfidence = base.coerceIn(0.1, 0.95)
+        // Fetch historical trade audit logs for statistical calibration
+        val allLogs = repository.getAllTradeAuditLogsDirect()
+        val strategyLogs = allLogs.filter { it.strategyName == strategyName }
+        val symbolLogs = allLogs.filter { it.signal.contains(symbol, ignoreCase = true) || it.entryReason.contains(symbol, ignoreCase = true) }
+        val regimeLogs = allLogs.filter { it.marketRegime.equals(regime, ignoreCase = true) }
 
-        // Revised Confidence Calibration Model:
-        // Incorporates Brier Score / Calibration Factor tracking:
-        // Calibration Factor C = (Realized Win Rate / Historical Predicted Confidence)
-        // If the strategy was historically overconfident (e.g. predicted 0.85, realized 0.55),
-        // C < 1.0 reduces predicted confidence to align with true empirical outcomes.
-        val health = calculateRollingStrategyHealth(strategyName)
-        val logs = repository.getAllTradeAuditLogsDirect().filter { it.strategyName == strategyName }
-        
-        val calibrationFactor = if (logs.size >= 5) {
-            val avgHistConfidence = logs.map { it.confidence }.average().coerceAtLeast(0.4)
-            val realizedWinRate = health.rollingWinRate / 100.0
-            (realizedWinRate / avgHistConfidence).coerceIn(0.65, 1.25)
+        // 2. Historical Calibration (Realized Win Rate / Average Historical Predicted Confidence)
+        val historicalCalibration = if (strategyLogs.size >= 5) {
+            val avgHistConfidence = strategyLogs.map { it.confidence }.average().coerceAtLeast(0.40)
+            val realizedWinRate = (strategyLogs.count { it.actualProfit > 0 }.toDouble() / strategyLogs.size).coerceIn(0.15, 0.95)
+            (realizedWinRate / avgHistConfidence).coerceIn(0.70, 1.25)
         } else {
-            1.0 // default uncalibrated neutral
+            1.0
         }
 
-        val pfAdjustment = when {
-            health.rollingProfitFactor >= 1.8 -> 0.12
-            health.rollingProfitFactor >= 1.3 -> 0.06
-            health.rollingProfitFactor >= 1.0 -> 0.0
-            health.rollingProfitFactor >= 0.75 -> -0.10
-            else -> -0.22
+        // 3. Regime Performance (Multiplier based on historical performance in the detected regime)
+        val regimePerformance = if (regimeLogs.isNotEmpty()) {
+            val regimeWins = regimeLogs.count { it.actualProfit > 0 }.toDouble()
+            val regimeWinRate = regimeWins / regimeLogs.size
+            when {
+                regimeWinRate >= 0.65 -> 1.15
+                regimeWinRate >= 0.50 -> 1.05
+                regimeWinRate >= 0.40 -> 0.95
+                else -> 0.85
+            }
+        } else {
+            if (isStrategyStrictlyCompatibleWithRegime(strategyName, regime)) 1.05 else 0.90
         }
 
-        val wrAdjustment = when {
-            health.rollingWinRate >= 65.0 -> 0.08
-            health.rollingWinRate >= 52.0 -> 0.03
-            health.rollingWinRate < 40.0 -> -0.12
-            else -> 0.0
+        // 4. Symbol Performance (Asset-specific historical expectancy & win rate multiplier)
+        val symbolPerformance = if (symbolLogs.size >= 3) {
+            val symbolWins = symbolLogs.count { it.actualProfit > 0 }.toDouble()
+            val symbolWinRate = symbolWins / symbolLogs.size
+            val symbolGrossProfit = symbolLogs.filter { it.actualProfit > 0 }.sumOf { it.actualProfit }
+            val symbolGrossLoss = Math.abs(symbolLogs.filter { it.actualProfit < 0 }.sumOf { it.actualProfit })
+            val symbolPF = if (symbolGrossLoss > 0) symbolGrossProfit / symbolGrossLoss else 1.5
+            when {
+                symbolPF >= 1.5 && symbolWinRate >= 0.55 -> 1.12
+                symbolPF >= 1.1 -> 1.03
+                symbolPF < 0.8 -> 0.88
+                else -> 0.96
+            }
+        } else {
+            1.0
         }
 
-        val streakPenalty = if (health.consecutiveLosses >= 3) -0.15 else if (health.consecutiveLosses == 2) -0.06 else 0.0
-        val sampleWeight = if (health.sampleSize >= 15) 1.0 else (health.sampleSize / 15.0).coerceAtLeast(0.4)
-        
-        val totalHistoricalAdjustment = (pfAdjustment + wrAdjustment + streakPenalty) * sampleWeight
-        val rawCalibrated = (rawConfidence + totalHistoricalAdjustment) * calibrationFactor
+        // 5. Strategy Performance (Global Strategy Profit Factor & Expectancy)
+        val health = calculateRollingStrategyHealth(strategyName)
+        val strategyPerformance = when {
+            health.rollingProfitFactor >= 1.8 && health.rollingWinRate >= 60.0 -> 1.15
+            health.rollingProfitFactor >= 1.3 -> 1.08
+            health.rollingProfitFactor >= 1.0 -> 1.00
+            health.rollingProfitFactor >= 0.75 -> 0.88
+            else -> 0.75
+        }
 
-        val calibratedConfidence = rawCalibrated.coerceIn(0.20, 0.96)
-        return calibratedConfidence
+        // 6. Recent Rolling Performance (Last 10 trades velocity & streak penalties)
+        val recentLogs = strategyLogs.sortedByDescending { it.timestamp }.take(10)
+        val recentRollingPerformance = if (recentLogs.size >= 3) {
+            val recentWins = recentLogs.count { it.actualProfit > 0 }.toDouble()
+            val recentWinRate = recentWins / recentLogs.size
+            val streakPenalty = if (health.consecutiveLosses >= 3) 0.80 else if (health.consecutiveLosses >= 2) 0.90 else 1.0
+            val streakBoost = if (recentWinRate >= 0.70) 1.10 else 1.0
+            ((recentWinRate * 0.5 + 0.5) * streakPenalty * streakBoost).coerceIn(0.70, 1.20)
+        } else {
+            1.0
+        }
+
+        // FINAL EMPIRICAL PROBABILITY:
+        val finalEmpiricalConfidence = (
+            modelPrediction *
+            historicalCalibration *
+            regimePerformance *
+            symbolPerformance *
+            strategyPerformance *
+            recentRollingPerformance
+        ).coerceIn(0.15, 0.98)
+
+        return finalEmpiricalConfidence
     }
 
     data class ConsensusResult(

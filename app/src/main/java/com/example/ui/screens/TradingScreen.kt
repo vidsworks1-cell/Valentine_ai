@@ -44,6 +44,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import kotlin.math.abs
 
+data class MarketFeedItem(
+    val symbol: String,
+    val name: String,
+    val price: Double,
+    val change: Double,
+    val type: String
+)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TradingScreen(
@@ -97,41 +105,60 @@ fun TradingScreen(
             .padding(top = innerPadding.calculateTopPadding() + 8.dp)
     ) {
         // Tab Selector Row
-        TabRow(
+        ScrollableTabRow(
             selectedTabIndex = activeTab,
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(RoundedCornerShape(12.dp)),
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            edgePadding = 0.dp
         ) {
             Tab(
                 selected = activeTab == 0,
                 onClick = { activeTab = 0 },
-                text = { Text("Live Portfolio", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                text = { Text("Portfolio", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(16.dp)) }
             )
             Tab(
                 selected = activeTab == 1,
                 onClick = { activeTab = 1 },
-                text = { Text("Market Intel", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                icon = { Icon(Icons.Default.Insights, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                text = { Text("Performance", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.Leaderboard, contentDescription = null, modifier = Modifier.size(16.dp)) }
             )
             Tab(
                 selected = activeTab == 2,
                 onClick = { activeTab = 2 },
-                text = { Text("Position Intel", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                icon = { Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                text = { Text("Market Intel", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.Insights, contentDescription = null, modifier = Modifier.size(16.dp)) }
             )
             Tab(
                 selected = activeTab == 3,
                 onClick = { activeTab = 3 },
-                text = { Text("Diagnostics", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
-                icon = { Icon(Icons.Default.QueryStats, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                text = { Text("Positions", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(16.dp)) }
             )
             Tab(
                 selected = activeTab == 4,
                 onClick = { activeTab = 4 },
+                text = { Text("Diagnostics", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.QueryStats, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            )
+            Tab(
+                selected = activeTab == 5,
+                onClick = { activeTab = 5 },
                 text = { Text("Backtest Lab", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
-                icon = { Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                icon = { Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            )
+            Tab(
+                selected = activeTab == 6,
+                onClick = { activeTab = 6 },
+                text = { Text("Counterfactual", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.Psychology, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            )
+            Tab(
+                selected = activeTab == 7,
+                onClick = { activeTab = 7 },
+                text = { Text("Trade Reviews", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.RateReview, contentDescription = null, modifier = Modifier.size(16.dp)) }
             )
         }
 
@@ -792,6 +819,12 @@ fun TradingScreen(
         }
     }
 } else if (activeTab == 1) {
+    // Performance Dashboard Tab
+    PerformanceDashboardSection(
+        viewModel = viewModel,
+        innerPadding = innerPadding
+    )
+} else if (activeTab == 2) {
     // Market Intelligence Tab
     MarketIntelligenceSection(
         viewModel = viewModel,
@@ -802,19 +835,29 @@ fun TradingScreen(
         strategies = strategies,
         innerPadding = innerPadding
     )
-} else if (activeTab == 2) {
-    // Position Manager & Risk Supervision Panel (Phase 17)
+} else if (activeTab == 3) {
+    // Position Manager & Risk Supervision Panel
     PositionManagerSection(
         viewModel = viewModel,
         innerPadding = innerPadding
     )
-} else if (activeTab == 3) {
+} else if (activeTab == 4) {
     TradingDiagnosticsDashboard(
         viewModel = viewModel,
         innerPadding = innerPadding
     )
-} else {
+} else if (activeTab == 5) {
     BacktestLabSection(
+        viewModel = viewModel,
+        innerPadding = innerPadding
+    )
+} else if (activeTab == 6) {
+    CounterfactualLearningSection(
+        viewModel = viewModel,
+        modifier = Modifier.padding(top = innerPadding.calculateTopPadding() + 56.dp)
+    )
+} else if (activeTab == 7) {
+    TradeReviewsSection(
         viewModel = viewModel,
         innerPadding = innerPadding
     )
@@ -1064,14 +1107,6 @@ fun TradingScreen(
 }
 }
 
-data class MarketFeedItem(
-    val symbol: String,
-    val name: String,
-    val price: Double,
-    val change: Double,
-    val type: String
-)
-
 @Composable
 fun BinanceConnectorHealthPanel(viewModel: AppViewModel) {
     val binanceStatus by viewModel.binanceApiStatus.collectAsState()
@@ -1221,10 +1256,8 @@ fun BinanceConnectorHealthPanel(viewModel: AppViewModel) {
                     }
                 }
             }
-        }
-    }
 
-    // Real-time Binance Wallet Balances Panel
+            // Real-time Binance Wallet Balances Panel
             if (binanceBalancesList.isNotEmpty()) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 Text(
@@ -1343,6 +1376,8 @@ fun BinanceConnectorHealthPanel(viewModel: AppViewModel) {
                 }
             }
         }
+    }
+}
 
 @Composable
 fun MarketIntelligenceSection(
