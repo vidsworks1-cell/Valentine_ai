@@ -5421,10 +5421,40 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     )
     val mtfGuardCalibrationState = _mtfGuardCalibrationState.asStateFlow()
 
-    fun calibrateMtfGuardThresholds(adaptiveThresholdPct: Double = 55.0) {
-        val newState = com.example.aza.strategy.BacktestEngine.calibrateMtfGuardThresholds(adaptiveThresholdPct)
+    private val _strategyMissedOpportunityMetrics = MutableStateFlow(
+        com.example.aza.strategy.LuminaMissedOpportunityEngine.calculateStrategyAttribution()
+    )
+    val strategyMissedOpportunityMetrics = _strategyMissedOpportunityMetrics.asStateFlow()
+
+    fun calibrateMtfGuardThresholds(
+        adaptiveThresholdPct: Double = 54.0,
+        severeDivergenceCutoff: Double = 42.0,
+        macroGateConfidence: Double = 0.70,
+        breakoutLeadEnabled: Boolean = true
+    ) {
+        val newState = com.example.aza.strategy.BacktestEngine.calibrateMtfGuardThresholds(
+            adaptiveThresholdPct = adaptiveThresholdPct,
+            severeDivergenceCutoff = severeDivergenceCutoff,
+            macroGateConfidence = macroGateConfidence,
+            breakoutLeadEnabled = breakoutLeadEnabled
+        )
         _mtfGuardCalibrationState.value = newState
-        addThought("🛡️ MTF GUARD TUNED: Threshold set to ${adaptiveThresholdPct}%. Reduced false positive blocks by ${newState.falseNegativeReductionPct}%.")
+        _strategyMissedOpportunityMetrics.value = com.example.aza.strategy.LuminaMissedOpportunityEngine.calculateStrategyAttribution()
+        addThought("🛡️ MTF GUARD & DIVERGENCE TUNED: Threshold set to ${adaptiveThresholdPct}%, divergence cutoff ${severeDivergenceCutoff}%, macro conflict gate ${macroGateConfidence}. False positive blocks reduced by ${String.format(java.util.Locale.US, "%.1f", newState.falseNegativeReductionPct)}%.")
+    }
+
+    fun applyBalancedGuardPreset() {
+        calibrateMtfGuardThresholds(
+            adaptiveThresholdPct = 54.0,
+            severeDivergenceCutoff = 42.0,
+            macroGateConfidence = 0.70,
+            breakoutLeadEnabled = true
+        )
+        addThought("⚡ BALANCED PRESET APPLIED: Balanced protection vs opportunity capture enabled across all strategies.")
+    }
+
+    fun refreshStrategyMissedOpportunities() {
+        _strategyMissedOpportunityMetrics.value = com.example.aza.strategy.LuminaMissedOpportunityEngine.calculateStrategyAttribution()
     }
 
     private val _systemHarmonyGlobalUtility = MutableStateFlow(

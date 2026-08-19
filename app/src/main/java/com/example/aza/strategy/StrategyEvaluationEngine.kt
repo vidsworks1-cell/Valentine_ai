@@ -43,16 +43,18 @@ object StrategyEvaluationEngine {
         val stdDev = sqrt(variance)
 
         // Volatility classification boundaries
-        val isHighVol = stdDev > 0.012
-
-        // Trend and Drawdown classification
         val last = prices.last()
         val first = prices.first()
         val changePct = (last - first) / first
         val totalChange = kotlin.math.abs(changePct)
         
         val maxInLookback = prices.maxOrNull() ?: last
+        val minInLookback = prices.minOrNull() ?: last
         val drawdownFromPeak = if (maxInLookback > 0.0) (last - maxInLookback) / maxInLookback else 0.0
+        val rangeSpanPct = if (minInLookback > 0.0) (maxInLookback - minInLookback) / minInLookback else 0.0
+
+        // Dynamic volatility threshold using stdDev and range expansion
+        val isHighVol = stdDev > 0.015 || rangeSpanPct > 0.045
 
         // TAIL-RISK SHOCK CIRCUIT BREAKERS (CRASH & BLACK_SWAN)
         // 1. BLACK_SWAN: Catastrophic systemic shock (> 12% precipitous drop OR > 14% peak drawdown OR stdDev > 0.038 with drop > 9%)
@@ -65,12 +67,12 @@ object StrategyEvaluationEngine {
             return "CRASH"
         }
 
-        // Let's determine standard trend type
-        val isTrending = totalChange > 0.03
+        // Refined trend threshold (2.0% directional displacement in lookback)
+        val isTrending = totalChange >= 0.020
 
         return when {
-            changePct > 0.06 -> "STRONG_BULL"
-            changePct < -0.06 -> "STRONG_BEAR"
+            changePct > 0.05 -> "STRONG_BULL"
+            changePct < -0.05 -> "STRONG_BEAR"
             isHighVol && isTrending -> "HIGH_VOLATILITY_TRENDING"
             !isHighVol && isTrending -> "LOW_VOLATILITY_TRENDING"
             isHighVol && !isTrending -> {
@@ -988,14 +990,14 @@ object StrategyEvaluationEngine {
     ): DecisionContext {
         val currentRegime = if (prices.size >= 5) detectMarketRegime(prices) else "LOW_VOLATILITY_RANGING"
 
-        // Dynamically calibrate effective MTF Threshold based on active market regime if default (66.0) was provided
-        val effectiveMtfThreshold = if (mtfThreshold == 66.0) {
+        // Dynamically calibrate effective MTF Threshold based on active market regime if default (54.0 or 66.0) was provided
+        val effectiveMtfThreshold = if (mtfThreshold in listOf(54.0, 66.0)) {
             when (currentRegime.uppercase(Locale.US)) {
-                "RANGING", "LOW_VOLATILITY_RANGING", "ACCUMULATION" -> 62.0
-                "TRENDING", "STRONG_BULL", "HIGH_VOLATILITY_TRENDING" -> 68.0
-                "HIGH_VOLATILITY", "HIGH_VOLATILITY_RANGING", "VOLATILE" -> 65.0
-                "CRASH", "BLACK_SWAN", "FLASH_CRASH" -> 72.0
-                else -> 66.0
+                "RANGING", "LOW_VOLATILITY_RANGING", "ACCUMULATION" -> 50.0
+                "TRENDING", "STRONG_BULL", "STRONG_BEAR", "HIGH_VOLATILITY_TRENDING" -> 56.0
+                "HIGH_VOLATILITY", "HIGH_VOLATILITY_RANGING", "VOLATILE" -> 54.0
+                "CRASH", "BLACK_SWAN", "FLASH_CRASH" -> 68.0
+                else -> 54.0
             }
         } else {
             mtfThreshold
@@ -1101,9 +1103,9 @@ object StrategyEvaluationEngine {
         val mtfGuardPassed = mtfDiagnostics.mtfStatus == MtfAlignmentStatus.STRONG_ALIGNMENT ||
                 mtfDiagnostics.mtfStatus == MtfAlignmentStatus.ACCEPTABLE_ALIGNMENT
 
-        val isSevereMtfDivergence = mtfDiagnostics.mtfWeightedScore < 55.0
+        val isSevereMtfDivergence = mtfDiagnostics.mtfWeightedScore < 42.0
         val mtfRationale = if (isSevereMtfDivergence) {
-            "⚡ [EARLY MTF GUARD SHORT-CIRCUIT]: Weighted divergence (${String.format(Locale.US, "%.1f%%", mtfDiagnostics.mtfWeightedScore)}) < 55.0% threshold. Pipeline short-circuited early. ${mtfDiagnostics.rationale}"
+            "⚡ [EARLY MTF GUARD SHORT-CIRCUIT]: Weighted divergence (${String.format(Locale.US, "%.1f%%", mtfDiagnostics.mtfWeightedScore)}) < 42.0% threshold. Pipeline short-circuited early. ${mtfDiagnostics.rationale}"
         } else {
             mtfDiagnostics.rationale
         }

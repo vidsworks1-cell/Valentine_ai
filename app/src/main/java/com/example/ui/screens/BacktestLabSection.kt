@@ -4935,23 +4935,44 @@ fun BacktestLabSection(
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
-                        Text(text = "Tune MTF Alignment Guard Threshold:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(text = "Tune MTF Alignment Guard & Divergence Balance:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(
-                                selected = mtf.weightedAlignmentThresholdPct == 55.0,
-                                onClick = { viewModel.calibrateMtfGuardThresholds(55.0) },
-                                label = { Text("55.0% Adaptive (Polished)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
+                                selected = mtf.weightedAlignmentThresholdPct == 54.0 && mtf.severeDivergenceCutoffPct == 42.0,
+                                onClick = { viewModel.applyBalancedGuardPreset() },
+                                label = { Text("⚡ 54.0% Balanced Preset", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                            )
+                            FilterChip(
+                                selected = mtf.weightedAlignmentThresholdPct == 48.0,
+                                onClick = { viewModel.calibrateMtfGuardThresholds(48.0, 38.0, 0.75, true) },
+                                label = { Text("🚀 48.0% Aggressive", fontSize = 11.sp) }
                             )
                             FilterChip(
                                 selected = mtf.weightedAlignmentThresholdPct == 66.0,
-                                onClick = { viewModel.calibrateMtfGuardThresholds(66.0) },
-                                label = { Text("66.0% Strict (Legacy)", fontSize = 11.sp) }
+                                onClick = { viewModel.calibrateMtfGuardThresholds(66.0, 55.0, 0.55, false) },
+                                label = { Text("🛡️ 66.0% Strict Legacy", fontSize = 11.sp) }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = "Fine-Tune Weighted Divergence Cutoff:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = mtf.severeDivergenceCutoffPct == 42.0,
+                                onClick = { viewModel.calibrateMtfGuardThresholds(mtf.weightedAlignmentThresholdPct, 42.0, mtf.macroConflictConfidenceGate, mtf.breakoutLeadEnabled) },
+                                label = { Text("42.0% Relaxed (Fewer Blocks)", fontSize = 10.sp) }
                             )
                             FilterChip(
-                                selected = mtf.weightedAlignmentThresholdPct == 50.0,
-                                onClick = { viewModel.calibrateMtfGuardThresholds(50.0) },
-                                label = { Text("50.0% Volatile Regime", fontSize = 11.sp) }
+                                selected = mtf.severeDivergenceCutoffPct == 50.0,
+                                onClick = { viewModel.calibrateMtfGuardThresholds(mtf.weightedAlignmentThresholdPct, 50.0, mtf.macroConflictConfidenceGate, mtf.breakoutLeadEnabled) },
+                                label = { Text("50.0% Standard", fontSize = 10.sp) }
+                            )
+                            FilterChip(
+                                selected = mtf.severeDivergenceCutoffPct == 55.0,
+                                onClick = { viewModel.calibrateMtfGuardThresholds(mtf.weightedAlignmentThresholdPct, 55.0, mtf.macroConflictConfidenceGate, mtf.breakoutLeadEnabled) },
+                                label = { Text("55.0% Strict", fontSize = 10.sp) }
                             )
                         }
                     }

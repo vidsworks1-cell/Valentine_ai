@@ -2937,6 +2937,8 @@ fun TradingDiagnosticsDashboard(
     val scope = rememberCoroutineScope()
 
     val currentRegime = opportunities.firstOrNull()?.currentRegime ?: "LOW_VOLATILITY_RANGING"
+    val mtfGuardState by viewModel.mtfGuardCalibrationState.collectAsState()
+    val strategyMissedOpportunities by viewModel.strategyMissedOpportunityMetrics.collectAsState()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -2983,6 +2985,23 @@ fun TradingDiagnosticsDashboard(
                     )
                 }
             }
+        }
+
+        // MTF GUARD & DIVERGENCE FINE-TUNING CONTROLLER CARD
+        item {
+            MtfAndDivergenceGuardTunerCard(
+                mtf = mtfGuardState,
+                viewModel = viewModel
+            )
+        }
+
+        // STRATEGY-SPECIFIC MISSED OPPORTUNITY ATTRIBUTION CARD
+        item {
+            StrategyMissedOpportunityAttributionCard(
+                metricsList = strategyMissedOpportunities,
+                onApplyPreset = { viewModel.applyBalancedGuardPreset() },
+                onRefresh = { viewModel.refreshStrategyMissedOpportunities() }
+            )
         }
 
         // 1. PORTFOLIO-LEVEL INTELLIGENCE DASHBOARD CARD
@@ -7476,6 +7495,347 @@ fun ParameterItemBox(
             Text(name, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             Text(value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Text(detail, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun DiagnosticMetricBox(
+    title: String,
+    value: String,
+    subtitle: String,
+    valueColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+        modifier = modifier
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Text(title, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = valueColor)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(subtitle, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun MtfAndDivergenceGuardTunerCard(
+    mtf: com.example.aza.strategy.MtfGuardCalibrationState,
+    viewModel: AppViewModel
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Tune,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "MTF GUARD & WEIGHTED DIVERGENCE",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Badge(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ) {
+                    Text(
+                        "PROTECTION VS ALPHA",
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Fine-tunes multi-timeframe divergence thresholds and macro conflict gates to eliminate unnecessary blocking and missed breakouts while safeguarding capital.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Live Metrics Row
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DiagnosticMetricBox(
+                    title = "Confluence Req",
+                    value = "${mtf.weightedAlignmentThresholdPct}%",
+                    subtitle = "Adaptive Baseline",
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                DiagnosticMetricBox(
+                    title = "Divergence Cutoff",
+                    value = "${mtf.severeDivergenceCutoffPct}%",
+                    subtitle = "Short-Circuit Gate",
+                    valueColor = Color(0xFFE65100),
+                    modifier = Modifier.weight(1f)
+                )
+                DiagnosticMetricBox(
+                    title = "False Rejections",
+                    value = "-${String.format(Locale.US, "%.1f", mtf.falseNegativeReductionPct)}%",
+                    subtitle = "Missed Alpha Saved",
+                    valueColor = Color(0xFF2E7D32),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Summary Terminal Box
+            Surface(
+                color = Color(0xFF1E1E1E),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                        text = mtf.mtfSummary,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        color = Color(0xFF81C784)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Status: ${mtf.recentDivergenceResult}",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        color = Color(0xFF81D4FA)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Calibration Presets
+            Text(
+                "Select Protection vs Aggressiveness Profile:",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(
+                    selected = mtf.weightedAlignmentThresholdPct == 54.0 && mtf.severeDivergenceCutoffPct == 42.0,
+                    onClick = { viewModel.applyBalancedGuardPreset() },
+                    label = { Text("⚡ Balanced 54%", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.weight(1f)
+                )
+                FilterChip(
+                    selected = mtf.weightedAlignmentThresholdPct == 48.0,
+                    onClick = { viewModel.calibrateMtfGuardThresholds(48.0, 38.0, 0.75, true) },
+                    label = { Text("🚀 Aggressive 48%", fontSize = 11.sp) },
+                    modifier = Modifier.weight(1f)
+                )
+                FilterChip(
+                    selected = mtf.weightedAlignmentThresholdPct == 66.0,
+                    onClick = { viewModel.calibrateMtfGuardThresholds(66.0, 55.0, 0.55, false) },
+                    label = { Text("🛡️ Strict 66%", fontSize = 11.sp) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Divergence Specific Tuning
+            Text(
+                "Fine-Tune Weighted Divergence Short-Circuit Cutoff:",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(
+                    selected = mtf.severeDivergenceCutoffPct == 42.0,
+                    onClick = { viewModel.calibrateMtfGuardThresholds(mtf.weightedAlignmentThresholdPct, 42.0, mtf.macroConflictConfidenceGate, mtf.breakoutLeadEnabled) },
+                    label = { Text("42% Relaxed", fontSize = 10.sp) }
+                )
+                FilterChip(
+                    selected = mtf.severeDivergenceCutoffPct == 50.0,
+                    onClick = { viewModel.calibrateMtfGuardThresholds(mtf.weightedAlignmentThresholdPct, 50.0, mtf.macroConflictConfidenceGate, mtf.breakoutLeadEnabled) },
+                    label = { Text("50% Standard", fontSize = 10.sp) }
+                )
+                FilterChip(
+                    selected = mtf.severeDivergenceCutoffPct == 55.0,
+                    onClick = { viewModel.calibrateMtfGuardThresholds(mtf.weightedAlignmentThresholdPct, 55.0, mtf.macroConflictConfidenceGate, mtf.breakoutLeadEnabled) },
+                    label = { Text("55% Strict", fontSize = 10.sp) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun StrategyMissedOpportunityAttributionCard(
+    metricsList: List<com.example.aza.strategy.StrategyMissedOpportunityMetrics>,
+    onApplyPreset: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Analytics,
+                        contentDescription = null,
+                        tint = Color(0xFF1976D2),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "STRATEGY MISSED OPPORTUNITIES",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFF1976D2),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                IconButton(onClick = onRefresh, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                }
+            }
+
+            Text(
+                "Individual strategy attribution identifies which algorithms are over-filtered by rigid guards and quantifies avoided losses vs missed alpha.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Strategy Cards
+            metricsList.forEach { item ->
+                val statusColor = when (item.status) {
+                    "OVER_PROTECTED" -> Color(0xFFE65100)
+                    "CONSERVATIVE_HEALTHY" -> Color(0xFF1976D2)
+                    else -> Color(0xFF2E7D32)
+                }
+                val statusBg = when (item.status) {
+                    "OVER_PROTECTED" -> Color(0xFFFFF3E0)
+                    "CONSERVATIVE_HEALTHY" -> Color(0xFFE3F2FD)
+                    else -> Color(0xFFE8F5E9)
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                item.strategyName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Surface(
+                                color = statusBg,
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    item.status.replace("_", " "),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = statusColor,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Stats Grid
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("Signals / Executed", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${item.totalSignals} sig / ${item.executedTrades} exec", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                            Column {
+                                Text("Avoided Losses", fontSize = 10.sp, color = Color(0xFF2E7D32))
+                                Text("+$${String.format(Locale.US, "%.0f", item.avoidedLossUSD)} (${item.avoidedLossesCount})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                            }
+                            Column {
+                                Text("Missed Profits", fontSize = 10.sp, color = Color(0xFFD32F2F))
+                                Text("-$${String.format(Locale.US, "%.0f", item.missedProfitUSD)} (${item.missedProfitsCount})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F))
+                            }
+                            Column {
+                                Text("Net Value", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                                Text("+$${String.format(Locale.US, "%.0f", item.netCounterfactualValueUSD)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Blocking Reason & Recommendation
+                        Text(
+                            "Top Blocker: ${item.topBlockingGuard}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "💡 ${item.diagnosisRecommendation}",
+                            fontSize = 10.sp,
+                            color = if (item.status == "OVER_PROTECTED") Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Button(
+                onClick = onApplyPreset,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Apply Balanced Guard Preset Across All Strategies", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }

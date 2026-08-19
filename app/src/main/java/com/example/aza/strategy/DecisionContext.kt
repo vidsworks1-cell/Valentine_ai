@@ -263,7 +263,8 @@ object MtfEvaluator {
     fun evaluateMtfDiagnostics(
         side: String,
         timeframeStates: List<TimeframeState>,
-        requiredScore: Double = 66.0
+        requiredScore: Double = 54.0,
+        macroConflictThreshold: Double = 0.70
     ): MtfDiagnostics {
         if (timeframeStates.isEmpty()) {
             return MtfDiagnostics(
@@ -310,17 +311,18 @@ object MtfEvaluator {
             if (!tfState.isMissing && !tfState.isStale) {
                 totalNonMissing++
 
+                // Balanced Institutional MTF Weights: 45% HTF (1D/4H) + 55% LTF/MTF (1H/15m)
                 val weight = when (tfState.timeframe.uppercase(Locale.US)) {
-                    "1D" -> if (has4H) 0.25 else 0.50
-                    "4H" -> if (has1D) 0.25 else 0.50
+                    "1D" -> if (has4H) 0.20 else 0.40
+                    "4H" -> if (has1D) 0.25 else 0.45
                     "1H" -> 0.30
-                    "15M" -> 0.20
+                    "15M" -> 0.25
                     else -> 0.20
                 }
 
                 val agreementFactor = when {
                     tfState.trendBias.equals(expectedBias, ignoreCase = true) -> 1.0
-                    tfState.trendBias.equals("NEUTRAL", ignoreCase = true) -> 0.50
+                    tfState.trendBias.equals("NEUTRAL", ignoreCase = true) -> 0.60 // Balanced neutral recognition
                     else -> 0.0
                 }
 
@@ -336,41 +338,43 @@ object MtfEvaluator {
         val rawScore = if (totalNonMissing > 0) (agreeingCount.toDouble() / totalNonMissing.toDouble()) * 100.0 else 0.0
         val weightedScore = if (totalWeight > 0.0) (weightedSum / totalWeight) * 100.0 else 0.0
 
-        // Higher Timeframe (HTF) Alignment Analysis
-        var isHtfConflict = false
+        // Higher Timeframe (HTF) Alignment Analysis - Fine-tuned to avoid blocking minor pullbacks
         val validHtfStates = htfStates.filter { !it.isMissing && !it.isStale }
-        val htfOpposing = validHtfStates.any { it.trendBias.equals(oppositeBias, ignoreCase = true) && it.confidence >= 0.55 }
+        val strongHtfOpposing = validHtfStates.any { it.trendBias.equals(oppositeBias, ignoreCase = true) && it.confidence >= macroConflictThreshold }
+        val moderateHtfOpposing = validHtfStates.any { it.trendBias.equals(oppositeBias, ignoreCase = true) && it.confidence in 0.50..macroConflictThreshold }
         val htfMatching = validHtfStates.isNotEmpty() && validHtfStates.all { it.trendBias.equals(expectedBias, ignoreCase = true) }
 
         val htfAlignment = when {
-            htfOpposing -> {
-                isHtfConflict = true
-                "OPPOSING"
-            }
+            strongHtfOpposing -> "STRONG_OPPOSING"
+            moderateHtfOpposing -> "MILD_OPPOSING"
             htfMatching -> "ALIGNED"
             else -> "NEUTRAL"
         }
 
+        val isHtfConflict = strongHtfOpposing
+
         // Check Early Breakout Lead Exception
-        // Lower timeframes (15m, 1H) leading a breakout while HTF is neutral (not opposing)
+        // Lower timeframes (15m, 1H) leading a breakout with high conviction
         val ltfState = timeframeStates.find { it.timeframe.equals("15m", ignoreCase = true) }
         val mtfState = timeframeStates.find { it.timeframe.equals("1H", ignoreCase = true) }
         val ltfMtfLeadingBreakout = ltfState != null && mtfState != null &&
                 ltfState.trendBias.equals(expectedBias, ignoreCase = true) &&
                 mtfState.trendBias.equals(expectedBias, ignoreCase = true) &&
-                ltfState.confidence >= 0.75 && mtfState.confidence >= 0.75
+                ltfState.confidence >= 0.70 && mtfState.confidence >= 0.70
 
-        val isEarlyBreakoutLead = ltfMtfLeadingBreakout && htfAlignment == "NEUTRAL"
+        val isEarlyBreakoutLead = ltfMtfLeadingBreakout && (htfAlignment == "NEUTRAL" || htfAlignment == "MILD_OPPOSING")
 
         var conflictLevel = ((1.0 - (weightedScore / 100.0)) * 100.0).coerceIn(0.0, 100.0)
         if (isHtfConflict) {
             conflictLevel = kotlin.math.max(conflictLevel, 75.0)
+        } else if (moderateHtfOpposing) {
+            conflictLevel = kotlin.math.max(conflictLevel, 45.0)
         }
 
         val status = when {
-            isHtfConflict || weightedScore < 40.0 -> MtfAlignmentStatus.CONFLICT
-            weightedScore >= 80.0 -> MtfAlignmentStatus.STRONG_ALIGNMENT
-            weightedScore >= requiredScore || (isEarlyBreakoutLead && weightedScore >= 50.0) -> MtfAlignmentStatus.ACCEPTABLE_ALIGNMENT
+            isHtfConflict || weightedScore < 35.0 -> MtfAlignmentStatus.CONFLICT
+            weightedScore >= 75.0 -> MtfAlignmentStatus.STRONG_ALIGNMENT
+            weightedScore >= requiredScore || (isEarlyBreakoutLead && weightedScore >= 45.0) -> MtfAlignmentStatus.ACCEPTABLE_ALIGNMENT
             else -> MtfAlignmentStatus.WEAK_ALIGNMENT
         }
 
@@ -379,15 +383,15 @@ object MtfEvaluator {
                 MtfAlignmentStatus.STRONG_ALIGNMENT -> append("✅ STRONG MTF ALIGNMENT: Signal aligned across timeframes (Weighted ${String.format(Locale.US, "%.1f%%", weightedScore)} >= ${String.format(Locale.US, "%.1f%%", requiredScore)}).")
                 MtfAlignmentStatus.ACCEPTABLE_ALIGNMENT -> {
                     if (isEarlyBreakoutLead) {
-                        append("⚡ EARLY BREAKOUT LEAD: LTF/MTF momentum leading breakout (Weighted ${String.format(Locale.US, "%.1f%%", weightedScore)}). HTF is neutral.")
+                        append("⚡ BALANCED BREAKOUT LEAD: LTF/MTF momentum leading breakout (Weighted ${String.format(Locale.US, "%.1f%%", weightedScore)}). Macro drag safely bypassed.")
                     } else {
-                        append("✅ ACCEPTABLE MTF ALIGNMENT: Confluence valid (Weighted ${String.format(Locale.US, "%.1f%%", weightedScore)} >= ${String.format(Locale.US, "%.1f%%", requiredScore)}).")
+                        append("✅ BALANCED MTF ALIGNMENT: Confluence valid (Weighted ${String.format(Locale.US, "%.1f%%", weightedScore)} >= ${String.format(Locale.US, "%.1f%%", requiredScore)}).")
                     }
                 }
                 MtfAlignmentStatus.WEAK_ALIGNMENT -> append("⚠️ WEAK MTF ALIGNMENT: Weighted agreement (${String.format(Locale.US, "%.1f%%", weightedScore)}) is below required threshold (${String.format(Locale.US, "%.1f%%", requiredScore)}).")
                 MtfAlignmentStatus.CONFLICT -> {
                     if (isHtfConflict) {
-                        append("⛔ MTF MACRO CONFLICT: Macro higher-timeframe directly contradicts signal side ($oppositeBias vs $expectedBias). Signal quarantined.")
+                        append("⛔ MTF MACRO CONFLICT: High-conviction macro timeframe directly opposes signal ($oppositeBias vs $expectedBias). Signal quarantined.")
                     } else {
                         append("⛔ MTF SEVERE CONFLICT: Multi-timeframe contradiction detected across timeframes (Weighted ${String.format(Locale.US, "%.1f%%", weightedScore)}).")
                     }
