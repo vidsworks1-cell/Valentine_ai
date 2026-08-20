@@ -2939,6 +2939,7 @@ fun TradingDiagnosticsDashboard(
     val currentRegime = opportunities.firstOrNull()?.currentRegime ?: "LOW_VOLATILITY_RANGING"
     val mtfGuardState by viewModel.mtfGuardCalibrationState.collectAsState()
     val strategyMissedOpportunities by viewModel.strategyMissedOpportunityMetrics.collectAsState()
+    val breakoutExperimentReport by viewModel.breakoutExperimentReport.collectAsState()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -3001,6 +3002,15 @@ fun TradingDiagnosticsDashboard(
                 metricsList = strategyMissedOpportunities,
                 onApplyPreset = { viewModel.applyBalancedGuardPreset() },
                 onRefresh = { viewModel.refreshStrategyMissedOpportunities() }
+            )
+        }
+
+        // BREAKOUT MOMENTUM FILTER SWEEPER & CALIBRATION CARD
+        item {
+            BreakoutMomentumExperimentCard(
+                report = breakoutExperimentReport,
+                onSelectFilter = { roc, lookback -> viewModel.updateBreakoutMomentumFilter(roc, lookback) },
+                onApplySweetSpot = { viewModel.applyBreakoutSweetSpotPreset() }
             )
         }
 
@@ -7835,6 +7845,282 @@ fun StrategyMissedOpportunityAttributionCard(
                 Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Apply Balanced Guard Preset Across All Strategies", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun BreakoutMomentumExperimentCard(
+    report: com.example.aza.strategy.BreakoutExperimentReport,
+    onSelectFilter: (Double, Int) -> Unit,
+    onApplySweetSpot: () -> Unit
+) {
+    val active = report.activeConfiguration
+    val sweetSpot = report.sweepResults.firstOrNull { it.isSweetSpot } ?: active
+    val baseline = report.baselineWithoutFilter
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth().testTag("breakout_momentum_experiment_card")
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Speed,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            "Breakout Momentum ROC Filter Lab",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Minimum price velocity threshold before triggering buy",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Surface(
+                    color = Color(0xFFE0F2FE),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "✨ Sweet Spot: 1.2% / 4b",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0369A1),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Rate of change selector chips
+            Text(
+                "Select Minimum Price Rate-of-Change (ROC %):",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val candidateRocs = listOf(0.0, 0.6, 1.0, 1.2, 1.5, 2.0, 2.5)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                candidateRocs.forEach { roc ->
+                    val isSelected = kotlin.math.abs(active.rocThresholdPct - roc) < 0.05
+                    val isSweet = (roc == 1.2)
+                    
+                    Surface(
+                        onClick = { onSelectFilter(roc, report.selectedLookback) },
+                        color = when {
+                            isSelected -> MaterialTheme.colorScheme.primary
+                            isSweet -> Color(0xFFE0F2FE)
+                            else -> MaterialTheme.colorScheme.surface
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) MaterialTheme.colorScheme.primary else if (isSweet) Color(0xFF0284C7) else MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                if (roc == 0.0) "0%" else "${roc}%",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else if (isSweet) Color(0xFF0369A1) else MaterialTheme.colorScheme.onSurface
+                            )
+                            if (isSweet) {
+                                Text(
+                                    "Sweet",
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color(0xFF0284C7)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Lookback bars selector
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Momentum Lookback Window:",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(2, 4, 6).forEach { bars ->
+                        val isSelected = report.selectedLookback == bars
+                        Surface(
+                            onClick = { onSelectFilter(report.selectedRocPct, bars) },
+                            color = if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Text(
+                                "$bars bars",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Active Filter Performance Summary Metrics
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Simulated Performance (${report.symbol} | ROC ${active.rocThresholdPct}% / ${active.rocLookbackBars}b)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (active.isSweetSpot) {
+                            Text("⭐ Optimal Balance", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DiagnosticMetricBox(
+                            title = "Win Rate",
+                            value = "${String.format(Locale.US, "%.1f", active.winRatePct)}%",
+                            subtitle = "vs ${String.format(Locale.US, "%.1f", baseline.winRatePct)}% base",
+                            valueColor = if (active.winRatePct >= 58.0) Color(0xFF059669) else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        DiagnosticMetricBox(
+                            title = "Profit Factor",
+                            value = String.format(Locale.US, "%.2f", active.profitFactor),
+                            subtitle = "Sharpe ${String.format(Locale.US, "%.2f", active.sharpeRatio)}",
+                            valueColor = if (active.profitFactor >= 2.0) Color(0xFF059669) else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        DiagnosticMetricBox(
+                            title = "Net PnL",
+                            value = "+$${String.format(Locale.US, "%.0f", active.netPnLUSD)}",
+                            subtitle = "+${String.format(Locale.US, "%.2f", active.expectancyR)}R Exp",
+                            valueColor = Color(0xFF0284C7),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DiagnosticMetricBox(
+                            title = "Fakeouts Blocked",
+                            value = "${active.falseBreakoutRejectionsCount}",
+                            subtitle = "Sluggish chop stopped",
+                            valueColor = Color(0xFF059669),
+                            modifier = Modifier.weight(1f)
+                        )
+                        DiagnosticMetricBox(
+                            title = "Missed Moves",
+                            value = "${active.missedProfitableBreakoutsCount}",
+                            subtitle = "Over-filter cost",
+                            valueColor = if (active.missedProfitableBreakoutsCount > 15) Color(0xFFDC2626) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        DiagnosticMetricBox(
+                            title = "Max Drawdown",
+                            value = "${String.format(Locale.US, "%.1f", active.maxDrawdownPct)}%",
+                            subtitle = "vs ${String.format(Locale.US, "%.1f", baseline.maxDrawdownPct)}% base",
+                            valueColor = if (active.maxDrawdownPct <= 6.0) Color(0xFF059669) else Color(0xFFDC2626),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        active.rationale,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onApplySweetSpot,
+                    modifier = Modifier.weight(1.4f),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Apply Sweet Spot (1.2% / 4b)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = { onSelectFilter(report.selectedRocPct, report.selectedLookback) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Set Active", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }

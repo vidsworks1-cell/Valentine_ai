@@ -75,16 +75,16 @@ object StrategyIndicators {
 
 class TrendFollowingStrategy(
     var emaShortPeriod: Int = 12,
-    var emaLongPeriod: Int = 26,
+    var emaLongPeriod: Int = 4,
     var rsiPeriod: Int = 14
 ) : TradingStrategy {
     override val name = "Trend Following"
-    override val version = "1.0.0"
-    override val description = "Follows strong upward market momentum using exponential moving average (EMA) crossovers."
+    override val version = "1.1.0"
+    override val description = "Follows strong market momentum using fast short-term (12) and confirmation (4) moving average crossovers with RSI confirmation."
     override val supportedMarkets = listOf("BTC", "ETH", "SOL", "AAPL", "NVDA")
     override val riskProfile = "Conservative"
     override val timeframe = "4H"
-    override val requiredIndicators = listOf("EMA (12, 26, 200)", "RSI (14)")
+    override val requiredIndicators = listOf("EMA (12, 4)", "RSI (14)")
 
     override val designedRegimes = listOf("Trending", "Low volatility", "HIGH_VOLATILITY_TRENDING", "LOW_VOLATILITY_TRENDING", "STRONG_BULL", "STRONG_BEAR")
     override fun getParameters(): Map<String, Double> = mapOf(
@@ -103,23 +103,29 @@ class TrendFollowingStrategy(
         val emaShort = StrategyIndicators.calculateSMA(prices, emaShortPeriod)
         val emaLong = StrategyIndicators.calculateSMA(prices, emaLongPeriod)
         val rsi = StrategyIndicators.calculateRSI(prices, rsiPeriod)
-        return "EMA($emaShortPeriod): ${String.format("%.2f", emaShort)}, EMA($emaLongPeriod): ${String.format("%.2f", emaLong)}, RSI: ${String.format("%.1f", rsi)}"
+        return "ShortTrend($emaShortPeriod): ${String.format("%.2f", emaShort)}, LongTrend($emaLongPeriod): ${String.format("%.2f", emaLong)}, RSI: ${String.format("%.1f", rsi)}"
     }
 
     override fun shouldEnter(market: String, prices: List<Double>): Boolean {
-        if (prices.size < emaLongPeriod) return false
+        val requiredBars = maxOf(emaShortPeriod, emaLongPeriod)
+        if (prices.size < requiredBars) return false
         val emaShort = StrategyIndicators.calculateSMA(prices, emaShortPeriod)
         val emaLong = StrategyIndicators.calculateSMA(prices, emaLongPeriod)
         val rsi = StrategyIndicators.calculateRSI(prices, rsiPeriod)
-        return emaShort > emaLong && rsi < 65.0
+        val lastPrice = prices.last()
+        val trendAligned = if (emaShortPeriod >= emaLongPeriod) (lastPrice >= emaShort || emaLong >= emaShort) else emaShort > emaLong
+        return trendAligned && rsi < 65.0
     }
 
     override fun shouldExit(market: String, prices: List<Double>, currentPosition: Double): Boolean {
-        if (prices.size < emaLongPeriod || currentPosition <= 0) return false
+        val requiredBars = maxOf(emaShortPeriod, emaLongPeriod)
+        if (prices.size < requiredBars || currentPosition <= 0) return false
         val emaShort = StrategyIndicators.calculateSMA(prices, emaShortPeriod)
         val emaLong = StrategyIndicators.calculateSMA(prices, emaLongPeriod)
         val rsi = StrategyIndicators.calculateRSI(prices, rsiPeriod)
-        return emaShort < emaLong || rsi > 78.0
+        val lastPrice = prices.last()
+        val trendBroken = if (emaShortPeriod >= emaLongPeriod) (lastPrice < emaShort && emaLong < emaShort) else emaShort < emaLong
+        return trendBroken || rsi > 78.0
     }
 
     override fun calculateStopLoss(market: String, entryPrice: Double, prices: List<Double>): Double {
@@ -169,9 +175,9 @@ class TrendFollowingStrategy(
         val rrr = 2.5
 
         val explanation = when (signal) {
-            SignalType.BUY -> "Golden Cross crossover signal. Short-term EMA is ${String.format("%.2f", emaShort)} which is above Long-term EMA ${String.format("%.2f", emaLong)} with RSI in favorable zone (${String.format("%.1f", rsi)})."
-            SignalType.SELL -> "Bearish decay crossover. Short-term EMA is decaying below Long-term EMA."
-            SignalType.HOLD -> "Market is consolidative. Indicator readings: EMA cross sideways, RSI is normal at ${String.format("%.1f", rsi)}."
+            SignalType.BUY -> "Bullish trend confirmed (Short-term trend $emaShortPeriod vs Long-term trend $emaLongPeriod). Short SMA is ${String.format("%.2f", emaShort)}, Long SMA is ${String.format("%.2f", emaLong)} with RSI at ${String.format("%.1f", rsi)}."
+            SignalType.SELL -> "Bearish trend decay crossover. Moving average alignment deteriorating below threshold."
+            SignalType.HOLD -> "Market is consolidative. Short-term trend: ${String.format("%.2f", emaShort)}, Long-term trend: ${String.format("%.2f", emaLong)}, RSI: ${String.format("%.1f", rsi)}."
         }
 
         return TradeProposal(name, market, signal, confidence, entry, sl, tp, size, rrr, explanation)
@@ -179,22 +185,35 @@ class TrendFollowingStrategy(
 }
 
 class BreakoutStrategy(
-    var period: Int = 20
+    var period: Int = 20,
+    var minRateOfChangePct: Double = 1.2,
+    var rocLookbackBars: Int = 4
 ) : TradingStrategy {
     override val name = "Breakout"
-    override val version = "1.3.0"
-    override val description = "Captures high-probability trend breakouts confirmed by volume and volatility expansion."
+    override val version = "1.4.0"
+    override val description = "Captures high-probability trend breakouts confirmed by volume, volatility expansion, and momentum rate-of-change filter."
     override val supportedMarkets = listOf("BTC", "ETH", "SOL", "NVDA", "AAPL")
     override val riskProfile = "Aggressive"
     override val timeframe = "1H"
-    override val requiredIndicators = listOf("Bollinger Bands", "RSI (14)", "ATR (14)", "Donchian Channels")
+    override val requiredIndicators = listOf("Bollinger Bands", "RSI (14)", "ATR (14)", "Donchian Channels", "Rate of Change (ROC)")
 
     override val designedRegimes = listOf("Trending", "High volatility", "HIGH_VOLATILITY_TRENDING", "LOW_VOLATILITY_TRENDING", "STRONG_BULL", "STRONG_BEAR")
     override fun getParameters(): Map<String, Double> = mapOf(
-        "period" to period.toDouble()
+        "period" to period.toDouble(),
+        "minRateOfChangePct" to minRateOfChangePct,
+        "rocLookbackBars" to rocLookbackBars.toDouble()
     )
     override fun setParameters(params: Map<String, Double>) {
         params["period"]?.let { period = it.toInt() }
+        params["minRateOfChangePct"]?.let { minRateOfChangePct = it }
+        params["rocLookbackBars"]?.let { rocLookbackBars = it.toInt() }
+    }
+
+    fun calculateRateOfChange(prices: List<Double>, lookback: Int = rocLookbackBars): Double {
+        if (prices.size <= lookback) return 0.0
+        val current = prices.last()
+        val past = prices[prices.size - 1 - lookback]
+        return if (past > 0.0) ((current - past) / past) * 100.0 else 0.0
     }
 
     override fun analyzeMarket(market: String, prices: List<Double>): String {
@@ -202,13 +221,15 @@ class BreakoutStrategy(
         val (mid, upper, lower) = StrategyIndicators.calculateBollingerBands(prices, period)
         val rsi = StrategyIndicators.calculateRSI(prices, 14)
         val adx = StrategyIndicators.calculateADX(prices, 14)
+        val roc = calculateRateOfChange(prices, rocLookbackBars)
         val bbWidth = if (mid > 0) (upper - lower) / mid else 0.0
         val adxState = when {
             adx >= 30.0 -> "Strong Trend (ADX: ${String.format(Locale.US, "%.1f", adx)})"
             adx >= 22.0 -> "Moderate Trend (ADX: ${String.format(Locale.US, "%.1f", adx)})"
             else -> "Low ADX / Choppy (ADX: ${String.format(Locale.US, "%.1f", adx)})"
         }
-        return "BB Upper: ${String.format(Locale.US, "%.2f", upper)}, BBW: ${String.format(Locale.US, "%.3f", bbWidth)}, RSI: ${String.format(Locale.US, "%.1f", rsi)}, $adxState"
+        val rocStatus = if (roc >= minRateOfChangePct) "ROC Pass (+${String.format(Locale.US, "%.2f", roc)}% >= ${minRateOfChangePct}%)" else "ROC Filtered (+${String.format(Locale.US, "%.2f", roc)}% < ${minRateOfChangePct}%)"
+        return "BB Upper: ${String.format(Locale.US, "%.2f", upper)}, BBW: ${String.format(Locale.US, "%.3f", bbWidth)}, RSI: ${String.format(Locale.US, "%.1f", rsi)}, $rocStatus, $adxState"
     }
 
     override fun shouldEnter(market: String, prices: List<Double>): Boolean {
@@ -222,13 +243,14 @@ class BreakoutStrategy(
         val recentDiff = if (prices.size >= 2) kotlin.math.abs(prices.last() - prices[prices.size - 2]) else 0.0
         val donchianHigh = prices.takeLast(period).dropLast(1).maxOrNull() ?: upper
         val bbWidth = if (mid > 0) (upper - lower) / mid else 0.0
-        
-        // Refined Breakout Momentum Entry Rules with Adaptive WFO Actionable Improvements:
-        // 1. Dynamic Regime ADX: ADX >= 26.0 in chop/squeeze, ADX >= 22.0 in established trend
-        // 2. Volatility Squeeze: Bollinger Bandwidth (BBW <= 0.050) + Expansion >= 1.10x ATR
-        // 3. Price breaks above upper Bollinger Band OR 20-period Donchian High
+
+        // Rate of change momentum filter: Minimum price velocity required
+        val roc = calculateRateOfChange(prices, rocLookbackBars)
+        val momentumFilterPassed = roc >= minRateOfChangePct
+
+        // Breakout trigger
         val priceBreakout = lastPrice > upper || lastPrice > donchianHigh
-        if (!priceBreakout || atr <= 0.0) return false
+        if (!priceBreakout || !momentumFilterPassed || atr <= 0.0) return false
 
         return when {
             // Tier 1: Low ADX Regime (< 22.0) - Hard Gate: Sideways Chop / Consolidation -> Block false breakouts
@@ -351,12 +373,15 @@ class BreakoutStrategy(
 
         val explanation = when (signal) {
             SignalType.BUY -> {
+                val roc = calculateRateOfChange(prices, rocLookbackBars)
                 val adxTag = if (adx >= 25.0) "Strong ADX (${String.format(Locale.US, "%.1f", adx)})" else "Squeeze-Confirmed Low ADX (${String.format(Locale.US, "%.1f", adx)})"
-                "High-conviction Breakout Momentum confirmed ($adxTag). Last price ${String.format(Locale.US, "%.2f", lastPrice)} expanded above resistance (${String.format(Locale.US, "%.2f", upper)}) with RSI (${String.format(Locale.US, "%.1f", rsi)})."
+                "High-conviction Breakout Momentum confirmed ($adxTag, ROC: +${String.format(Locale.US, "%.2f", roc)}% >= ${minRateOfChangePct}%). Last price ${String.format(Locale.US, "%.2f", lastPrice)} expanded above resistance (${String.format(Locale.US, "%.2f", upper)}) with RSI (${String.format(Locale.US, "%.1f", rsi)})."
             }
             SignalType.SELL -> "Breakout momentum waning. Price dropped below midline channel or ADX stalled."
             SignalType.HOLD -> {
-                val holdReason = if (adx < 20.0) "ADX too low (${String.format(Locale.US, "%.1f", adx)} < 20.0; chop gate active)" else "Price consolidating within channels (${String.format(Locale.US, "%.2f", lower)} - ${String.format(Locale.US, "%.2f", upper)})"
+                val roc = calculateRateOfChange(prices, rocLookbackBars)
+                val rocNote = if (roc < minRateOfChangePct) ", ROC velocity below +${minRateOfChangePct}% threshold" else ""
+                val holdReason = if (adx < 20.0) "ADX too low (${String.format(Locale.US, "%.1f", adx)} < 20.0; chop gate active$rocNote)" else "Price consolidating within channels (${String.format(Locale.US, "%.2f", lower)} - ${String.format(Locale.US, "%.2f", upper)}$rocNote)"
                 "Awaiting high-probability breakout setup. $holdReason."
             }
         }

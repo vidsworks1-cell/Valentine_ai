@@ -5426,6 +5426,30 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     )
     val strategyMissedOpportunityMetrics = _strategyMissedOpportunityMetrics.asStateFlow()
 
+    private val _breakoutExperimentReport = MutableStateFlow(
+        com.example.aza.strategy.BreakoutMomentumExperimentEngine.runBreakoutMomentumSweep(
+            symbol = "BTC",
+            selectedRocPct = 1.2,
+            lookbackBars = 4
+        )
+    )
+    val breakoutExperimentReport = _breakoutExperimentReport.asStateFlow()
+
+    fun updateBreakoutMomentumFilter(rocPct: Double, lookbackBars: Int, symbol: String = "BTC") {
+        com.example.aza.strategy.BreakoutMomentumExperimentEngine.applyBreakoutMomentumParameters(rocPct, lookbackBars)
+        _breakoutExperimentReport.value = com.example.aza.strategy.BreakoutMomentumExperimentEngine.runBreakoutMomentumSweep(
+            symbol = symbol,
+            selectedRocPct = rocPct,
+            lookbackBars = lookbackBars
+        )
+        addThought("💥 BREAKOUT MOMENTUM FILTER CALIBRATED: Rate of change set to ${String.format(java.util.Locale.US, "%.1f", rocPct)}% over $lookbackBars bars. Sweet spot Profit Factor: ${String.format(java.util.Locale.US, "%.2f", _breakoutExperimentReport.value.activeConfiguration.profitFactor)}.")
+    }
+
+    fun applyBreakoutSweetSpotPreset(symbol: String = "BTC") {
+        updateBreakoutMomentumFilter(1.2, 4, symbol)
+        addThought("✨ BREAKOUT SWEET SPOT APPLIED: Configured optimal Rate of Change filter (1.2% over 4 bars) for high-conviction breakout entry.")
+    }
+
     fun calibrateMtfGuardThresholds(
         adaptiveThresholdPct: Double = 54.0,
         severeDivergenceCutoff: Double = 42.0,

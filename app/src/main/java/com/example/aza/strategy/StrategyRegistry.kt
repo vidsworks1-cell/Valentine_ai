@@ -22,7 +22,14 @@ object StrategyRegistry {
     }
 
     fun getStrategy(name: String): TradingStrategy? {
-        return strategies[name]
+        strategies[name]?.let { return it }
+        return when (name.lowercase().trim()) {
+            "breakout momentum", "breakout_momentum" -> strategies["Breakout"]
+            "trend following", "trend_following" -> strategies["Trend Following"]
+            "mean reversion", "mean_reversion" -> strategies["Mean Reversion"]
+            "volatility expansion breakout", "veb" -> strategies["Volatility Expansion Breakout"]
+            else -> strategies.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        }
     }
 
     fun applyParameters(strategy: TradingStrategy, bestConfigParams: String) {
