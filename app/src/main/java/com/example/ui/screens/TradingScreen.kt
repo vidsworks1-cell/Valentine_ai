@@ -7195,9 +7195,9 @@ fun AutonomousParameterTuningCard() {
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // 8 Candidate Parameters Grid
+                        // 9 Candidate Parameters Grid
                         Text(
-                            "8 CANDIDATE PARAMETERS:",
+                            "9 CANDIDATE PARAMETERS:",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -7205,34 +7205,34 @@ fun AutonomousParameterTuningCard() {
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // Row 1: ATR Multiplier & Breakout Distance
+                            // Row 1: Lookback Period & ATR Multiplier
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                ParameterItemBox(
+                                    name = "Lookback Period",
+                                    value = "${p.period} bars",
+                                    detail = "Volatility pattern lookback window",
+                                    modifier = Modifier.weight(1f)
+                                )
                                 ParameterItemBox(
                                     name = "ATR Multiplier",
                                     value = "${String.format(Locale.US, "%.2f", p.atrMultiplier)}x",
                                     detail = "Volatility expansion threshold",
                                     modifier = Modifier.weight(1f)
                                 )
+                            }
+
+                            // Row 2: Breakout Distance & Volume Threshold
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 ParameterItemBox(
                                     name = "Breakout Distance",
                                     value = "${String.format(Locale.US, "%.4f", p.breakoutDistance)} (${p.breakoutConfirmationBars}b)",
                                     detail = "Minimum price clearance",
                                     modifier = Modifier.weight(1f)
                                 )
-                            }
-
-                            // Row 2: Volume Threshold & Momentum Threshold
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 ParameterItemBox(
                                     name = "Volume Threshold",
                                     value = "${String.format(Locale.US, "%.2f", p.volumeThreshold)}x",
                                     detail = "Baseline volume surge gate",
-                                    modifier = Modifier.weight(1f)
-                                )
-                                ParameterItemBox(
-                                    name = "Momentum Threshold",
-                                    value = "${String.format(Locale.US, "%.1f", p.momentumThreshold)} ADX",
-                                    detail = "Trend conviction filter",
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -7246,9 +7246,9 @@ fun AutonomousParameterTuningCard() {
                                     modifier = Modifier.weight(1f)
                                 )
                                 ParameterItemBox(
-                                    name = "Stop Multiplier",
+                                    name = "Stop-Loss Distance",
                                     value = "${String.format(Locale.US, "%.2f", p.stopMultiplier)}x ATR",
-                                    detail = "Noise-buffered stop distance",
+                                    detail = "Noise & fluctuation buffer stop",
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -7381,7 +7381,7 @@ fun AutonomousParameterTuningCard() {
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Text(
-                                        "Parameters: ATR ${String.format(Locale.US, "%.2f", ver.parameters.atrMultiplier)}x | Vol ${String.format(Locale.US, "%.2f", ver.parameters.volumeThreshold)}x | Sqz ${String.format(Locale.US, "%.4f", ver.parameters.squeezeSensitivity)} | SL ${String.format(Locale.US, "%.2f", ver.parameters.stopMultiplier)}x | TP ${String.format(Locale.US, "%.2f", ver.parameters.takeProfitMultiplier)}x | Trail ${String.format(Locale.US, "%.1f", ver.parameters.trailingStopActivationR)}R",
+                                        "Parameters: Period ${ver.parameters.period}b | ATR ${String.format(Locale.US, "%.2f", ver.parameters.atrMultiplier)}x | Vol ${String.format(Locale.US, "%.2f", ver.parameters.volumeThreshold)}x | Sqz ${String.format(Locale.US, "%.4f", ver.parameters.squeezeSensitivity)} | SL ${String.format(Locale.US, "%.2f", ver.parameters.stopMultiplier)}x | TP ${String.format(Locale.US, "%.2f", ver.parameters.takeProfitMultiplier)}x | Trail ${String.format(Locale.US, "%.1f", ver.parameters.trailingStopActivationR)}R",
                                         fontSize = 9.sp,
                                         fontFamily = FontFamily.Monospace,
                                         color = MaterialTheme.colorScheme.onSurface
