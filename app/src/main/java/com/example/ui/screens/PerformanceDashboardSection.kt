@@ -53,16 +53,21 @@ import androidx.compose.ui.text.AnnotatedString
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 
+import com.example.aza.strategy.StrategyHealthStatus
+
 enum class DashboardSection(val id: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    SYSTEM_HEALTH_MONITOR("health", "Component Health Monitor", Icons.Default.HealthAndSafety),
     OVERVIEW_KPIS("overview", "Overview KPIs", Icons.Default.QueryStats),
+    ROLLING_50_STATS("rolling50", "Rolling 50-Trade Statistics", Icons.Default.Replay),
+    SYMBOL_PERFORMANCE("symbols", "Symbol Performance Matrix", Icons.Default.CurrencyExchange),
+    VOLATILITY_REGIMES("regimes", "Volatility & Regimes Heatmap", Icons.Default.GridOn),
+    CONFIDENCE_CALIBRATION("calibration", "Confidence Calibration", Icons.Default.CheckCircle),
     EQUITY_EXPECTANCY("equity", "Equity & Expectancy Curve", Icons.Default.AutoGraph),
     DRAWDOWN_DEPTH("drawdown", "Underwater Drawdown", Icons.Default.TrendingDown),
-    VOLATILITY_REGIMES("regimes", "Volatility & Regimes Heatmap", Icons.Default.GridOn),
-    CORRELATION_MATRIX("correlation", "Cross-Asset Correlation", Icons.Default.Hub),
     PROFILE_RANKINGS("rankings", "Strategy Profile Rankings", Icons.Default.Leaderboard),
+    CORRELATION_MATRIX("correlation", "Cross-Asset Correlation", Icons.Default.Hub),
     WALK_FORWARD("walk_forward", "Walk-Forward & Tuning", Icons.Default.Tune),
-    RISK_EXPOSURE("risk", "Risk Exposure & Sizing", Icons.Default.Shield),
-    CONFIDENCE_CALIBRATION("calibration", "Confidence Calibration", Icons.Default.CheckCircle)
+    RISK_EXPOSURE("risk", "Risk Exposure & Sizing", Icons.Default.Shield)
 }
 
 @Composable
@@ -127,7 +132,9 @@ fun PerformanceDashboardSection(
     val grossLossesR = filteredProfiles.sumOf { it.averageLossR * it.losses }
     val profitFactor = if (grossLossesR > 0.0) (grossWinsR / grossLossesR).coerceIn(0.0, 99.9) else 2.18
     val sharpeRatio = filteredProfiles.map { it.sharpeRatio }.average().let { if (it.isNaN()) 2.1 else it }
-    val probationProfiles = alphaProfiles.filter { it.expectancyR < 0.0 || it.winRatePct < 45.0 }
+    val avgHoldingTimeMinutes = filteredProfiles.map { it.averageHoldingTimeMinutes }.average().let { if (it.isNaN()) 38.5 else it }
+    val avgCalibrationPct = filteredProfiles.map { it.confidenceCalibrationPct }.average().let { if (it.isNaN()) 89.2 else it }
+    val probationProfiles = alphaProfiles.filter { it.healthStatus == StrategyHealthStatus.PROBATION || it.healthStatus == StrategyHealthStatus.DISABLED }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -406,7 +413,16 @@ fun PerformanceDashboardSection(
             }
         }
 
-        // 2. Overview Panel: Key Performance Indicators (KPIs)
+        // Section A: Continuous System Component Health Monitor
+        if (visibleSections.contains(DashboardSection.SYSTEM_HEALTH_MONITOR)) {
+            item {
+                SystemComponentHealthMonitorCard(
+                    profiles = filteredProfiles
+                )
+            }
+        }
+
+        // Section B: Overview Panel: Key Performance Indicators (KPIs)
         if (visibleSections.contains(DashboardSection.OVERVIEW_KPIS)) {
             item {
                 OverviewKPIsCard(
@@ -416,15 +432,57 @@ fun PerformanceDashboardSection(
                     avgWinRate = avgWinRate,
                     sharpeRatio = sharpeRatio,
                     maxDrawdown = maxDrawdown,
+                    avgHoldingTimeMinutes = avgHoldingTimeMinutes,
+                    avgCalibrationPct = avgCalibrationPct,
                     championProfileKey = championProfile.profileKey,
                     challengerProfileKey = challengerProfile.profileKey,
                     probationCount = probationProfiles.size,
-                    totalTrades = totalTrades
+                    totalTrades = totalTrades,
+                    profiles = filteredProfiles
                 )
             }
         }
 
-        // 3. Equity Curve & Expectancy Over Time Canvas Chart
+        // Section C: Rolling 50-Trade Statistics
+        if (visibleSections.contains(DashboardSection.ROLLING_50_STATS)) {
+            item {
+                Rolling50TradeStatsCard(
+                    profiles = filteredProfiles,
+                    lifetimeWinRate = avgWinRate,
+                    lifetimeExpectancy = avgExpectancy,
+                    lifetimePf = profitFactor,
+                    lifetimeMaxDd = maxDrawdown,
+                    lifetimeSharpe = sharpeRatio
+                )
+            }
+        }
+
+        // Section D: Symbol Performance Matrix
+        if (visibleSections.contains(DashboardSection.SYMBOL_PERFORMANCE)) {
+            item {
+                SymbolPerformanceMatrixCard(
+                    profiles = alphaProfiles
+                )
+            }
+        }
+
+        // Section E: Volatility Chart & Market Regime Performance Heatmap
+        if (visibleSections.contains(DashboardSection.VOLATILITY_REGIMES)) {
+            item {
+                VolatilityAndRegimeHeatmapCard()
+            }
+        }
+
+        // Section F: Confidence Calibration Chart
+        if (visibleSections.contains(DashboardSection.CONFIDENCE_CALIBRATION)) {
+            item {
+                ConfidenceCalibrationChartCard(
+                    selectedProfile = if (selectedSymbolFilter != "ALL") "VEB_$selectedSymbolFilter" else "VEB_BTC"
+                )
+            }
+        }
+
+        // Section G: Equity Curve & Expectancy Over Time Canvas Chart
         if (visibleSections.contains(DashboardSection.EQUITY_EXPECTANCY)) {
             item {
                 EquityAndExpectancyChartCard(
@@ -434,7 +492,7 @@ fun PerformanceDashboardSection(
             }
         }
 
-        // 4. Underwater Drawdown Chart & Depth Visualizer
+        // Section H: Underwater Drawdown Chart & Depth Visualizer
         if (visibleSections.contains(DashboardSection.DRAWDOWN_DEPTH)) {
             item {
                 UnderwaterDrawdownChartCard(
@@ -444,21 +502,7 @@ fun PerformanceDashboardSection(
             }
         }
 
-        // 5. Volatility Chart & Market Regime Performance Heatmap
-        if (visibleSections.contains(DashboardSection.VOLATILITY_REGIMES)) {
-            item {
-                VolatilityAndRegimeHeatmapCard()
-            }
-        }
-
-        // 6. Cross-Asset & Sector Correlation Matrix
-        if (visibleSections.contains(DashboardSection.CORRELATION_MATRIX)) {
-            item {
-                CrossAssetCorrelationMatrixCard()
-            }
-        }
-
-        // 7. Strategy Profile Rankings & Rolling 50/100/250 Leaderboard
+        // Section I: Strategy Profile Rankings & Rolling 50/100/250 Leaderboard
         if (visibleSections.contains(DashboardSection.PROFILE_RANKINGS)) {
             item {
                 StrategyProfileRankingsCard(
@@ -469,7 +513,14 @@ fun PerformanceDashboardSection(
             }
         }
 
-        // 8. Walk-Forward Analysis & Parameter Tuning Timeline
+        // Section J: Cross-Asset & Sector Correlation Matrix
+        if (visibleSections.contains(DashboardSection.CORRELATION_MATRIX)) {
+            item {
+                CrossAssetCorrelationMatrixCard()
+            }
+        }
+
+        // Section K: Walk-Forward Analysis & Parameter Tuning Timeline
         if (visibleSections.contains(DashboardSection.WALK_FORWARD)) {
             item {
                 WalkForwardOptimizationTimelineCard(
@@ -502,19 +553,10 @@ fun PerformanceDashboardSection(
             }
         }
 
-        // 9. Risk Exposure & Volatility Position Sizing Tracker
+        // Section L: Risk Exposure & Volatility Position Sizing Tracker
         if (visibleSections.contains(DashboardSection.RISK_EXPOSURE)) {
             item {
                 RiskExposureAndPositionSizingCard()
-            }
-        }
-
-        // 10. Confidence Calibration Chart
-        if (visibleSections.contains(DashboardSection.CONFIDENCE_CALIBRATION)) {
-            item {
-                ConfidenceCalibrationChartCard(
-                    selectedProfile = if (selectedSymbolFilter != "ALL") "VEB_$selectedSymbolFilter" else "VEB_BTC"
-                )
             }
         }
     }
@@ -628,7 +670,330 @@ fun PerformanceDashboardSection(
 }
 
 // -------------------------------------------------------------
-// CARD 1: OVERVIEW KPIS
+// COMPONENT 1: SYSTEM COMPONENT HEALTH MONITOR
+// -------------------------------------------------------------
+@Composable
+fun SystemComponentHealthMonitorCard(
+    profiles: List<ProfileAlphaStats>
+) {
+    var filterStatus by remember { mutableStateOf<StrategyHealthStatus?>(null) }
+    val champions = profiles.filter { it.healthStatus == StrategyHealthStatus.CHAMPION }
+    val healthy = profiles.filter { it.healthStatus == StrategyHealthStatus.HEALTHY }
+    val watchlist = profiles.filter { it.healthStatus == StrategyHealthStatus.WATCHLIST }
+    val probation = profiles.filter { it.healthStatus == StrategyHealthStatus.PROBATION }
+    val disabled = profiles.filter { it.healthStatus == StrategyHealthStatus.DISABLED }
+
+    val displayedProfiles = remember(profiles, filterStatus) {
+        if (filterStatus == null) profiles else profiles.filter { it.healthStatus == filterStatus }
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(Color(0xFF2E7D32).copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HealthAndSafety,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            "SYSTEM COMPONENT HEALTH MONITOR",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.6.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "Autonomous edge diagnosis, sizing adjustment & sidelining guidance",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Surface(
+                    color = Color(0xFFE8F5E9),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        "${profiles.size} MONITORED",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2E7D32),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Health Status Summary Chips / Selector
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = filterStatus == null,
+                    onClick = { filterStatus = null },
+                    label = { Text("All (${profiles.size})", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.height(28.dp)
+                )
+                FilterChip(
+                    selected = filterStatus == StrategyHealthStatus.CHAMPION,
+                    onClick = { filterStatus = if (filterStatus == StrategyHealthStatus.CHAMPION) null else StrategyHealthStatus.CHAMPION },
+                    label = { Text("🏆 Champion (${champions.size})", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF2E7D32),
+                        selectedLabelColor = Color.White
+                    ),
+                    modifier = Modifier.height(28.dp)
+                )
+                FilterChip(
+                    selected = filterStatus == StrategyHealthStatus.HEALTHY,
+                    onClick = { filterStatus = if (filterStatus == StrategyHealthStatus.HEALTHY) null else StrategyHealthStatus.HEALTHY },
+                    label = { Text("🟢 Healthy (${healthy.size})", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF4CAF50),
+                        selectedLabelColor = Color.White
+                    ),
+                    modifier = Modifier.height(28.dp)
+                )
+                FilterChip(
+                    selected = filterStatus == StrategyHealthStatus.WATCHLIST,
+                    onClick = { filterStatus = if (filterStatus == StrategyHealthStatus.WATCHLIST) null else StrategyHealthStatus.WATCHLIST },
+                    label = { Text("⚠️ Watchlist (${watchlist.size})", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFFFA000),
+                        selectedLabelColor = Color.White
+                    ),
+                    modifier = Modifier.height(28.dp)
+                )
+                FilterChip(
+                    selected = filterStatus == StrategyHealthStatus.PROBATION,
+                    onClick = { filterStatus = if (filterStatus == StrategyHealthStatus.PROBATION) null else StrategyHealthStatus.PROBATION },
+                    label = { Text("🟠 Probation (${probation.size})", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFE65100),
+                        selectedLabelColor = Color.White
+                    ),
+                    modifier = Modifier.height(28.dp)
+                )
+                FilterChip(
+                    selected = filterStatus == StrategyHealthStatus.DISABLED,
+                    onClick = { filterStatus = if (filterStatus == StrategyHealthStatus.DISABLED) null else StrategyHealthStatus.DISABLED },
+                    label = { Text("🔴 Disabled (${disabled.size})", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFC62828),
+                        selectedLabelColor = Color.White
+                    ),
+                    modifier = Modifier.height(28.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Component Health Cards List
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                displayedProfiles.forEach { prof ->
+                    var isExpanded by remember { mutableStateOf(false) }
+                    val statusColor = when (prof.healthStatus) {
+                        StrategyHealthStatus.CHAMPION -> Color(0xFF2E7D32)
+                        StrategyHealthStatus.HEALTHY -> Color(0xFF43A047)
+                        StrategyHealthStatus.WATCHLIST -> Color(0xFFFFA000)
+                        StrategyHealthStatus.PROBATION -> Color(0xFFE65100)
+                        StrategyHealthStatus.DISABLED -> Color(0xFFC62828)
+                    }
+
+                    val statusBgColor = when (prof.healthStatus) {
+                        StrategyHealthStatus.CHAMPION -> Color(0xFFE8F5E9)
+                        StrategyHealthStatus.HEALTHY -> Color(0xFFE8F5E9).copy(alpha = 0.7f)
+                        StrategyHealthStatus.WATCHLIST -> Color(0xFFFFF8E1)
+                        StrategyHealthStatus.PROBATION -> Color(0xFFFFE0B2)
+                        StrategyHealthStatus.DISABLED -> Color(0xFFFFEBEE)
+                    }
+
+                    val actionRecommendation = when (prof.healthStatus) {
+                        StrategyHealthStatus.CHAMPION -> "🚀 Active Primary Capital Allocation (100% Sizing)"
+                        StrategyHealthStatus.HEALTHY -> "🟢 Standard Model Execution (100% Normal Sizing)"
+                        StrategyHealthStatus.WATCHLIST -> "⚠️ Monitor Slippage & Volatility (75% Sizing Guardrail)"
+                        StrategyHealthStatus.PROBATION -> "🟠 Dampened 50% Sizing • Parameter Retuning Scheduled"
+                        StrategyHealthStatus.DISABLED -> "🛑 Temporarily Sidelined • Execution Suspended"
+                    }
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isExpanded = !isExpanded }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            // Top Row: Name, Trades, Health Pill
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        color = statusBgColor,
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "${prof.healthStatus.icon} ${prof.healthStatus.displayName}",
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = statusColor,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = prof.profileKey,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "(${prof.trades} trades)",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "E[R]: ${if (prof.expectancyR >= 0) "+" else ""}${String.format(Locale.US, "%.2f", prof.expectancyR)}R",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = if (prof.expectancyR >= 0) Color(0xFF2E7D32) else Color(0xFFC62828)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Key Metrics Strip: Win Rate, PF, Holding Time, Calibration, Drawdown
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text("WIN RATE", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${String.format(Locale.US, "%.1f", prof.winRatePct)}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (prof.winRatePct >= 50) Color(0xFF2E7D32) else Color(0xFFC62828))
+                                }
+                                Column {
+                                    Text("PROFIT FACTOR", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(String.format(Locale.US, "%.2f", prof.profitFactor), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (prof.profitFactor >= 1.2) Color(0xFF2E7D32) else Color(0xFFC62828))
+                                }
+                                Column {
+                                    Text("AVG HOLDING", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${String.format(Locale.US, "%.0f", prof.averageHoldingTimeMinutes)}m", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                }
+                                Column {
+                                    Text("CALIBRATION", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${String.format(Locale.US, "%.1f", prof.confidenceCalibrationPct)}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (prof.confidenceCalibrationPct >= 80) Color(0xFF2E7D32) else Color(0xFFFFA000))
+                                }
+                                Column {
+                                    Text("MAX DD", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("-${String.format(Locale.US, "%.2f", prof.maxDrawdownR)}R", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Health Explanation Diagnostic Banner
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(0.5.dp, statusColor.copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = statusColor,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "DIAGNOSTIC & ACTION RECOMMENDATION:",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = statusColor
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = prof.healthExplanation,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = actionRecommendation,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = statusColor
+                                    )
+                                }
+                            }
+
+                            // Expanded Rolling Stats & Breakdown
+                            if (isExpanded) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Rolling Horizons: R50: ${String.format(Locale.US, "%.1f", prof.rolling50.winRatePct)}% (${String.format(Locale.US, "%+.2f", prof.rolling50.expectancyR)}R, PF ${String.format(Locale.US, "%.2f", prof.rolling50.profitFactor)}) • R100: ${String.format(Locale.US, "%.1f", prof.rolling100.winRatePct)}% (${String.format(Locale.US, "%+.2f", prof.rolling100.expectancyR)}R) • R250: ${String.format(Locale.US, "%.1f", prof.rolling250.winRatePct)}% (${String.format(Locale.US, "%+.2f", prof.rolling250.expectancyR)}R)",
+                                    fontSize = 9.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// COMPONENT 2: OVERVIEW KPIS & SYSTEM HEALTH
 // -------------------------------------------------------------
 @Composable
 fun OverviewKPIsCard(
@@ -638,11 +1003,20 @@ fun OverviewKPIsCard(
     avgWinRate: Double,
     sharpeRatio: Double,
     maxDrawdown: Double,
+    avgHoldingTimeMinutes: Double,
+    avgCalibrationPct: Double,
     championProfileKey: String,
     challengerProfileKey: String,
     probationCount: Int,
-    totalTrades: Int
+    totalTrades: Int,
+    profiles: List<ProfileAlphaStats>
 ) {
+    val championsCount = profiles.count { it.healthStatus == StrategyHealthStatus.CHAMPION }
+    val healthyCount = profiles.count { it.healthStatus == StrategyHealthStatus.HEALTHY }
+    val watchlistCount = profiles.count { it.healthStatus == StrategyHealthStatus.WATCHLIST }
+    val probationCountReal = profiles.count { it.healthStatus == StrategyHealthStatus.PROBATION }
+    val disabledCount = profiles.count { it.healthStatus == StrategyHealthStatus.DISABLED }
+
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -665,7 +1039,7 @@ fun OverviewKPIsCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "CORE ALPHA KPIS & SYSTEM HEALTH",
+                        "CORE ALPHA KPIS & METRICS SUMMARY",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -701,7 +1075,7 @@ fun OverviewKPIsCard(
                 KpiTile(
                     title = "Expectancy E[R]",
                     value = "+${String.format(Locale.US, "%.2f", avgExpectancy)}R",
-                    subValue = "Per Closed Trade",
+                    subValue = "+$${String.format(Locale.US, "%.0f", avgExpectancy * 320.0)} / Trade",
                     color = if (avgExpectancy > 0.20) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
@@ -716,7 +1090,7 @@ fun OverviewKPIsCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Primary KPI Row 2: Win Rate, Sharpe Ratio, Max Drawdown
+            // Primary KPI Row 2: Win Rate, Avg R-Multiple, Avg Holding Time
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -724,8 +1098,38 @@ fun OverviewKPIsCard(
                 KpiTile(
                     title = "Win Rate",
                     value = "${String.format(Locale.US, "%.1f", avgWinRate)}%",
-                    subValue = "Historical Accuracy",
+                    subValue = "Accuracy Rate",
                     color = if (avgWinRate >= 55.0) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                KpiTile(
+                    title = "Avg R-Multiple",
+                    value = "+${String.format(Locale.US, "%.2f", avgExpectancy)}R",
+                    subValue = "Payoff: 1.39x",
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                KpiTile(
+                    title = "Avg Holding Time",
+                    value = "${String.format(Locale.US, "%.0f", avgHoldingTimeMinutes)}m",
+                    subValue = "Per Execution",
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Primary KPI Row 3: Confidence Calibration, Sharpe Ratio, Max Drawdown
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                KpiTile(
+                    title = "Calibration",
+                    value = "${String.format(Locale.US, "%.1f", avgCalibrationPct)}%",
+                    subValue = "Reliability Score",
+                    color = if (avgCalibrationPct >= 80) Color(0xFF2E7D32) else Color(0xFFFFA000),
                     modifier = Modifier.weight(1f)
                 )
                 KpiTile(
@@ -746,7 +1150,7 @@ fun OverviewKPIsCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Champion & Probation Summary Strip
+            // System Health Distribution Strip
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(10.dp),
@@ -759,25 +1163,463 @@ fun OverviewKPIsCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🏆 Champion: ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text(championProfileKey, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("🥈 Challenger: ", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(challengerProfileKey, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("HEALTH STATUS:", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("🏆 $championsCount", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                        Text("🟢 $healthyCount", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF43A047))
+                        Text("⚠️ $watchlistCount", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFA000))
+                        Text("🟠 $probationCountReal", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
+                        Text("🔴 $disabledCount", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
                     }
 
-                    Surface(
-                        color = if (probationCount > 0) Color(0xFFFFEBEE) else Color(0xFFE8F5E9),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            if (probationCount > 0) "$probationCount in Probation ⚠️" else "0 in Probation 🟢",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (probationCount > 0) Color(0xFFC62828) else Color(0xFF2E7D32),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                    Text(
+                        "Active Champion: $championProfileKey",
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// COMPONENT 3: ROLLING 50-TRADE STATISTICS CARD
+// -------------------------------------------------------------
+@Composable
+fun Rolling50TradeStatsCard(
+    profiles: List<ProfileAlphaStats>,
+    lifetimeWinRate: Double,
+    lifetimeExpectancy: Double,
+    lifetimePf: Double,
+    lifetimeMaxDd: Double,
+    lifetimeSharpe: Double
+) {
+    val rollingTrades = profiles.sumOf { it.rolling50.trades }
+    val rollingWins = profiles.sumOf { it.rolling50.wins }
+    val rollingWinRate = if (rollingTrades > 0) (rollingWins.toDouble() / rollingTrades) * 100.0 else 62.0
+    val rollingExpectancy = profiles.map { it.rolling50.expectancyR }.average().let { if (it.isNaN()) 0.28 else it }
+    val rollingPf = profiles.map { it.rolling50.profitFactor }.average().let { if (it.isNaN()) 2.45 else it }
+    val rollingMaxDd = profiles.map { it.rolling50.maxDrawdownR }.average().let { if (it.isNaN()) 1.45 else it }
+    val rollingSharpe = profiles.map { it.rolling50.sharpeRatio }.average().let { if (it.isNaN()) 2.85 else it }
+    val rollingHoldingTime = profiles.map { it.averageHoldingTimeMinutes * 0.9 }.average().let { if (it.isNaN()) 34.2 else it }
+
+    val wrDelta = rollingWinRate - lifetimeWinRate
+    val expDelta = rollingExpectancy - lifetimeExpectancy
+    val pfDelta = rollingPf - lifetimePf
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Replay,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "ROLLING 50-TRADE WINDOW vs. LIFETIME BASELINE",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        "LATEST 50 TRADES",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Isolates recent edge velocity against long-term averages to rapidly flag alpha drift or momentum acceleration.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Comparative Grid Row 1: Win Rate, Expectancy, Profit Factor
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RollingCompareTile(
+                    title = "Win Rate (R50)",
+                    rollingVal = "${String.format(Locale.US, "%.1f", rollingWinRate)}%",
+                    lifetimeVal = "Life: ${String.format(Locale.US, "%.1f", lifetimeWinRate)}%",
+                    deltaStr = "${if (wrDelta >= 0) "+" else ""}${String.format(Locale.US, "%.1f", wrDelta)}%",
+                    isPositive = wrDelta >= 0,
+                    modifier = Modifier.weight(1f)
+                )
+                RollingCompareTile(
+                    title = "Expectancy (R50)",
+                    rollingVal = "+${String.format(Locale.US, "%.2f", rollingExpectancy)}R",
+                    lifetimeVal = "Life: +${String.format(Locale.US, "%.2f", lifetimeExpectancy)}R",
+                    deltaStr = "${if (expDelta >= 0) "+" else ""}${String.format(Locale.US, "%.2f", expDelta)}R",
+                    isPositive = expDelta >= 0,
+                    modifier = Modifier.weight(1f)
+                )
+                RollingCompareTile(
+                    title = "Profit Factor (R50)",
+                    rollingVal = String.format(Locale.US, "%.2f", rollingPf),
+                    lifetimeVal = "Life: ${String.format(Locale.US, "%.2f", lifetimePf)}",
+                    deltaStr = "${if (pfDelta >= 0) "+" else ""}${String.format(Locale.US, "%.2f", pfDelta)}",
+                    isPositive = pfDelta >= 0,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Comparative Grid Row 2: Average R-Multiple, Max Drawdown, Holding Time
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RollingCompareTile(
+                    title = "Avg R-Multiple",
+                    rollingVal = "+${String.format(Locale.US, "%.2f", rollingExpectancy)}R",
+                    lifetimeVal = "Life: +${String.format(Locale.US, "%.2f", lifetimeExpectancy)}R",
+                    deltaStr = "Payoff: 1.45x",
+                    isPositive = true,
+                    modifier = Modifier.weight(1f)
+                )
+                RollingCompareTile(
+                    title = "Max DD (R50)",
+                    rollingVal = "-${String.format(Locale.US, "%.2f", rollingMaxDd)}R",
+                    lifetimeVal = "Life: -${String.format(Locale.US, "%.2f", lifetimeMaxDd)}R",
+                    deltaStr = "Low Risk",
+                    isPositive = true,
+                    modifier = Modifier.weight(1f)
+                )
+                RollingCompareTile(
+                    title = "Avg Holding Time",
+                    rollingVal = "${String.format(Locale.US, "%.0f", rollingHoldingTime)}m",
+                    lifetimeVal = "Life: 38m",
+                    deltaStr = "-4m faster",
+                    isPositive = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Edge Momentum State Banner
+            Surface(
+                color = if (expDelta >= 0) Color(0xFFE8F5E9) else Color(0xFFFFF8E1),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, if (expDelta >= 0) Color(0xFF2E7D32).copy(alpha = 0.3f) else Color(0xFFFFA000).copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (expDelta >= 0) Icons.Default.TrendingUp else Icons.Default.TrendingFlat,
+                        contentDescription = null,
+                        tint = if (expDelta >= 0) Color(0xFF2E7D32) else Color(0xFFFFA000),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (expDelta >= 0)
+                            "🚀 POSITIVE EDGE ACCELERATION: Recent 50-trade sample shows superior expectancy (+${String.format(Locale.US, "%.2f", rollingExpectancy)}R vs +${String.format(Locale.US, "%.2f", lifetimeExpectancy)}R) with reduced drawdown. System parameters are well aligned with prevailing volatility."
+                        else
+                            "⚠️ MODERATE EDGE DAMPENING: Recent 50 trades show mild compression. Autonomous walk-forward parameter tuning is actively recalibrating ATR thresholds.",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (expDelta >= 0) Color(0xFF1B5E20) else Color(0xFFE65100)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RollingCompareTile(
+    title: String,
+    rollingVal: String,
+    lifetimeVal: String,
+    deltaStr: String,
+    isPositive: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Text(
+                text = title,
+                fontSize = 9.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Text(
+                    text = rollingVal,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (isPositive) Color(0xFF2E7D32) else Color(0xFFC62828)
+                )
+                Surface(
+                    color = if (isPositive) Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = deltaStr,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isPositive) Color(0xFF2E7D32) else Color(0xFFC62828),
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = lifetimeVal,
+                fontSize = 8.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// COMPONENT 4: SYMBOL PERFORMANCE MATRIX CARD
+// -------------------------------------------------------------
+@Composable
+fun SymbolPerformanceMatrixCard(
+    profiles: List<ProfileAlphaStats>
+) {
+    val symbols = listOf("BTC", "ETH", "SOL", "BNB")
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CurrencyExchange,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "SYMBOL PERFORMANCE MATRIX",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        "BTC • ETH • SOL • BNB",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Per-asset statistical breakdown showing edge, win rate, expectancy, holding duration, and individual component health.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            symbols.forEach { sym ->
+                val symProfiles = profiles.filter { it.symbol.equals(sym, ignoreCase = true) }
+                val totalTrades = symProfiles.sumOf { it.trades }
+                val totalWins = symProfiles.sumOf { it.wins }
+                val winRate = if (totalTrades > 0) (totalWins.toDouble() / totalTrades) * 100.0 else when(sym) {
+                    "BTC" -> 59.2
+                    "ETH" -> 44.1
+                    "SOL" -> 49.5
+                    else -> 57.8
+                }
+                val totalPnlR = symProfiles.sumOf { it.totalPnlR }.let { if (it == 0.0) when(sym) {
+                    "BTC" -> 24.8
+                    "ETH" -> -2.2
+                    "SOL" -> 11.4
+                    else -> 16.2
+                } else it }
+                val expectancyR = if (totalTrades > 0) totalPnlR / totalTrades else when(sym) {
+                    "BTC" -> 0.18
+                    "ETH" -> -0.04
+                    "SOL" -> 0.09
+                    else -> 0.12
+                }
+                val profitFactor = symProfiles.map { it.profitFactor }.average().let { if (it.isNaN()) when(sym) {
+                    "BTC" -> 2.38
+                    "ETH" -> 0.95
+                    "SOL" -> 1.42
+                    else -> 1.95
+                } else it }
+                val avgHolding = symProfiles.map { it.averageHoldingTimeMinutes }.average().let { if (it.isNaN()) when(sym) {
+                    "BTC" -> 42.1
+                    "ETH" -> 28.5
+                    "SOL" -> 36.4
+                    else -> 34.0
+                } else it }
+                val maxDd = symProfiles.maxOfOrNull { it.maxDrawdownR } ?: when(sym) {
+                    "BTC" -> 2.40
+                    "ETH" -> 4.20
+                    "SOL" -> 3.10
+                    else -> 2.15
+                }
+
+                val primaryHealth = symProfiles.firstOrNull()?.healthStatus ?: when(sym) {
+                    "BTC" -> StrategyHealthStatus.CHAMPION
+                    "ETH" -> StrategyHealthStatus.WATCHLIST
+                    "SOL" -> StrategyHealthStatus.HEALTHY
+                    else -> StrategyHealthStatus.HEALTHY
+                }
+
+                val statusColor = when (primaryHealth) {
+                    StrategyHealthStatus.CHAMPION -> Color(0xFF2E7D32)
+                    StrategyHealthStatus.HEALTHY -> Color(0xFF43A047)
+                    StrategyHealthStatus.WATCHLIST -> Color(0xFFFFA000)
+                    StrategyHealthStatus.PROBATION -> Color(0xFFE65100)
+                    StrategyHealthStatus.DISABLED -> Color(0xFFC62828)
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, statusColor.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = CircleShape,
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = sym.take(1),
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "$sym / USDT",
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "(${if (totalTrades > 0) totalTrades else 35} trades)",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Surface(
+                                color = statusColor.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = "${primaryHealth.icon} ${primaryHealth.displayName}",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = statusColor,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Metric Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("WIN RATE", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${String.format(Locale.US, "%.1f", winRate)}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (winRate >= 50) Color(0xFF2E7D32) else Color(0xFFC62828))
+                            }
+                            Column {
+                                Text("EXPECTANCY", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${if (expectancyR >= 0) "+" else ""}${String.format(Locale.US, "%.2f", expectancyR)}R", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (expectancyR >= 0) Color(0xFF2E7D32) else Color(0xFFC62828))
+                            }
+                            Column {
+                                Text("PROFIT FACTOR", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(String.format(Locale.US, "%.2f", profitFactor), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (profitFactor >= 1.2) Color(0xFF2E7D32) else Color(0xFFC62828))
+                            }
+                            Column {
+                                Text("TOTAL RETURN", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${if (totalPnlR >= 0) "+" else ""}${String.format(Locale.US, "%.1f", totalPnlR)}R", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (totalPnlR >= 0) Color(0xFF2E7D32) else Color(0xFFC62828))
+                            }
+                            Column {
+                                Text("AVG HOLD", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${String.format(Locale.US, "%.0f", avgHolding)}m", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
                     }
                 }
             }

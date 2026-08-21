@@ -672,11 +672,16 @@ object LuminaSelfAdaptationEngine {
 
         // Low Sample Size Safeguard via Wilson Confidence Intervals:
         // Never allow raw model confidence to bypass calibration; low sample sizes shrink to Wilson lower bound
-        val calibratedProb = if (uncertainty == UncertaintyLevel.HIGH || effTotalTrades < 20) {
+        val rawCalibratedProb = if (uncertainty == UncertaintyLevel.HIGH || effTotalTrades < 20) {
             val lambda = ((20 - effTotalTrades).coerceAtLeast(0) / 20.0).coerceIn(0.0, 0.85)
             ((1.0 - lambda) * blendedEmpiricalProb + lambda * wilsonLower).coerceIn(0.05, 0.98)
         } else {
             blendedEmpiricalProb
+        }
+        val calibratedProb = if (uncertainty == UncertaintyLevel.HIGH) {
+            rawCalibratedProb.coerceIn(targetConf - 0.05, targetConf + 0.05)
+        } else {
+            rawCalibratedProb
         }
 
         // Calculate Holistic Strategy Quality (0 to 100)

@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.sp
 import com.example.aza.strategy.TradeReviewAgent
 import com.example.data.database.TradeReviewEntity
 import com.example.viewmodel.AppViewModel
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,7 +41,6 @@ fun TradeReviewsSection(
     viewModel: AppViewModel,
     innerPadding: PaddingValues
 ) {
-    val coroutineScope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
@@ -51,32 +49,41 @@ fun TradeReviewsSection(
         if (rawReviews.isNotEmpty()) rawReviews else TradeReviewAgent.generateSeedReviews()
     }
 
+    var selectedAuditFilter by remember { mutableStateOf("ALL") }
     var selectedSymbolFilter by remember { mutableStateOf("ALL") }
-    var selectedCategoryFilter by remember { mutableStateOf("ALL") }
     var searchQuery by remember { mutableStateOf("") }
     var expandedReviewId by remember { mutableStateOf<String?>(null) }
+    var showParadigmExplainer by remember { mutableStateOf(false) }
 
-    val filteredReviews = remember(allReviews, selectedSymbolFilter, selectedCategoryFilter, searchQuery) {
+    val filteredReviews = remember(allReviews, selectedAuditFilter, selectedSymbolFilter, searchQuery) {
         allReviews.filter { review ->
-            val matchSymbol = selectedSymbolFilter == "ALL" || review.symbol.equals(selectedSymbolFilter, ignoreCase = true)
-            val matchCategory = selectedCategoryFilter == "ALL" || review.category.equals(selectedCategoryFilter, ignoreCase = true)
+            val matchAuditFilter = when (selectedAuditFilter) {
+                "ALL" -> true
+                "GOOD_LOSS" -> review.processVsOutcomeType == "GOOD_DECISION_LOSING_TRADE"
+                "BAD_WIN" -> review.processVsOutcomeType == "BAD_DECISION_WINNING_TRADE"
+                "GOOD_WIN" -> review.processVsOutcomeType == "GOOD_DECISION_WINNING_TRADE"
+                "BAD_LOSS" -> review.processVsOutcomeType == "BAD_DECISION_LOSING_TRADE"
+                else -> true
+            }
+            val matchSymbol = selectedSymbolFilter == "ALL" || review.symbol.contains(selectedSymbolFilter, ignoreCase = true)
             val matchQuery = searchQuery.isBlank() ||
-                    review.lessonLearned.contains(searchQuery, ignoreCase = true) ||
-                    review.missedOpportunity.contains(searchQuery, ignoreCase = true) ||
-                    review.actionablePolicy.contains(searchQuery, ignoreCase = true) ||
-                    review.symbol.contains(searchQuery, ignoreCase = true)
-            matchSymbol && matchCategory && matchQuery
+                    review.tradeId.contains(searchQuery, ignoreCase = true) ||
+                    review.symbol.contains(searchQuery, ignoreCase = true) ||
+                    review.rootCause.contains(searchQuery, ignoreCase = true) ||
+                    review.auditReasonsList.contains(searchQuery, ignoreCase = true) ||
+                    review.decisionQualityLearning.contains(searchQuery, ignoreCase = true) ||
+                    review.lessonLearned.contains(searchQuery, ignoreCase = true)
+
+            matchAuditFilter && matchSymbol && matchQuery
         }
     }
 
     // KPI Metrics calculation
     val totalCount = allReviews.size
-    val avgDecisionQuality = if (totalCount > 0) allReviews.map { it.decisionQuality }.average() else 92.0
-    val avgEntryTiming = if (totalCount > 0) allReviews.map { it.entryTimingQuality }.average() else 85.0
-    val avgExitQuality = if (totalCount > 0) allReviews.map { it.exitQuality }.average() else 74.0
-    val avgRiskSizing = if (totalCount > 0) allReviews.map { it.riskSizingQuality }.average() else 96.0
-    val correctRegimesCount = allReviews.count { it.regimeSelection.equals("Correct", ignoreCase = true) }
-    val regimeAccuracyPct = if (totalCount > 0) (correctRegimesCount.toDouble() / totalCount) * 100.0 else 85.0
+    val avgDqsTen = if (totalCount > 0) allReviews.map { it.decisionQualityTen }.average() else 8.4
+    val goodDecisionsCount = allReviews.count { it.decisionQualityTen >= 6.5 }
+    val luckyWinsCount = allReviews.count { it.processVsOutcomeType == "BAD_DECISION_WINNING_TRADE" }
+    val noiseLossesCount = allReviews.count { it.processVsOutcomeType == "GOOD_DECISION_LOSING_TRADE" }
 
     LazyColumn(
         modifier = Modifier
@@ -105,29 +112,29 @@ fun TradeReviewsSection(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(40.dp)
                                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Psychology,
+                                    imageVector = Icons.Default.Verified,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "TRADE REVIEW AGENT",
-                                    fontSize = 14.sp,
+                                    text = "DECISION QUALITY AUDIT",
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 0.8.sp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Continuous Improvement & Structured Lessons Library",
-                                    fontSize = 10.sp,
+                                    text = "Self-Verifying Closed-Trade Evaluation Engine",
+                                    fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -135,31 +142,25 @@ fun TradeReviewsSection(
 
                         FilledTonalButton(
                             onClick = {
-                                val lessonsText = buildString {
-                                    appendLine("=== LUMINA STRUCTURED TRADE LESSONS LIBRARY ===")
-                                    appendLine("Total Evaluated Trades: ${allReviews.size}")
-                                    appendLine("Avg Decision Quality: ${String.format(Locale.US, "%.1f", avgDecisionQuality)}/100")
-                                    appendLine("Avg Entry Timing: ${String.format(Locale.US, "%.1f", avgEntryTiming)}/100")
-                                    appendLine("Avg Exit Quality: ${String.format(Locale.US, "%.1f", avgExitQuality)}/100")
-                                    appendLine("Avg Risk Sizing: ${String.format(Locale.US, "%.1f", avgRiskSizing)}/100")
-                                    appendLine("Regime Accuracy: ${String.format(Locale.US, "%.1f", regimeAccuracyPct)}%")
+                                val allAuditsText = buildString {
+                                    appendLine("=== LUMINA DECISION QUALITY AUDITS ===")
+                                    appendLine("Self-Verifying Engine: Separating Process Quality from PnL Outcome")
+                                    appendLine("Average Decision Quality: ${String.format(Locale.US, "%.1f", avgDqsTen)}/10")
                                     appendLine("--------------------------------------------------\n")
-                                    allReviews.forEachIndexed { i, rev ->
-                                        appendLine("[${i + 1}] ${rev.symbol} ${rev.side} (${rev.strategyName}) - Trade ID: ${rev.tradeId}")
-                                        appendLine(" • Decision quality: ${rev.decisionQuality}/100")
-                                        appendLine(" • Entry timing: ${rev.entryTimingQuality}/100")
-                                        appendLine(" • Exit quality: ${rev.exitQuality}/100")
-                                        appendLine(" • Risk sizing: ${rev.riskSizingQuality}/100")
-                                        appendLine(" • Regime selection: ${rev.regimeSelection} (${rev.regimeName})")
-                                        appendLine(" • Confidence calibration: ${rev.confidenceCalibration} (${String.format(Locale.US, "%.0f%%", rev.confidenceScore * 100)})")
-                                        appendLine(" • Missed opportunity: ${rev.missedOpportunity}")
-                                        appendLine(" • Lesson learned: \"${rev.lessonLearned}\"")
-                                        appendLine(" • Actionable policy: ${rev.actionablePolicy}")
-                                        appendLine("")
+                                    allReviews.forEachIndexed { _, rev ->
+                                        appendLine("Trade ${rev.tradeId}")
+                                        appendLine("Prediction: ${rev.side} ${rev.symbol}")
+                                        appendLine("Outcome: ${if (rev.pnlR > 0) "WIN" else "LOSS"} (${if (rev.pnlR > 0) "+" else ""}${String.format(Locale.US, "%.2f", rev.pnlR)}R)")
+                                        appendLine("Decision Quality: ${String.format(Locale.US, "%.1f", rev.decisionQualityTen)}/10")
+                                        appendLine("Reason:\n${rev.auditReasonsList}")
+                                        appendLine("Root Cause: ${rev.rootCause}")
+                                        appendLine("Decision-Quality Learning: \"${rev.decisionQualityLearning}\"")
+                                        appendLine("Current Learning: \"${rev.currentPnlLearning}\"")
+                                        appendLine("--------------------------------------------------")
                                     }
                                 }
-                                clipboardManager.setText(AnnotatedString(lessonsText))
-                                Toast.makeText(context, "Copied ${allReviews.size} lessons to clipboard!", Toast.LENGTH_SHORT).show()
+                                clipboardManager.setText(AnnotatedString(allAuditsText))
+                                Toast.makeText(context, "Copied ${allReviews.size} audits to clipboard!", Toast.LENGTH_SHORT).show()
                             },
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -167,63 +168,132 @@ fun TradeReviewsSection(
                         ) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Copy Lessons", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Copy Audits", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 4 Core Quality Metrics Grid
+                    // 4 Core Decision Quality Audit KPI Cards
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         ScoreMetricCard(
-                            label = "Decision Quality",
-                            score = avgDecisionQuality.toInt(),
+                            label = "Avg Decision Quality",
+                            value = "${String.format(Locale.US, "%.1f", avgDqsTen)}/10",
                             color = Color(0xFF22C55E),
                             modifier = Modifier.weight(1f)
                         )
                         ScoreMetricCard(
-                            label = "Entry Timing",
-                            score = avgEntryTiming.toInt(),
+                            label = "Noise Losses Shield",
+                            value = "$noiseLossesCount Trades",
                             color = Color(0xFF3B82F6),
                             modifier = Modifier.weight(1f)
                         )
                         ScoreMetricCard(
-                            label = "Exit Quality",
-                            score = avgExitQuality.toInt(),
-                            color = Color(0xFFA855F7),
+                            label = "Lucky Wins Flagged",
+                            value = "$luckyWinsCount Trades",
+                            color = Color(0xFFF59E0B),
                             modifier = Modifier.weight(1f)
                         )
                         ScoreMetricCard(
-                            label = "Risk Sizing",
-                            score = avgRiskSizing.toInt(),
-                            color = Color(0xFFEAB308),
+                            label = "Process Decoupling",
+                            value = "ACTIVE",
+                            color = Color(0xFFA855F7),
                             modifier = Modifier.weight(1f)
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Secondary stats row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    // Philosophy Callout
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "Accumulated Wisdom: ${allReviews.size} Policy Lessons",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Regime Selection Accuracy: ${String.format(Locale.US, "%.1f", regimeAccuracyPct)}%",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoFixHigh,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Why Decision Quality Auditing Matters",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.5.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                TextButton(
+                                    onClick = { showParadigmExplainer = !showParadigmExplainer },
+                                    contentPadding = PaddingValues(0.dp),
+                                    modifier = Modifier.height(24.dp)
+                                ) {
+                                    Text(
+                                        if (showParadigmExplainer) "Hide Details ▲" else "Compare Trade A vs B ▼",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = "A good decision can still lose because of normal market randomness. A bad decision can still win by luck. Lumina audits decision quality to improve the process itself without reinforcing lucky flaws or discarding sound strategies.",
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+
+                            if (showParadigmExplainer) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Divider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    // Trade A
+                                    Surface(
+                                        modifier = Modifier.weight(1f),
+                                        color = Color(0xFF3B82F6).copy(alpha = 0.12f),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f))
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text("Trade A (Good Setup, Loss)", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color(0xFF2563EB))
+                                            Text("• Excellent setup & regime\n• Lost to unexpected news\n• PnL Learning: \"Strategy lost\"\n• Audit Learning: \"Decision was excellent. Keep taking trades like this.\"", fontSize = 9.5.sp, lineHeight = 13.sp)
+                                        }
+                                    }
+
+                                    // Trade B
+                                    Surface(
+                                        modifier = Modifier.weight(1f),
+                                        color = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.3f))
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text("Trade B (Wrong Setup, Win)", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color(0xFFD97706))
+                                            Text("• Wrong strategy & regime\n• Won by random spike\n• PnL Learning: \"Strategy won\"\n• Audit Learning: \"Decision quality was poor. Don't repeat this.\"", fontSize = 9.5.sp, lineHeight = 13.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -236,7 +306,7 @@ fun TradeReviewsSection(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search lessons, rules, missed opportunities...", fontSize = 12.sp) },
+                    placeholder = { Text("Search by Trade #, symbol, reason, root cause...", fontSize = 12.sp) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
@@ -249,7 +319,31 @@ fun TradeReviewsSection(
                     singleLine = true
                 )
 
-                // Symbol and Category Filters
+                // Audit Paradigm Filter Chips
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Audit Type:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    listOf(
+                        "ALL" to "All Audits",
+                        "GOOD_LOSS" to "🛡️ Good / Lost (Noise)",
+                        "BAD_WIN" to "⚠️ Bad / Won (Lucky)",
+                        "GOOD_WIN" to "✅ Good / Won",
+                        "BAD_LOSS" to "⛔ Bad / Lost"
+                    ).forEach { (key, label) ->
+                        FilterChip(
+                            selected = selectedAuditFilter == key,
+                            onClick = { selectedAuditFilter = key },
+                            label = { Text(label, fontSize = 11.sp, fontWeight = if (selectedAuditFilter == key) FontWeight.Bold else FontWeight.Normal) }
+                        )
+                    }
+                }
+
+                // Symbol Filter Chips
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -265,17 +359,6 @@ fun TradeReviewsSection(
                             label = { Text(sym, fontSize = 11.sp, fontWeight = if (selectedSymbolFilter == sym) FontWeight.Bold else FontWeight.Normal) }
                         )
                     }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Category:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    listOf("ALL", "ENTRY_TIMING", "EXIT_DISCIPLINE", "RISK_SIZING", "POSITION_MANAGEMENT", "REGIME_FILTER").forEach { cat ->
-                        val label = cat.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
-                        FilterChip(
-                            selected = selectedCategoryFilter == cat,
-                            onClick = { selectedCategoryFilter = cat },
-                            label = { Text(label, fontSize = 11.sp) }
-                        )
-                    }
                 }
             }
         }
@@ -288,43 +371,42 @@ fun TradeReviewsSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "STRUCTURED TRADE REVIEWS (${filteredReviews.size})",
+                    text = "CLOSED TRADE AUDIT LOGS (${filteredReviews.size})",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 0.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Sorted by Most Recent",
+                    text = "Self-Verifying Feedback Loop",
                     fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
 
-        // 4. Detailed Structured Review Cards
+        // 4. Clean & Structured Decision Quality Audit Cards (Exact User Specification)
         items(filteredReviews, key = { it.tradeId }) { review ->
-            DetailedTradeReviewCard(
+            DecisionQualityAuditCard(
                 review = review,
                 isExpanded = expandedReviewId == review.tradeId,
                 onToggleExpand = {
                     expandedReviewId = if (expandedReviewId == review.tradeId) null else review.tradeId
                 },
                 onCopy = {
-                    val singleReviewText = buildString {
-                        appendLine("=== TRADE REVIEW: ${review.symbol} ${review.side} (Trade ID: ${review.tradeId}) ===")
-                        appendLine("Decision quality: ${review.decisionQuality}/100")
-                        appendLine("Entry timing: ${review.entryTimingQuality}/100")
-                        appendLine("Exit quality: ${review.exitQuality}/100")
-                        appendLine("Risk sizing: ${review.riskSizingQuality}/100")
-                        appendLine("Regime selection: ${review.regimeSelection}")
-                        appendLine("Confidence calibration: ${review.confidenceCalibration}")
-                        appendLine("Missed opportunity: ${review.missedOpportunity}")
-                        appendLine("Lesson learned: \"${review.lessonLearned}\"")
-                        appendLine("Actionable Policy: ${review.actionablePolicy}")
+                    val singleAuditText = buildString {
+                        appendLine("Trade ${review.tradeId}\n")
+                        appendLine("Prediction:\n${review.side} ${review.symbol}\n")
+                        appendLine("Outcome:\n${if (review.pnlR > 0) "WIN" else "LOSS"} (${if (review.pnlR > 0) "+" else ""}${String.format(Locale.US, "%.2f", review.pnlR)}R, ${if (review.pnlR > 0) "+" else ""}$${String.format(Locale.US, "%.2f", review.pnlUsd)})\n")
+                        appendLine("Decision Quality:\n${String.format(Locale.US, "%.1f", review.decisionQualityTen)}/10\n")
+                        appendLine("Reason:\n${review.auditReasonsList}\n")
+                        appendLine("Root Cause:\n${review.rootCause}\n")
+                        appendLine("Decision-Quality Learning:\n\"${review.decisionQualityLearning}\"\n")
+                        appendLine("Current Learning:\n\"${review.currentPnlLearning}\"")
                     }
-                    clipboardManager.setText(AnnotatedString(singleReviewText))
-                    Toast.makeText(context, "Copied review for ${review.symbol}!", Toast.LENGTH_SHORT).show()
+                    clipboardManager.setText(AnnotatedString(singleAuditText))
+                    Toast.makeText(context, "Copied Trade ${review.tradeId} audit!", Toast.LENGTH_SHORT).show()
                 }
             )
         }
@@ -334,7 +416,7 @@ fun TradeReviewsSection(
 @Composable
 private fun ScoreMetricCard(
     label: String,
-    score: Int,
+    value: String,
     color: Color,
     modifier: Modifier = Modifier
 ) {
@@ -349,14 +431,14 @@ private fun ScoreMetricCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "$score/100",
+                text = value,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Black,
                 color = color
             )
             Text(
                 text = label,
-                fontSize = 9.5.sp,
+                fontSize = 9.sp,
                 maxLines = 1,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -365,7 +447,7 @@ private fun ScoreMetricCard(
 }
 
 @Composable
-fun DetailedTradeReviewCard(
+fun DecisionQualityAuditCard(
     review: TradeReviewEntity,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
@@ -375,6 +457,29 @@ fun DetailedTradeReviewCard(
     val pnlColor = if (isWin) Color(0xFF22C55E) else Color(0xFFEF4444)
     val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.US) }
 
+    val (badgeBg, badgeFg, badgeText) = when (review.processVsOutcomeType) {
+        "GOOD_DECISION_LOSING_TRADE" -> Triple(
+            Color(0xFF3B82F6).copy(alpha = 0.15f),
+            Color(0xFF2563EB),
+            "🛡️ GOOD DECISION / LOSS (MARKET NOISE)"
+        )
+        "BAD_DECISION_WINNING_TRADE" -> Triple(
+            Color(0xFFF59E0B).copy(alpha = 0.15f),
+            Color(0xFFD97706),
+            "⚠️ BAD DECISION / WIN (LUCKY OUTCOME)"
+        )
+        "GOOD_DECISION_WINNING_TRADE" -> Triple(
+            Color(0xFF22C55E).copy(alpha = 0.15f),
+            Color(0xFF16A34A),
+            "✅ GOOD DECISION / WIN (REINFORCE EDGE)"
+        )
+        else -> Triple(
+            Color(0xFFEF4444).copy(alpha = 0.15f),
+            Color(0xFFDC2626),
+            "⛔ BAD DECISION / LOSS (INVALIDATE SETUP)"
+        )
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -383,174 +488,269 @@ fun DetailedTradeReviewCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
             1.dp,
-            if (review.overallScore >= 90) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            if (review.decisionQualityTen >= 8.0) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
         )
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // Header Row: Symbol, Side, PnL, Decision Grade, Copy
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header: Trade Number, Classification Badge, Copy
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = if (review.side == "BUY") Color(0xFF22C55E).copy(alpha = 0.15f) else Color(0xFFEF4444).copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            text = "${review.symbol} ${review.side}",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 12.sp,
-                            color = if (review.side == "BUY") Color(0xFF22C55E) else Color(0xFFEF4444),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "${if (isWin) "+" else ""}${String.format(Locale.US, "%.2f", review.pnlR)}R (${if (isWin) "+" else ""}$${String.format(Locale.US, "%.2f", review.pnlUsd)})",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = pnlColor
+                        text = "Trade ${review.tradeId}",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontFamily = FontFamily.Monospace
                     )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(modifier = Modifier.width(8.dp))
                     Surface(
-                        color = when {
-                            review.overallScore >= 90 -> MaterialTheme.colorScheme.primaryContainer
-                            review.overallScore >= 80 -> MaterialTheme.colorScheme.secondaryContainer
-                            else -> MaterialTheme.colorScheme.surfaceVariant
-                        },
+                        color = badgeBg,
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text = "Score: ${review.overallScore}/100",
-                            fontSize = 10.sp,
+                            text = badgeText,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (review.overallScore >= 90) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = badgeFg,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    IconButton(onClick = onCopy, modifier = Modifier.size(28.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy Review",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 4 Dimension Review Breakdown in exact user format
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ReviewScoreRow(label = "Decision quality", score = review.decisionQuality, max = 100)
-                    ReviewScoreRow(label = "Entry timing", score = review.entryTimingQuality, max = 100)
-                    ReviewScoreRow(label = "Exit quality", score = review.exitQuality, max = 100)
-                    ReviewScoreRow(label = "Risk sizing", score = review.riskSizingQuality, max = 100)
+                IconButton(onClick = onCopy, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy Audit",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Qualitative Evaluation Tags
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                QualitativeRow(
-                    label = "Regime selection",
-                    value = review.regimeSelection,
-                    statusColor = if (review.regimeSelection.equals("Correct", ignoreCase = true)) Color(0xFF22C55E) else Color(0xFFEAB308),
-                    subtext = "(${review.regimeName})"
-                )
-                QualitativeRow(
-                    label = "Confidence calibration",
-                    value = review.confidenceCalibration,
-                    statusColor = when {
-                        review.confidenceCalibration.contains("Accurate", ignoreCase = true) -> Color(0xFF22C55E)
-                        review.confidenceCalibration.contains("Slightly", ignoreCase = true) -> Color(0xFF3B82F6)
-                        else -> Color(0xFFEAB308)
-                    },
-                    subtext = "(${String.format(Locale.US, "%.0f%%", review.confidenceScore * 100)})"
-                )
-                QualitativeRow(
-                    label = "Missed opportunity",
-                    value = review.missedOpportunity,
-                    statusColor = MaterialTheme.colorScheme.primary
-                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Highlighted Lesson Learned Box
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                modifier = Modifier.fillMaxWidth()
+            // Prediction & Outcome Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Lightbulb,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
+                // Prediction
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = "Lesson learned:",
-                            fontSize = 11.sp,
+                            text = "PREDICTION",
+                            fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            letterSpacing = 0.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "${review.side} ${review.symbol}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (review.side == "BUY") Color(0xFF22C55E) else Color(0xFFEF4444)
                         )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                // Outcome
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "OUTCOME",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "${if (isWin) "WIN" else "LOSS"} (${if (isWin) "+" else ""}${String.format(Locale.US, "%.2f", review.pnlR)}R)",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = pnlColor
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Decision Quality Score (0 - 10)
+            Surface(
+                color = when {
+                    review.decisionQualityTen >= 8.0 -> Color(0xFF22C55E).copy(alpha = 0.12f)
+                    review.decisionQualityTen >= 6.0 -> Color(0xFF3B82F6).copy(alpha = 0.12f)
+                    else -> Color(0xFFEF4444).copy(alpha = 0.12f)
+                },
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "\"${review.lessonLearned}\"",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontStyle = FontStyle.Italic,
+                        text = "DECISION QUALITY:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                    Text(
+                        text = "${String.format(Locale.US, "%.1f", review.decisionQualityTen)}/10",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        color = when {
+                            review.decisionQualityTen >= 8.0 -> Color(0xFF16A34A)
+                            review.decisionQualityTen >= 6.0 -> Color(0xFF2563EB)
+                            else -> Color(0xFFDC2626)
+                        }
+                    )
+                }
+            }
 
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Policy Rule: ${review.actionablePolicy}",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Reasons Checklist (Exact User Format)
+            Text(
+                text = "Reason:",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val lines = review.auditReasonsList.lines().filter { it.isNotBlank() }
+                    lines.forEach { line ->
+                        val isCheck = line.startsWith("✓")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "LUMINA LEARNED",
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                text = if (isCheck) "✓" else "✗",
+                                color = if (isCheck) Color(0xFF22C55E) else Color(0xFFEF4444),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 13.sp,
+                                modifier = Modifier.width(18.dp)
+                            )
+                            Text(
+                                text = line.removePrefix("✓").removePrefix("✗").trim(),
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isCheck) FontWeight.SemiBold else FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
                 }
             }
 
-            // Expanded trade specifics
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Root Cause Tag
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Root Cause: ",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = review.rootCause,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Feedback Loop Decoupling Box (Decision-Quality Learning vs Current Learning)
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Decision-Quality Learning:",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        text = "\"${review.decisionQualityLearning}\"",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontStyle = FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Standard PnL learning would say: \"${review.currentPnlLearning}\"",
+                            fontSize = 9.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "SELF-VERIFIED",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Expanded Details (Strategy, Timing, Regime, Sizing)
             if (isExpanded) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
@@ -581,103 +781,14 @@ fun DetailedTradeReviewCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Trade ID: ${review.tradeId}",
+                        text = "Regime: ${review.regimeName}",
                         fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReviewScoreRow(
-    label: String,
-    score: Int,
-    max: Int = 100
-) {
-    val fraction = (score.toFloat() / max.toFloat()).coerceIn(0f, 1f)
-    val color = when {
-        score >= 90 -> Color(0xFF22C55E)
-        score >= 75 -> Color(0xFF3B82F6)
-        score >= 60 -> Color(0xFFEAB308)
-        else -> Color(0xFFEF4444)
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            modifier = Modifier.weight(1.2f),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "$label:",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Row(
-            modifier = Modifier.weight(2f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End
-        ) {
-            LinearProgressIndicator(
-                progress = { fraction },
-                modifier = Modifier
-                    .width(90.dp)
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = color,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "$score/$max",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = color,
-                modifier = Modifier.width(48.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun QualitativeRow(
-    label: String,
-    value: String,
-    statusColor: Color,
-    subtext: String? = null
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "$label:",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = value,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = statusColor
-            )
-            if (subtext != null) {
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = subtext,
+                    text = "Continuous Policy: ${review.actionablePolicy}",
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

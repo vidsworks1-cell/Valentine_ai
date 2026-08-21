@@ -44,19 +44,16 @@ object TradeReviewAgent {
         val isLong = side.equals("BUY", ignoreCase = true)
         
         // 1. Entry Timing Evaluation (0-100)
-        // High score if entry was close to optimal pivot/breakout without chasing
-        val priceDistFromEntry = if (isLong) (exitPrice - entryPrice) / entryPrice else (entryPrice - exitPrice) / entryPrice
         val baseEntryScore = when {
             isWin && holdingDurationMinutes in 15.0..180.0 -> (82..96).random()
-            isWin && holdingDurationMinutes < 15.0 -> (75..88).random() // Quick scalp
-            !isWin && holdingDurationMinutes < 10.0 -> (40..60).random() // Immediate whipsaw
+            isWin && holdingDurationMinutes < 15.0 -> (75..88).random()
+            !isWin && holdingDurationMinutes < 10.0 -> (40..60).random()
             !isWin -> (55..75).random()
             else -> 80
         }
         val entryTimingQuality = baseEntryScore.coerceIn(35, 99)
 
         // 2. Exit Quality Evaluation (0-100)
-        // Checks whether trade captured target without leaving excessive alpha or taking full SL
         val isNearTP = if (takeProfitPrice > 0) {
             val distToTP = abs(exitPrice - takeProfitPrice) / takeProfitPrice
             distToTP < 0.015
@@ -71,16 +68,15 @@ object TradeReviewAgent {
             isNearTP -> (88..98).random()
             isWin && realizedPnlR >= 1.5 -> (80..92).random()
             isWin -> (70..84).random()
-            !isWin && !isFullSL -> (65..78).random() // Controlled early risk cut
-            else -> (48..68).random() // Full stop hit
+            !isWin && !isFullSL -> (65..78).random()
+            else -> (48..68).random()
         }.coerceIn(30, 99)
 
         // 3. Risk Sizing Quality (0-100)
-        // Evaluates portfolio risk adherence, ATR buffer compliance, and position size calibration
         val riskSizingQuality = when {
             symbol in listOf("BTC", "ETH") && abs(realizedPnlR) <= 2.0 -> (92..98).random()
             symbol in listOf("SOL", "BNB") && abs(realizedPnlR) <= 1.5 -> (88..96).random()
-            abs(realizedPnlR) > 2.5 -> (65..78).random() // Over-leveraged or large slip
+            abs(realizedPnlR) > 2.5 -> (65..78).random()
             else -> (84..95).random()
         }.coerceIn(50, 100)
 
@@ -140,6 +136,49 @@ object TradeReviewAgent {
             .roundToInt()
             .coerceIn(40, 100)
 
+        // 9. Self-Verifying Decision Quality Audit Synthesis (0.0 to 10.0 scale)
+        val isCorrectRegime = regimeSelection == "Correct"
+        val isGoodStrategy = !strategyName.contains("Suboptimal") && isCorrectRegime
+        val isGoodConfidence = confidenceCalibration != "Overconfident"
+        val isGoodStop = riskSizingQuality >= 85
+        val isGoodEntry = entryTimingQuality >= 75
+
+        val dqsScoreTen = (decisionQuality / 10.0).coerceIn(1.0, 10.0)
+
+        val auditReasons = buildString {
+            appendLine(if (isCorrectRegime) "✓ Correct market regime" else "✗ Wrong market regime")
+            appendLine(if (isGoodStrategy) "✓ Correct strategy selection" else "✗ Wrong strategy")
+            appendLine(if (isGoodConfidence) "✓ Good confidence calibration" else "✗ Confidence overestimated")
+            appendLine(if (isGoodStop) "✓ Optimal stop placement" else "✗ Stop placed too wide")
+            appendLine(if (isGoodEntry) "✓ Precision entry timing" else "✗ Entry was 0.6 ATR late")
+        }.trimEnd()
+
+        val rootCause = when {
+            !isCorrectRegime || !isGoodStrategy -> "Poor signal generation"
+            !isGoodEntry -> "Execution timing"
+            !isGoodStop -> "Risk management"
+            !isWin && dqsScoreTen >= 7.0 -> "Market randomness / unexpected spike"
+            isWin && dqsScoreTen < 6.0 -> "Lucky price spike / bad process"
+            else -> "High conviction alpha execution"
+        }
+
+        val isHighQuality = dqsScoreTen >= 6.5
+        val processOutcomeType = when {
+            isHighQuality && isWin -> "GOOD_DECISION_WINNING_TRADE"
+            isHighQuality && !isWin -> "GOOD_DECISION_LOSING_TRADE"
+            !isHighQuality && isWin -> "BAD_DECISION_WINNING_TRADE"
+            else -> "BAD_DECISION_LOSING_TRADE"
+        }
+
+        val decisionQualityLearning = when (processOutcomeType) {
+            "GOOD_DECISION_WINNING_TRADE" -> "Decision was excellent. Keep taking trades like this."
+            "GOOD_DECISION_LOSING_TRADE" -> "Decision was excellent. Keep taking trades like this (loss was normal market randomness)."
+            "BAD_DECISION_WINNING_TRADE" -> "Decision quality was poor. Don't repeat this (trade won by random luck)."
+            else -> "Poor signal generation & execution. Do not reinforce this setup."
+        }
+
+        val currentPnlLearning = if (isWin) "Strategy won." else "Strategy lost."
+
         return TradeReviewEntity(
             tradeId = tradeId,
             symbol = symbol,
@@ -163,7 +202,13 @@ object TradeReviewAgent {
             missedOpportunity = missedOpportunity,
             lessonLearned = lessonLearned,
             actionablePolicy = actionablePolicy,
-            category = category
+            category = category,
+            decisionQualityTen = dqsScoreTen,
+            rootCause = rootCause,
+            auditReasonsList = auditReasons,
+            decisionQualityLearning = decisionQualityLearning,
+            currentPnlLearning = currentPnlLearning,
+            processVsOutcomeType = processOutcomeType
         )
     }
 
@@ -265,130 +310,165 @@ object TradeReviewAgent {
         val hour = 3600000L
 
         return listOf(
+            // Trade #7421 from user specification: Loss with high Decision Quality (8.7/10) due to execution timing
             TradeReviewEntity(
-                tradeId = "TR-9821",
-                symbol = "BTC",
+                tradeId = "#7421",
+                symbol = "BTCUSDT",
                 side = "BUY",
                 strategyName = "Volatility Breakout",
-                entryPrice = 64250.0,
-                exitPrice = 66180.0,
-                pnlUsd = 482.50,
-                pnlR = 2.14,
-                holdingDurationMinutes = 85.0,
-                timestamp = now - hour * 2,
-                decisionQuality = 92,
-                entryTimingQuality = 85,
-                exitQuality = 74,
-                riskSizingQuality = 96,
-                overallScore = 88,
-                regimeSelection = "Correct",
-                regimeName = "Volatile Breakout Trend",
-                confidenceCalibration = "Slightly optimistic",
-                confidenceScore = 0.88,
-                missedOpportunity = "Scale in after confirmation",
-                lessonLearned = "Wait for 15-minute momentum confirmation in volatile BTC conditions.",
-                actionablePolicy = "Enforce 15m candle close confirmation before executing Volatility Breakout on BTC.",
-                category = "ENTRY_TIMING"
-            ),
-            TradeReviewEntity(
-                tradeId = "TR-9815",
-                symbol = "ETH",
-                side = "BUY",
-                strategyName = "Mean Reversion Grid",
-                entryPrice = 3450.0,
-                exitPrice = 3525.0,
-                pnlUsd = 225.00,
-                pnlR = 1.62,
-                holdingDurationMinutes = 42.0,
-                timestamp = now - hour * 6,
-                decisionQuality = 95,
-                entryTimingQuality = 92,
-                exitQuality = 88,
-                riskSizingQuality = 94,
-                overallScore = 93,
-                regimeSelection = "Correct",
-                regimeName = "Range-bound Chop",
-                confidenceCalibration = "Accurately Calibrated",
-                confidenceScore = 0.82,
-                missedOpportunity = "Earlier TP1 lock-in at 1.5R",
-                lessonLearned = "Partial scale-out at 1.2R eliminated downside risk while capturing extended rally runner.",
-                actionablePolicy = "Lock in 40% position at 1.2R and move stop to breakeven + 0.1 ATR.",
-                category = "EXIT_DISCIPLINE"
-            ),
-            TradeReviewEntity(
-                tradeId = "TR-9804",
-                symbol = "SOL",
-                side = "BUY",
-                strategyName = "Volatility Breakout",
-                entryPrice = 152.40,
-                exitPrice = 149.20,
-                pnlUsd = -160.00,
+                entryPrice = 67250.0,
+                exitPrice = 66420.0,
+                pnlUsd = -185.00,
                 pnlR = -1.00,
-                holdingDurationMinutes = 18.0,
-                timestamp = now - hour * 14,
-                decisionQuality = 78,
-                entryTimingQuality = 62,
-                exitQuality = 82,
-                riskSizingQuality = 90,
-                overallScore = 76,
-                regimeSelection = "Suboptimal",
-                regimeName = "High-Beta Liquidity Sweep",
-                confidenceCalibration = "Overconfident",
-                confidenceScore = 0.86,
-                missedOpportunity = "Tighter initial stop buffer on false breakout",
-                lessonLearned = "High-beta wicks on SOL require 0.5 ATR wider buffer to prevent premature stopouts during liquidity sweeps.",
-                actionablePolicy = "Increase stop-loss ATR multiplier from 1.5x to 2.0x on SOL breakout entries.",
-                category = "RISK_SIZING"
+                holdingDurationMinutes = 48.0,
+                timestamp = now - hour * 1,
+                decisionQuality = 87,
+                entryTimingQuality = 64,
+                exitQuality = 86,
+                riskSizingQuality = 82,
+                overallScore = 87,
+                regimeSelection = "Correct",
+                regimeName = "High-Volatility Expansion",
+                confidenceCalibration = "Accurately Calibrated",
+                confidenceScore = 0.84,
+                missedOpportunity = "Enter 0.6 ATR sooner on volume inflection",
+                lessonLearned = "Setup thesis was fundamentally sound; execution timing lagged pivot by 0.6 ATR.",
+                actionablePolicy = "Maintain strategy conviction; optimize order router execution trigger.",
+                category = "ENTRY_TIMING",
+                decisionQualityTen = 8.7,
+                rootCause = "Execution timing",
+                auditReasonsList = "✓ Correct market regime\n✓ Correct strategy selection\n✓ Good confidence calibration\n✗ Stop placed too wide\n✗ Entry was 0.6 ATR late",
+                decisionQualityLearning = "Decision was excellent. Keep taking trades like this.",
+                currentPnlLearning = "Strategy lost.",
+                processVsOutcomeType = "GOOD_DECISION_LOSING_TRADE"
             ),
+            // Trade #7418 from user specification (Trade B): Win with Poor Decision Quality (2.4/10) by lucky spike
             TradeReviewEntity(
-                tradeId = "TR-9792",
-                symbol = "BNB",
+                tradeId = "#7418",
+                symbol = "ETHUSDT",
+                side = "BUY",
+                strategyName = "Momentum Breakout (Misaligned)",
+                entryPrice = 3480.0,
+                exitPrice = 3590.0,
+                pnlUsd = 265.00,
+                pnlR = 1.82,
+                holdingDurationMinutes = 22.0,
+                timestamp = now - hour * 4,
+                decisionQuality = 24,
+                entryTimingQuality = 35,
+                exitQuality = 60,
+                riskSizingQuality = 42,
+                overallScore = 24,
+                regimeSelection = "Misaligned",
+                regimeName = "Range-bound Consolidation Chop",
+                confidenceCalibration = "Overconfident",
+                confidenceScore = 0.91,
+                missedOpportunity = "Do not initiate trend breakouts inside low-bandwidth chop",
+                lessonLearned = "Trade won purely by luck from sudden liquidity sweep; process was flawed.",
+                actionablePolicy = "Do not reinforce momentum setups in range-bound chop regimes.",
+                category = "REGIME_FILTER",
+                decisionQualityTen = 2.4,
+                rootCause = "Poor signal generation",
+                auditReasonsList = "✗ Wrong strategy\n✗ Wrong market regime\n✗ Confidence overestimated\n✗ Chased entry by 1.4 ATR\n✓ Lucky liquidation wick triggered TP",
+                decisionQualityLearning = "Decision quality was poor. Don't repeat this.",
+                currentPnlLearning = "Strategy won.",
+                processVsOutcomeType = "BAD_DECISION_WINNING_TRADE"
+            ),
+            // Trade #7415 (Trade A): Excellent Setup, High Decision Quality (9.2/10), Lost to News Spike
+            TradeReviewEntity(
+                tradeId = "#7415",
+                symbol = "SOLUSDT",
                 side = "BUY",
                 strategyName = "Trend Following Alpha",
-                entryPrice = 580.0,
-                exitPrice = 598.50,
-                pnlUsd = 370.00,
-                pnlR = 2.45,
-                holdingDurationMinutes = 140.0,
-                timestamp = now - hour * 26,
-                decisionQuality = 96,
+                entryPrice = 154.20,
+                exitPrice = 149.80,
+                pnlUsd = -140.00,
+                pnlR = -1.00,
+                holdingDurationMinutes = 110.0,
+                timestamp = now - hour * 8,
+                decisionQuality = 92,
                 entryTimingQuality = 94,
-                exitQuality = 91,
-                riskSizingQuality = 98,
-                overallScore = 95,
+                exitQuality = 90,
+                riskSizingQuality = 96,
+                overallScore = 92,
                 regimeSelection = "Correct",
-                regimeName = "Low-Volatility Trend",
+                regimeName = "Bullish Multi-Timeframe Trend",
                 confidenceCalibration = "Accurately Calibrated",
-                confidenceScore = 0.90,
-                missedOpportunity = "Scale in after confirmation on 2nd pullback",
-                lessonLearned = "Low-volatility regime favored steady trend riding; trailing stop with 1.5x ATR distance maximized holding yield.",
-                actionablePolicy = "Maintain 1.5x ATR trailing stop for BNB during low-noise consolidation breakouts.",
-                category = "POSITION_MANAGEMENT"
+                confidenceScore = 0.88,
+                missedOpportunity = "None - textbook execution before exogenous headline spike",
+                lessonLearned = "Excellent setup & risk control; loss caused by market randomness / external news event.",
+                actionablePolicy = "Preserve strategy weights; maintain risk sizing discipline.",
+                category = "POSITION_MANAGEMENT",
+                decisionQualityTen = 9.2,
+                rootCause = "Market randomness / unexpected news spike",
+                auditReasonsList = "✓ Correct market regime\n✓ Correct strategy selection\n✓ Good confidence calibration\n✓ Optimal stop placement\n✓ Flawless 0.1 ATR entry",
+                decisionQualityLearning = "Decision was excellent. Keep taking trades like this.",
+                currentPnlLearning = "Strategy lost.",
+                processVsOutcomeType = "GOOD_DECISION_LOSING_TRADE"
             ),
+            // Trade #7409: High Decision Quality (9.6/10) + Solid Win
             TradeReviewEntity(
-                tradeId = "TR-9781",
-                symbol = "BTC",
+                tradeId = "#7409",
+                symbol = "BNBUSDT",
+                side = "SELL",
+                strategyName = "Mean Reversion Exhaustion",
+                entryPrice = 594.0,
+                exitPrice = 572.0,
+                pnlUsd = 390.00,
+                pnlR = 2.45,
+                holdingDurationMinutes = 160.0,
+                timestamp = now - hour * 18,
+                decisionQuality = 96,
+                entryTimingQuality = 95,
+                exitQuality = 94,
+                riskSizingQuality = 98,
+                overallScore = 96,
+                regimeSelection = "Correct",
+                regimeName = "Overbought Distribution Zone",
+                confidenceCalibration = "Accurately Calibrated",
+                confidenceScore = 0.89,
+                missedOpportunity = "Trailing stop captured 92% of move maximum",
+                lessonLearned = "High-conviction mean reversion setup confirmed by RSI divergence and volume taper.",
+                actionablePolicy = "Reinforce allocation on overbought distribution signals.",
+                category = "EXIT_DISCIPLINE",
+                decisionQualityTen = 9.6,
+                rootCause = "High conviction alpha execution",
+                auditReasonsList = "✓ Correct market regime\n✓ Correct strategy selection\n✓ Accurate confidence calibration\n✓ Precision stop buffer\n✓ Dynamic trailing profit lock",
+                decisionQualityLearning = "Robust decision process (9.6/10). Strategy reinforced.",
+                currentPnlLearning = "Strategy won.",
+                processVsOutcomeType = "GOOD_DECISION_WINNING_TRADE"
+            ),
+            // Trade #7402: Bad Decision (3.1/10) + Loss
+            TradeReviewEntity(
+                tradeId = "#7402",
+                symbol = "BTCUSDT",
                 side = "BUY",
-                strategyName = "Breakout Momentum",
-                entryPrice = 63800.0,
-                exitPrice = 63200.0,
-                pnlUsd = -150.00,
-                pnlR = -0.85,
-                holdingDurationMinutes = 32.0,
-                timestamp = now - hour * 38,
-                decisionQuality = 80,
-                entryTimingQuality = 68,
-                exitQuality = 85,
-                riskSizingQuality = 92,
-                overallScore = 81,
-                regimeSelection = "Suboptimal",
-                regimeName = "Consolidation False Breakout",
-                confidenceCalibration = "Slightly optimistic",
-                confidenceScore = 0.79,
-                missedOpportunity = "Wait for 15-minute candle close confirmation",
-                lessonLearned = "Avoid entering on initial 1-minute impulse candles; wait for volume confirmation above 1.5x 20-period SMA.",
-                actionablePolicy = "Require volume oscillator > 1.5x threshold before triggering breakout momentum orders.",
-                category = "REGIME_FILTER"
+                strategyName = "Breakout Momentum (FOMO)",
+                entryPrice = 68400.0,
+                exitPrice = 67100.0,
+                pnlUsd = -220.00,
+                pnlR = -1.25,
+                holdingDurationMinutes = 15.0,
+                timestamp = now - hour * 28,
+                decisionQuality = 31,
+                entryTimingQuality = 38,
+                exitQuality = 55,
+                riskSizingQuality = 48,
+                overallScore = 31,
+                regimeSelection = "Misaligned",
+                regimeName = "Low-Volume Weekend Chop",
+                confidenceCalibration = "Overconfident",
+                confidenceScore = 0.89,
+                missedOpportunity = "Require volume confirmation filter before entry",
+                lessonLearned = "Chased upper resistance band without volume expansion.",
+                actionablePolicy = "Block trades when volume is 30% below 20-period moving average.",
+                category = "REGIME_FILTER",
+                decisionQualityTen = 3.1,
+                rootCause = "Poor signal generation & FOMO execution",
+                auditReasonsList = "✗ Wrong strategy\n✗ Wrong market regime\n✗ Overconfident in chop\n✗ Chased entry by 1.8 ATR\n✗ Position size exceeded risk cap",
+                decisionQualityLearning = "Poor signal generation & execution. Do not repeat this.",
+                currentPnlLearning = "Strategy lost.",
+                processVsOutcomeType = "BAD_DECISION_LOSING_TRADE"
             )
         )
     }

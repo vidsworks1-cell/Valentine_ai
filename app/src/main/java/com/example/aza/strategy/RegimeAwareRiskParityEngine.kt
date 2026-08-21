@@ -7,13 +7,26 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
+ * Liquidity Pool (LP) Provider Sentiment & Depth Telemetry.
+ */
+data class LiquidityPoolSentimentTelemetry(
+    val poolSymbol: String,
+    val tvl7dDeltaPct: Double,
+    val volumeToTvlRatio: Double,
+    val concentrationSkew: Double,
+    val feeAprPct: Double,
+    val compositeSentimentScore: Double, // Psi_LP: -3.0 to +3.0
+    val sentimentCategory: String        // "HIGH_CONFIDENCE_INFLOW", "STABLE_EQUILIBRIUM", "LIQUIDITY_FLIGHT_RISK"
+)
+
+/**
  * Strategy or Asset Return Series representation for historical calibration.
  */
 data class AssetReturnSeries(
     val assetSymbol: String,
     val strategyName: String,
     val dailyReturns: List<Double>, // 5 years = 1825 daily return observations
-    val assetClass: String = "CRYPTO" // "CRYPTO", "DEFENSIVE", "CASH"
+    val assetClass: String = "CRYPTO" // "CRYPTO", "EQUITY", "DEFENSIVE", "CASH"
 )
 
 /**
@@ -76,11 +89,46 @@ object RegimeAwareRiskParityEngine {
     const val TARGET_MIN_SHARPE_RATIO: Double = 1.20
 
     /**
-     * Calibrates multi-strategy allocations on 5 years of historical price data (1,825 daily steps).
+     * Calculates Liquidity Pool (LP) Provider Sentiment & Depth Telemetry:
+     * Evaluates on-chain LP liquidity changes, fee yield expansion, and concentration depth skew.
+     */
+    fun calculateLiquidityPoolSentiment(
+        poolSymbol: String = "ETH/USDC",
+        tvl7dDeltaPct: Double = 6.4,
+        volumeToTvlRatio: Double = 0.38,
+        concentrationSkew: Double = 0.18,
+        feeAprPct: Double = 18.5
+    ): LiquidityPoolSentimentTelemetry {
+        // Mathematical LP Sentiment Score Psi_LP:
+        // 0.45 * (TVL_delta / 5.0) + 0.35 * (Vol_TVL / 0.30 - 1.0) + 0.20 * (ConcentrationSkew / 0.25)
+        val rawPsi = (0.45 * (tvl7dDeltaPct / 5.0)) +
+                     (0.35 * ((volumeToTvlRatio / 0.30) - 1.0)) +
+                     (0.20 * (concentrationSkew / 0.25))
+        val psiScore = rawPsi.coerceIn(-3.0, +3.0)
+        val category = when {
+            psiScore >= 1.0 -> "HIGH_CONFIDENCE_INFLOW"
+            psiScore <= -1.0 -> "LIQUIDITY_FLIGHT_RISK"
+            else -> "STABLE_EQUILIBRIUM"
+        }
+        return LiquidityPoolSentimentTelemetry(
+            poolSymbol = poolSymbol,
+            tvl7dDeltaPct = tvl7dDeltaPct,
+            volumeToTvlRatio = volumeToTvlRatio,
+            concentrationSkew = concentrationSkew,
+            feeAprPct = feeAprPct,
+            compositeSentimentScore = psiScore,
+            sentimentCategory = category
+        )
+    }
+
+    /**
+     * Calibrates multi-strategy allocations on 5 years of historical price data (1,825 daily steps),
+     * incorporating Market Regimes, LP Provider Sentiment Telemetry, and Cross-Asset Volatilities.
      */
     fun calibrate5YearRiskParityFramework(
         accountBalance: Double = 10000.0,
-        activeMarketRegime: String = "TRENDING"
+        activeMarketRegime: String = "TRENDING",
+        lpSentimentScore: Double = 0.0
     ): RiskParityFrameworkReport {
         // 1. Generate 5-year historical price return series for a diverse multi-asset / multi-strategy portfolio
         val historicalSeries = generate5YearHistoricalCalibrationData()
@@ -173,7 +221,14 @@ object RegimeAwareRiskParityEngine {
                 else -> 1.00
             }
 
-            regimeWeights[i] = rawRiskParityWeights[i] * regimeMultiplier
+            val lpMultiplier = when {
+                lpSentimentScore > 0.5 && series.assetClass == "CRYPTO" -> 1.0 + (lpSentimentScore * 0.08)
+                lpSentimentScore < -0.5 && series.assetClass == "CRYPTO" -> (1.0 + (lpSentimentScore * 0.12)).coerceAtLeast(0.35)
+                lpSentimentScore < -0.5 && (series.assetClass == "DEFENSIVE" || series.assetClass == "CASH") -> 1.0 + (abs(lpSentimentScore) * 0.18)
+                else -> 1.0
+            }
+
+            regimeWeights[i] = rawRiskParityWeights[i] * regimeMultiplier * lpMultiplier
         }
 
         // Normalize regime-adjusted weights
@@ -358,7 +413,9 @@ object RegimeAwareRiskParityEngine {
             Triple("ETHUSDT", "Mean Reversion", "CRYPTO"),
             Triple("SOLUSDT", "Volatility Expansion Breakout", "CRYPTO"),
             Triple("BNBUSDT", "Mean Reversion Grid", "CRYPTO"),
+            Triple("LTCUSDT", "Volatility Expansion Breakout", "CRYPTO"),
             Triple("AVAXUSDT", "Liquidity Sweep", "CRYPTO"),
+            Triple("QQQ", "Sector & Index ETF", "EQUITY"),
             Triple("USDCUSD", "Defensive Cash Yield", "DEFENSIVE")
         )
 
@@ -368,18 +425,20 @@ object RegimeAwareRiskParityEngine {
             val returns = DoubleArray(days)
             var baseTrend = when (strat) {
                 "Breakout Momentum" -> 0.00065
-                "Volatility Expansion Breakout" -> 0.00072
+                "Volatility Expansion Breakout" -> if (symbol.contains("LTC")) 0.00048 else 0.00072
                 "Mean Reversion" -> 0.00052
                 "Mean Reversion Grid" -> 0.00060
                 "Liquidity Sweep" -> 0.00058
+                "Sector & Index ETF" -> 0.00042
                 else -> 0.00012
             }
             val baseVol = when (strat) {
                 "Breakout Momentum" -> 0.022
-                "Volatility Expansion Breakout" -> 0.025
+                "Volatility Expansion Breakout" -> if (symbol.contains("LTC")) 0.017 else 0.025
                 "Mean Reversion" -> 0.016
                 "Mean Reversion Grid" -> 0.014
                 "Liquidity Sweep" -> 0.019
+                "Sector & Index ETF" -> 0.011
                 else -> 0.001
             }
 

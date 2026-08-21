@@ -57,7 +57,7 @@ import kotlinx.coroutines.launch
         CounterfactualEvaluationEntity::class,
         TradeReviewEntity::class
     ],
-    version = 29,
+    version = 30,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

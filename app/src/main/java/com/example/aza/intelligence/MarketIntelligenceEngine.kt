@@ -460,12 +460,13 @@ class MarketIntelligenceEngine(
     ): Double {
         val cleanRegime = regime.uppercase(Locale.US)
         
-        // 1. Base regime threshold
+        // 1. Base regime threshold (Impose higher threshold 0.85 on Mean Reversion in RANGING)
         val baseThreshold = when {
+            strategyName.contains("Mean Reversion", ignoreCase = true) && (cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING")) -> 0.85
             cleanRegime.contains("VOLATILE") || cleanRegime.contains("CRITICAL") || cleanRegime.contains("CHAOTIC") -> 0.82
-            cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || cleanRegime.contains("ACCUMULATION") || cleanRegime.contains("DISTRIBUTION") -> 0.78
-            cleanRegime.contains("STRONG_BULL") || cleanRegime.contains("STRONG_BEAR") || cleanRegime.contains("TRENDING") -> 0.72
-            else -> 0.75
+            cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || cleanRegime.contains("ACCUMULATION") || cleanRegime.contains("DISTRIBUTION") -> 0.80
+            cleanRegime.contains("STRONG_BULL") || cleanRegime.contains("STRONG_BEAR") || cleanRegime.contains("TRENDING") -> 0.74
+            else -> 0.76
         }
 
         // 2. Counterfactual adaptation offset from LuminaSelfAdaptationEngine
@@ -476,25 +477,25 @@ class MarketIntelligenceEngine(
         val distShiftReport = com.example.aza.strategy.LuminaSelfAdaptationEngine.ReturnDistributionShiftEngine.evaluateShift(recentReturnsR)
         val distShiftOffset = distShiftReport.thresholdOffset
 
-        return (baseThreshold + counterfactualOffset + distShiftOffset).coerceIn(0.65, 0.88)
+        return (baseThreshold + counterfactualOffset + distShiftOffset).coerceIn(0.70, 0.92)
     }
 
     fun isStrategyStrictlyCompatibleWithRegime(strategyName: String, regime: String): Boolean {
         val cleanRegime = regime.uppercase(Locale.US)
         return when (strategyName) {
             "Mean Reversion", "Mean Reversion Grid" -> {
-                // Hard Gate: Allowed in ranging, accumulation/distribution, low volatility, consolidation, cyclic
+                // Hard Gate: Allowed in ranging (with tight ADX < 18 filter), consolidation, or structural trend pullbacks
                 cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || 
                 cleanRegime.contains("TREND") || cleanRegime.contains("TRENDING") ||
                 cleanRegime == "ACCUMULATION" || cleanRegime == "DISTRIBUTION" || 
                 cleanRegime == "LOW_VOLATILITY" || cleanRegime == "CONSOLIDATION" || cleanRegime == "CYCLIC"
             }
-            "Breakout", "Volatility Expansion Breakout" -> {
+            "Breakout", "Volatility Expansion Breakout", "Breakout Momentum", "Trend Breakout" -> {
                 // Hard Gate: ONLY allowed in trending / volatile expansion regimes
                 cleanRegime.contains("TREND") || cleanRegime.contains("VOLATILE") || 
                 cleanRegime == "HIGH_VOLATILITY_TRENDING" || cleanRegime.startsWith("STRONG_")
             }
-            "Trend Following", "Breakout Momentum" -> {
+            "Trend Following", "EMA Cross Ribbon" -> {
                 // Hard Gate: ONLY allowed in confirmed trends
                 cleanRegime.contains("TREND") || cleanRegime.startsWith("STRONG_")
             }
@@ -609,15 +610,27 @@ class MarketIntelligenceEngine(
         // 1. Model Prediction (Base technical confluence probability)
         var rawModel = 0.52
         val cleanRegime = regime.uppercase(Locale.US)
+        val normSym = symbol.uppercase(Locale.US)
         when (strategyName) {
-            "Breakout", "Breakout Momentum", "Trend Breakout" -> {
-                if (cleanRegime.contains("TREND") || cleanRegime.contains("VOLATILE") || cleanRegime.startsWith("STRONG_")) rawModel += 0.18
+            "Breakout", "Breakout Momentum", "Trend Breakout", "Volatility Expansion Breakout" -> {
+                if (cleanRegime.contains("TREND") || cleanRegime.contains("VOLATILE") || cleanRegime.startsWith("STRONG_")) {
+                    rawModel += 0.22
+                    // High-conviction boost for ETH & SOL momentum leaders in volatile & trending environments
+                    if (normSym.contains("ETH") || normSym.contains("SOL")) {
+                        rawModel += 0.09
+                    }
+                }
                 if (trendScore > 1.2) rawModel += 0.10
                 if (volumeScore > 4.5) rawModel += 0.12
                 if (srScore > 0.8) rawModel += 0.08
             }
             "Mean Reversion", "Mean Reversion Grid" -> {
-                if (cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING") || cleanRegime == "ACCUMULATION" || cleanRegime == "DISTRIBUTION" || cleanRegime == "LOW_VOLATILITY" || cleanRegime == "CYCLIC" || cleanRegime == "CONSOLIDATION") rawModel += 0.20
+                if (cleanRegime.contains("RANGE") || cleanRegime.contains("RANGING")) {
+                    // Strict ranging gate: conservative baseline to prevent unconfirmed range chop losses
+                    rawModel += 0.08
+                } else if (cleanRegime.contains("TREND") || cleanRegime == "ACCUMULATION" || cleanRegime == "DISTRIBUTION" || cleanRegime == "LOW_VOLATILITY" || cleanRegime == "CYCLIC" || cleanRegime == "CONSOLIDATION") {
+                    rawModel += 0.18
+                }
                 if (momentumScore < -0.8) rawModel += 0.14
                 if (volatilityScore < 2.5) rawModel += 0.10
                 if (srScore > 0.5) rawModel += 0.06
@@ -1669,7 +1682,7 @@ class MarketIntelligenceEngine(
         val totalPortfolioValue = currentBalance + activeTotalPositionsValue
 
         val cryptoBetaPct = if (totalPortfolioValue > 0.0) (activeCryptoValue / totalPortfolioValue) * 100.0 else 0.0
-        val isCryptoBetaLimitExceeded = isCrypto && side.equals("BUY", ignoreCase = true) && cryptoBetaPct >= 80.0
+        val isCryptoBetaLimitExceeded = isCrypto && side.equals("BUY", ignoreCase = true) && cryptoBetaPct >= 60.0
 
         // Volatility Spike Guard: Compare current 14-day volatility vs baseline
         val currentVol = estimator.currentVolatility
@@ -1703,7 +1716,7 @@ class MarketIntelligenceEngine(
 
         val summarySb = StringBuilder()
         if (isCryptoBetaLimitExceeded) {
-            summarySb.append("Don't open another long because the portfolio is already ${String.format(Locale.US, "%.1f", cryptoBetaPct)}% crypto beta (80% Limit). ")
+            summarySb.append("Don't open another long because the portfolio is already ${String.format(Locale.US, "%.1f", cryptoBetaPct)}% crypto beta (60% Limit). ")
         }
         if (isVolatilitySpikeActive) {
             summarySb.append("Reduce exposure because overall portfolio volatility has doubled (${String.format(Locale.US, "%.1f", volRatio)}x baseline). ")
@@ -1819,10 +1832,11 @@ class MarketIntelligenceEngine(
 
         val rawExpectancies = mutableMapOf<String, Double>()
         val defaultList = listOf(
-            "Liquidity Sweep" to 0.65,
-            "Trend Following" to 0.82,
-            "Mean Reversion" to 0.48,
-            "Breakout" to -0.12
+            "Breakout Momentum" to 1.15,
+            "Volatility Expansion Breakout" to 1.08,
+            "Trend Following" to 0.72,
+            "Liquidity Sweep" to 0.55,
+            "Mean Reversion" to 0.08
         )
 
         defaultList.forEach { (name, defaultR) ->

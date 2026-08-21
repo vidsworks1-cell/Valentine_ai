@@ -345,8 +345,8 @@ object MtfEvaluator {
         val htfMatching = validHtfStates.isNotEmpty() && validHtfStates.all { it.trendBias.equals(expectedBias, ignoreCase = true) }
 
         val htfAlignment = when {
-            strongHtfOpposing -> "STRONG_OPPOSING"
-            moderateHtfOpposing -> "MILD_OPPOSING"
+            strongHtfOpposing -> "OPPOSING"
+            moderateHtfOpposing -> "OPPOSING"
             htfMatching -> "ALIGNED"
             else -> "NEUTRAL"
         }
@@ -362,7 +362,7 @@ object MtfEvaluator {
                 mtfState.trendBias.equals(expectedBias, ignoreCase = true) &&
                 ltfState.confidence >= 0.70 && mtfState.confidence >= 0.70
 
-        val isEarlyBreakoutLead = ltfMtfLeadingBreakout && (htfAlignment == "NEUTRAL" || htfAlignment == "MILD_OPPOSING")
+        val isEarlyBreakoutLead = ltfMtfLeadingBreakout && (htfAlignment == "NEUTRAL" || (moderateHtfOpposing && !strongHtfOpposing))
 
         var conflictLevel = ((1.0 - (weightedScore / 100.0)) * 100.0).coerceIn(0.0, 100.0)
         if (isHtfConflict) {
