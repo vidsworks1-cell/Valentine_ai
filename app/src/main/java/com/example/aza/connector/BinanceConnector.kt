@@ -3,6 +3,7 @@ package com.example.aza.connector
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -29,6 +30,12 @@ class ImpossibleCloseOrderException(
     message: String
 ) : BinanceApiException(errorCode, message, false)
 
+class ExecutionGateBlockedException(
+    val reason: String,
+    val suggestedAction: String,
+    override val message: String = "Execution Gate Blocked: $reason"
+) : IOException(message)
+
 object BinanceConnector {
     private const val TAG = "BinanceConnector"
     private const val BASE_URL = "https://api.binance.com"
@@ -44,6 +51,21 @@ object BinanceConnector {
         .writeTimeout(10, TimeUnit.SECONDS)
         .certificatePinner(com.example.aza.security.SslPinningUtility.certificatePinner)
         .build()
+
+    // Operating Mode & Execution Lock
+    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.ANALYSIS_ONLY)
+    val operatingMode: StateFlow<com.example.aza.strategy.LuminaOperatingMode> = _operatingMode.asStateFlow()
+
+    private val _isExecutionUnlocked = MutableStateFlow(false)
+    val isExecutionUnlocked: StateFlow<Boolean> = _isExecutionUnlocked.asStateFlow()
+
+    fun setOperatingMode(mode: com.example.aza.strategy.LuminaOperatingMode) {
+        _operatingMode.value = mode
+    }
+
+    fun setExecutionUnlocked(unlocked: Boolean) {
+        _isExecutionUnlocked.value = unlocked
+    }
 
     // Connection Health Telemetry & Status StateFlows
     private val _isAuthenticated = MutableStateFlow(false)
@@ -509,6 +531,20 @@ object BinanceConnector {
     ): Result<BinanceOpenOrder> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank() || apiSecret.isBlank()) {
             return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
+        }
+        if (_operatingMode.value == com.example.aza.strategy.LuminaOperatingMode.ANALYSIS_ONLY) {
+            val gateEx = ExecutionGateBlockedException(
+                reason = "Lumina is running in ANALYSIS_ONLY mode.",
+                suggestedAction = "Switch to Live Approval Mode to stage actionable trades."
+            )
+            return@withContext Result.failure(gateEx)
+        }
+        if (!_isExecutionUnlocked.value) {
+            val gateEx = ExecutionGateBlockedException(
+                reason = "Master Execution Lock is ENGAGED (execution_enabled = false).",
+                suggestedAction = "Unlock the Master Execution Switch in the Trading Screen header."
+            )
+            return@withContext Result.failure(gateEx)
         }
         if (!_isOrderPlacementEnabled.value) {
             return@withContext Result.failure(IllegalStateException("Order placement is disabled. Safety lock is active."))

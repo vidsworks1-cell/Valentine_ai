@@ -2110,6 +2110,11 @@ fun PositionManagerSection(
         contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // 0. Master Execution Gate & Mode Selector
+        item {
+            ExecutionGateHeaderCard(viewModel = viewModel)
+        }
+
         // 1. Portfolio Health Summary Dashboard Card
         item {
             Card(

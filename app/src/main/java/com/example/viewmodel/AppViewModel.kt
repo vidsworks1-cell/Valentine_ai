@@ -193,6 +193,15 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _isPositionSyncRunning = MutableStateFlow(false)
     val isPositionSyncRunning = _isPositionSyncRunning.asStateFlow()
 
+    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.ANALYSIS_ONLY)
+    val operatingMode = _operatingMode.asStateFlow()
+
+    private val _isExecutionUnlocked = MutableStateFlow(false)
+    val isExecutionUnlocked = _isExecutionUnlocked.asStateFlow()
+
+    private val _pendingApprovalQueue = MutableStateFlow<List<com.example.aza.strategy.PendingApprovalTrade>>(emptyList())
+    val pendingApprovalQueue = _pendingApprovalQueue.asStateFlow()
+
     private val _institutionalRiskStatus = MutableStateFlow<com.example.data.api.InstitutionalRiskStatusResponse?>(null)
     val institutionalRiskStatus = _institutionalRiskStatus.asStateFlow()
 
@@ -800,6 +809,236 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 _isPositionSyncRunning.value = false
             }
         }
+    }
+
+    // ==========================================
+    // TWO-TIER SAFETY GATE & PENDING APPROVAL QUEUE
+    // ==========================================
+
+    fun setOperatingMode(mode: com.example.aza.strategy.LuminaOperatingMode) {
+        _operatingMode.value = mode
+        com.example.aza.connector.BinanceConnector.setOperatingMode(mode)
+        addThought("🛡️ OPERATING MODE UPDATED: Set to ${mode.name}. ${mode.description}")
+        onAppEventOccurred(
+            "OPERATING_MODE_CHANGED",
+            "Operating Mode shifted to **${mode.displayName}**. Safety checks and execution authority re-configured."
+        )
+    }
+
+    fun setExecutionUnlocked(unlocked: Boolean) {
+        _isExecutionUnlocked.value = unlocked
+        com.example.aza.connector.BinanceConnector.setExecutionUnlocked(unlocked)
+        if (unlocked) {
+            addThought("⚠️ MASTER EXECUTION UNLOCKED (execution_enabled = true). Live orders will be authorized if operating mode permits.")
+            onAppEventOccurred("EXECUTION_UNLOCKED", "Master Execution Lock was **UNLOCKED** by operator.")
+        } else {
+            addThought("🔒 MASTER EXECUTION LOCKED (execution_enabled = false). All Binance order dispatches will be stopped at the gate.")
+            onAppEventOccurred("EXECUTION_LOCKED", "Master Execution Lock was **ENGAGED**. All order routing halted.")
+        }
+    }
+
+    /**
+     * Enqueues a trade into the Pending Approval Queue when in LIVE_APPROVAL mode,
+     * or logs a counterfactual missed opportunity when in ANALYSIS_ONLY mode.
+     */
+    fun handleNewTradeProposal(
+        symbol: String,
+        side: String,
+        entryPrice: Double,
+        targetPositionSizeUsd: Double,
+        stopLoss: Double,
+        takeProfit: Double,
+        confidenceScore: Double,
+        strategyName: String,
+        rationale: String
+    ) {
+        val qty = if (entryPrice > 0.0) targetPositionSizeUsd / entryPrice else 0.0
+        val proposal = com.example.aza.strategy.PendingApprovalTrade(
+            symbol = symbol,
+            side = side,
+            entryPrice = entryPrice,
+            targetPositionSizeUsd = targetPositionSizeUsd,
+            calculatedQuantity = qty,
+            stopLoss = stopLoss,
+            takeProfit = takeProfit,
+            confidenceScore = confidenceScore,
+            strategyName = strategyName,
+            rationale = rationale,
+            expiresAt = System.currentTimeMillis() + 120_000L // 2-minute timeout
+        )
+
+        when (_operatingMode.value) {
+            com.example.aza.strategy.LuminaOperatingMode.ANALYSIS_ONLY -> {
+                addThought("🎯 SIGNAL GENERATED: ${proposal.symbol} ${proposal.side} @ $$entryPrice (Confidence: ${String.format(Locale.US, "%.1f", confidenceScore * 100)}%). Execution skipped: ANALYSIS_ONLY mode active. Recorded to opportunity ledger.")
+            }
+            com.example.aza.strategy.LuminaOperatingMode.LIVE_APPROVAL -> {
+                _pendingApprovalQueue.value = listOf(proposal) + _pendingApprovalQueue.value.take(19)
+                addThought("⏳ PENDING APPROVAL # ${proposal.proposalNumber}: ${proposal.symbol} ${proposal.side} @ $$entryPrice. WAITING FOR OPERATOR APPROVAL (Expires in 2 mins).")
+                onAppEventOccurred(
+                    "TRADE_PENDING_APPROVAL",
+                    "Trade #${proposal.proposalNumber} **${proposal.symbol} ${proposal.side}** is awaiting operator approval in queue."
+                )
+            }
+            com.example.aza.strategy.LuminaOperatingMode.FULL_AUTONOMOUS_LIVE -> {
+                if (_isExecutionUnlocked.value) {
+                    executeApprovedTrade(proposal, isExplicitOperatorAction = false)
+                } else {
+                    _pendingApprovalQueue.value = listOf(proposal) + _pendingApprovalQueue.value.take(19)
+                    addThought("⏳ Execution Lock is ENGAGED. Queued trade #${proposal.proposalNumber} for operator approval.")
+                }
+            }
+        }
+    }
+
+    /**
+     * Explicit operator approval action (from UI or chat command).
+     */
+    fun approveAndExecutePendingTrade(tradeId: String) {
+        val trade = _pendingApprovalQueue.value.find { it.id == tradeId } ?: return
+        executeApprovedTrade(trade, isExplicitOperatorAction = true)
+    }
+
+    fun rejectPendingTrade(tradeId: String, reason: String = "Operator dismissed") {
+        _pendingApprovalQueue.value = _pendingApprovalQueue.value.map {
+            if (it.id == tradeId) it.copy(status = com.example.aza.strategy.PendingTradeStatus.REJECTED_BY_OPERATOR, executionLog = reason)
+            else it
+        }
+        addThought("🚫 PENDING TRADE DISMISSED: Operator rejected trade proposal $tradeId.")
+    }
+
+    private fun executeApprovedTrade(
+        trade: com.example.aza.strategy.PendingApprovalTrade,
+        isExplicitOperatorAction: Boolean
+    ) {
+        viewModelScope.launch {
+            // 1. Fetch live market price
+            val currentPriceRes = com.example.aza.connector.BinanceConnector.fetchMarketPrice(trade.symbol)
+            val currentPrice = if (currentPriceRes.isSuccess) currentPriceRes.getOrThrow() else trade.entryPrice
+
+            // 2. Evaluate Multi-Tier Safety Execution Gate
+            val gateDecision = com.example.aza.strategy.ExecutionGateManager.evaluateExecutionGate(
+                operatingMode = _operatingMode.value,
+                executionUnlocked = _isExecutionUnlocked.value,
+                pendingTrade = trade,
+                currentMarketPrice = currentPrice,
+                isOperatorExplicitAction = isExplicitOperatorAction
+            )
+
+            when (gateDecision) {
+                is com.example.aza.strategy.ExecutionGateDecision.Blocked -> {
+                    val failedStatus = when {
+                        trade.isExpired -> com.example.aza.strategy.PendingTradeStatus.EXPIRED_TIMEOUT
+                        gateDecision.reason.contains("Price moved", ignoreCase = true) -> com.example.aza.strategy.PendingTradeStatus.FAILED_PRICE_TOLERANCE
+                        else -> com.example.aza.strategy.PendingTradeStatus.REJECTED_BY_OPERATOR
+                    }
+                    _pendingApprovalQueue.value = _pendingApprovalQueue.value.map {
+                        if (it.id == trade.id) it.copy(status = failedStatus, executionLog = gateDecision.reason)
+                        else it
+                    }
+                    addThought("⛔ EXECUTION GATE BLOCKED: ${gateDecision.reason} ${gateDecision.suggestedAction}")
+                    onAppEventOccurred("TRADE_EXECUTION_BLOCKED", "Execution Gate blocked trade #${trade.proposalNumber}: ${gateDecision.reason}")
+                    return@launch
+                }
+                is com.example.aza.strategy.ExecutionGateDecision.Allowed -> {
+                    // All checks passed! Proceed with order transmission
+                    addThought("⚡ EXECUTION GATE CLEARED: Dispatching signed order to Binance Spot API for ${trade.symbol} ${trade.side}...")
+                    _pendingApprovalQueue.value = _pendingApprovalQueue.value.map {
+                        if (it.id == trade.id) it.copy(status = com.example.aza.strategy.PendingTradeStatus.APPROVED_EXECUTING)
+                        else it
+                    }
+                }
+            }
+
+            // 3. Dispatch to BinanceConnector
+            try {
+                val orderResult = com.example.aza.connector.BinanceConnector.placeOrder(
+                    symbol = trade.symbol,
+                    side = trade.side,
+                    type = "MARKET",
+                    quantity = trade.calculatedQuantity
+                )
+
+                if (orderResult.isSuccess) {
+                    val resp = orderResult.getOrThrow()
+                    _pendingApprovalQueue.value = _pendingApprovalQueue.value.map {
+                        if (it.id == trade.id) it.copy(
+                            status = com.example.aza.strategy.PendingTradeStatus.EXECUTED_SUCCESS,
+                            executionLog = "Filled Order #${resp.orderId} on Binance Spot @ $currentPrice"
+                        ) else it
+                    }
+
+                    // Record new open position locally
+                    val newPos = com.example.data.database.BinancePositionEntity(
+                        symbol = trade.symbol,
+                        amountOwned = trade.calculatedQuantity,
+                        entryPrice = currentPrice,
+                        currentPrice = currentPrice,
+                        status = "OPEN",
+                        openedAt = System.currentTimeMillis(),
+                        stopLossPrice = trade.stopLoss,
+                        takeProfitPrice = trade.takeProfit,
+                        proposalId = trade.proposalNumber
+                    )
+                    repository.insertPosition(newPos)
+
+                    addThought("✅ BINANCE ORDER FILLED: Successfully executed ${trade.symbol} ${trade.side} (Order #${resp.orderId}). Tracked in live monitoring.")
+                    onAppEventOccurred(
+                        "ORDER_EXECUTED_LIVE",
+                        "Live Order **#${resp.orderId}** executed on Binance for **${trade.symbol}** (${trade.side} ${trade.calculatedQuantity} @ $$currentPrice)."
+                    )
+                } else {
+                    val ex = orderResult.exceptionOrNull()
+                    val errLog = ex?.message ?: "Unknown exchange error"
+                    _pendingApprovalQueue.value = _pendingApprovalQueue.value.map {
+                        if (it.id == trade.id) it.copy(status = com.example.aza.strategy.PendingTradeStatus.FAILED_BALANCE_CHECK, executionLog = errLog)
+                        else it
+                    }
+                    addThought("❌ BINANCE ORDER FAILED: $errLog")
+                }
+            } catch (e: Exception) {
+                _pendingApprovalQueue.value = _pendingApprovalQueue.value.map {
+                    if (it.id == trade.id) it.copy(status = com.example.aza.strategy.PendingTradeStatus.FAILED_BALANCE_CHECK, executionLog = e.message)
+                    else it
+                }
+                addThought("❌ ORDER DISPATCH EXCEPTION: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Periodic task to prune expired pending trade proposals.
+     */
+    fun sweepExpiredPendingTrades() {
+        val now = System.currentTimeMillis()
+        _pendingApprovalQueue.value = _pendingApprovalQueue.value.map { trade ->
+            if (trade.status == com.example.aza.strategy.PendingTradeStatus.WAITING_FOR_OPERATOR_APPROVAL && now >= trade.expiresAt) {
+                trade.copy(
+                    status = com.example.aza.strategy.PendingTradeStatus.EXPIRED_TIMEOUT,
+                    executionLog = "Trade expired after 2-minute validity timeout."
+                )
+            } else trade
+        }
+    }
+
+    /**
+     * Parses chat commands for manual execution approval, e.g. "Execute trade 42" or "Execute ETHUSDT BUY"
+     */
+    fun handleChatTradeApprovalCommand(command: String): Boolean {
+        val clean = command.trim().uppercase()
+        if (!clean.startsWith("EXECUTE")) return false
+
+        val queue = _pendingApprovalQueue.value.filter { it.status == com.example.aza.strategy.PendingTradeStatus.WAITING_FOR_OPERATOR_APPROVAL }
+        val targetTrade = queue.find { trade ->
+            clean.contains(trade.proposalNumber.toString()) ||
+            clean.contains(trade.id.uppercase()) ||
+            (clean.contains(trade.symbol) && clean.contains(trade.side))
+        }
+
+        if (targetTrade != null) {
+            approveAndExecutePendingTrade(targetTrade.id)
+            return true
+        }
+        return false
     }
 
     fun fetchLayeredVpsStatus() {
@@ -2697,6 +2936,9 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
                             // Automatically synchronize internal positions with Binance Spot holdings
                             autoSynchronizePositionsWithBinance("BINANCE_SYNC_LOOP")
+
+                            // Sweep expired pending trade proposals in Live Approval queue
+                            sweepExpiredPendingTrades()
                         }
                     }
                 } catch (e: Exception) {
@@ -3240,7 +3482,10 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 "NVDA" to (945.5 to "NVIDIA Corp.")
             )
 
-            if (buyMatch != null) {
+            // Check for explicit Execution Gate Trade Approval command (e.g. "Execute trade 42" or "Execute ETHUSDT BUY")
+            if (handleChatTradeApprovalCommand(text)) {
+                actionExecutedNotice = "⚡ **Execution Command Authorized:** Evaluating trade proposal against safety gate (slippage tolerance, expiry, balance, execution lock)..."
+            } else if (buyMatch != null) {
                 val amount = buyMatch.groupValues[1].toDoubleOrNull() ?: 0.0
                 val symbol = buyMatch.groupValues[2].uppercase()
                 val priceInfo = assetPrices[symbol]
