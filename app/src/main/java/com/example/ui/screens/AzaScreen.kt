@@ -80,10 +80,10 @@ fun AzaScreen(
     }
 
     val quickPrompts = listOf(
-        "Execute trade 42",
+        "Propose trade",
+        "Execute 42",
+        "Reject 42",
         "Buy 0.05 BTC",
-        "Sell 1 AAPL",
-        "Add script about Jetpack Compose on YouTube",
         "Brief portfolio status"
     )
 

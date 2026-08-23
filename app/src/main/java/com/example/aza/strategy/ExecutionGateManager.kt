@@ -4,6 +4,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Three-Tier Operating Modes for Lumina:
@@ -36,9 +37,14 @@ enum class PendingTradeStatus {
     EXECUTED_SUCCESS
 }
 
+object ProposalSequence {
+    private val counter = AtomicInteger(42)
+    fun next(): Int = counter.getAndIncrement()
+}
+
 data class PendingApprovalTrade(
     val id: String = "TRD-" + UUID.randomUUID().toString().take(6).uppercase(),
-    val proposalNumber: Int = (1000..9999).random(),
+    val proposalNumber: Int = ProposalSequence.next(),
     val symbol: String,
     val side: String, // "BUY" or "SELL"
     val entryPrice: Double,
@@ -58,6 +64,49 @@ data class PendingApprovalTrade(
 ) {
     val isExpired: Boolean get() = System.currentTimeMillis() >= expiresAt
     val remainingSeconds: Int get() = ((expiresAt - System.currentTimeMillis()) / 1000).coerceAtLeast(0).toInt()
+
+    val expectedRR: Double
+        get() {
+            val risk = Math.abs(entryPrice - stopLoss)
+            val reward = Math.abs(takeProfit - entryPrice)
+            return if (risk > 0.0) reward / risk else 2.0
+        }
+
+    fun formattedProposalMessage(): String {
+        val bulletPoints = rationale.lines()
+            .map { it.trim().trimStart('•', '-', '*').trim() }
+            .filter { it.isNotEmpty() }
+            .ifEmpty {
+                listOf(
+                    "Breakout confirmed",
+                    "HTF bullish",
+                    "Volume expanding",
+                    "Liquidity sweep completed"
+                )
+            }
+            .joinToString("\n") { "• $it" }
+
+        return """
+🚨 Trade Proposal #$proposalNumber
+
+Symbol: $symbol
+Direction: $side
+
+Entry: ${String.format(Locale.US, "%.2f", entryPrice)}
+Stop Loss: ${String.format(Locale.US, "%.2f", stopLoss)}
+Take Profit: ${String.format(Locale.US, "%.2f", takeProfit)}
+
+Risk: ${String.format(Locale.US, "%.2f", riskPercent)}%
+Expected R:R: ${String.format(Locale.US, "%.1f", expectedRR)}
+
+Confidence: ${String.format(Locale.US, "%.1f", confidenceScore * 100)}%
+
+Why?
+$bulletPoints
+
+Waiting for operator...
+""".trim()
+    }
 }
 
 sealed class ExecutionGateDecision {

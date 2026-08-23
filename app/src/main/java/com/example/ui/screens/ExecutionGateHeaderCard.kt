@@ -238,31 +238,44 @@ fun ExecutionGateHeaderCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("Entry: $${String.format(Locale.US, "%,.2f", trade.entryPrice)}", fontSize = 10.5.sp)
-                                Text("Size: $${String.format(Locale.US, "%,.0f", trade.targetPositionSizeUsd)}", fontSize = 10.5.sp)
-                                Text("Conf: ${String.format(Locale.US, "%.0f%%", trade.confidenceScore * 100)}", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                Text("Entry: $${String.format(Locale.US, "%,.2f", trade.entryPrice)}", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold)
+                                Text("SL: $${String.format(Locale.US, "%,.2f", trade.stopLoss)}", fontSize = 10.5.sp, color = Color(0xFFC62828))
+                                Text("TP: $${String.format(Locale.US, "%,.2f", trade.takeProfit)}", fontSize = 10.5.sp, color = Color(0xFF2E7D32))
+                            }
+
+                            Spacer(modifier = Modifier.height(3.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Risk: ${String.format(Locale.US, "%.2f", trade.riskPercent)}%", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("R:R: ${String.format(Locale.US, "%.1f", trade.expectedRR)}", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("Conf: ${String.format(Locale.US, "%.1f%%", trade.confidenceScore * 100)}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Action buttons: Approve vs Dismiss
+                            // Action buttons: Reject vs Execute
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedButton(
-                                    onClick = { viewModel.rejectPendingTrade(trade.id, "Dismissed by operator") },
+                                    onClick = { viewModel.rejectPendingTrade(trade.id, "Rejected #${trade.proposalNumber} by operator") },
                                     modifier = Modifier.weight(1f).height(32.dp),
                                     contentPadding = PaddingValues(0.dp),
                                     shape = RoundedCornerShape(6.dp)
                                 ) {
-                                    Text("Dismiss", fontSize = 11.sp)
+                                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Reject ${trade.proposalNumber}", fontSize = 10.5.sp)
                                 }
 
                                 Button(
                                     onClick = {
                                         viewModel.approveAndExecutePendingTrade(trade.id)
-                                        Toast.makeText(context, "Approving & Validating trade #${trade.proposalNumber}...", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Executing proposal #${trade.proposalNumber}...", Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.weight(1.4f).height(32.dp),
                                     colors = ButtonDefaults.buttonColors(
@@ -273,7 +286,7 @@ fun ExecutionGateHeaderCard(
                                 ) {
                                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Approve & Execute", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("Execute ${trade.proposalNumber}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

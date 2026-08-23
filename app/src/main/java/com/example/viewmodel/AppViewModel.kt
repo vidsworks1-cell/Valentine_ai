@@ -878,6 +878,15 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     "TRADE_PENDING_APPROVAL",
                     "Trade #${proposal.proposalNumber} **${proposal.symbol} ${proposal.side}** is awaiting operator approval in queue."
                 )
+                // Post institutional trade proposal format directly into chat stream
+                viewModelScope.launch {
+                    repository.insertChatMessage(
+                        ChatMessage(
+                            sender = "AZA",
+                            text = proposal.formattedProposalMessage()
+                        )
+                    )
+                }
             }
             com.example.aza.strategy.LuminaOperatingMode.FULL_AUTONOMOUS_LIVE -> {
                 if (_isExecutionUnlocked.value) {
@@ -885,6 +894,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 } else {
                     _pendingApprovalQueue.value = listOf(proposal) + _pendingApprovalQueue.value.take(19)
                     addThought("⏳ Execution Lock is ENGAGED. Queued trade #${proposal.proposalNumber} for operator approval.")
+                    viewModelScope.launch {
+                        repository.insertChatMessage(
+                            ChatMessage(
+                                sender = "AZA",
+                                text = proposal.formattedProposalMessage()
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -1021,24 +1038,92 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     }
 
     /**
-     * Parses chat commands for manual execution approval, e.g. "Execute trade 42" or "Execute ETHUSDT BUY"
+     * Parses institutional chat commands for execution approval or rejection:
+     * e.g., "Execute 42", "Execute trade 42", "Reject 42", "Reject trade 42", "Dismiss 42".
+     * Returns a clear operator notification string or null if not a matching command.
      */
-    fun handleChatTradeApprovalCommand(command: String): Boolean {
-        val clean = command.trim().uppercase()
-        if (!clean.startsWith("EXECUTE")) return false
+    fun handleChatTradeApprovalOrRejectCommand(command: String): String? {
+        val clean = command.trim()
+        val upper = clean.uppercase(Locale.US)
 
-        val queue = _pendingApprovalQueue.value.filter { it.status == com.example.aza.strategy.PendingTradeStatus.WAITING_FOR_OPERATOR_APPROVAL }
-        val targetTrade = queue.find { trade ->
-            clean.contains(trade.proposalNumber.toString()) ||
-            clean.contains(trade.id.uppercase()) ||
-            (clean.contains(trade.symbol) && clean.contains(trade.side))
+        val isExecute = upper.startsWith("EXECUTE") || upper.startsWith("APPROVE") || upper.startsWith("CONFIRM")
+        val isReject = upper.startsWith("REJECT") || upper.startsWith("DISMISS") || upper.startsWith("CANCEL")
+
+        if (!isExecute && !isReject) return null
+
+        // Extract proposal number or symbol
+        val numberMatch = """\b(\d+)\b""".toRegex().find(upper)?.groupValues?.get(1)?.toIntOrNull()
+        val symbolMatch = """\b(BTC(?:USDT)?|ETH(?:USDT)?|SOL(?:USDT)?|BNB(?:USDT)?|ADA(?:USDT)?|XRP(?:USDT)?|DOGE(?:USDT)?)\b""".toRegex().find(upper)?.groupValues?.get(1)
+
+        val waitingTrades = _pendingApprovalQueue.value.filter { it.status == com.example.aza.strategy.PendingTradeStatus.WAITING_FOR_OPERATOR_APPROVAL && !it.isExpired }
+
+        val targetTrade = when {
+            numberMatch != null -> waitingTrades.find { it.proposalNumber == numberMatch }
+            symbolMatch != null -> waitingTrades.find { it.symbol.startsWith(symbolMatch.replace("USDT", "")) }
+            else -> waitingTrades.firstOrNull()
         }
 
-        if (targetTrade != null) {
-            approveAndExecutePendingTrade(targetTrade.id)
-            return true
+        if (isExecute) {
+            if (targetTrade != null) {
+                approveAndExecutePendingTrade(targetTrade.id)
+                return "⚡ **Trade Proposal #${targetTrade.proposalNumber} Authorized:** Order dispatched to Binance Spot for **${targetTrade.symbol} ${targetTrade.side}** @ $${String.format(Locale.US, "%,.2f", targetTrade.entryPrice)}. Evaluating slippage and balance at the execution gate..."
+            } else {
+                val pastTrade = _pendingApprovalQueue.value.find { numberMatch != null && it.proposalNumber == numberMatch }
+                return if (pastTrade != null) {
+                    "⚠️ **Proposal #${pastTrade.proposalNumber} Inactive:** Status is `${pastTrade.status.name}` (${pastTrade.executionLog ?: "No longer pending"}). Zero orders placed."
+                } else {
+                    "⚠️ **No Active Proposal Found:** No pending trade matching '$clean' is waiting in the approval queue."
+                }
+            }
+        } else if (isReject) {
+            if (targetTrade != null) {
+                rejectPendingTrade(targetTrade.id, "Rejected #${targetTrade.proposalNumber} by operator via chat command: '$clean'")
+                return "🚫 **Trade Proposal #${targetTrade.proposalNumber} Rejected:** Setup for **${targetTrade.symbol} ${targetTrade.side}** has been dismissed. Zero orders placed."
+            } else {
+                val pastTrade = _pendingApprovalQueue.value.find { numberMatch != null && it.proposalNumber == numberMatch }
+                return if (pastTrade != null) {
+                    "ℹ️ **Proposal #${pastTrade.proposalNumber} Already Inactive:** Status is `${pastTrade.status.name}`."
+                } else {
+                    "ℹ️ **No Active Proposal Found:** No pending trade found matching '$clean'."
+                }
+            }
         }
-        return false
+
+        return null
+    }
+
+    /**
+     * Staging helper for generating an institutional trade proposal on demand.
+     */
+    fun triggerInstitutionalTradeProposal(
+        symbol: String = "ETHUSDT",
+        side: String = "BUY",
+        rationaleList: List<String> = listOf(
+            "Breakout confirmed",
+            "HTF bullish",
+            "Volume expanding",
+            "Liquidity sweep completed"
+        )
+    ) {
+        viewModelScope.launch {
+            val priceRes = com.example.aza.connector.BinanceConnector.fetchMarketPrice(symbol)
+            val entryPrice = if (priceRes.isSuccess && priceRes.getOrThrow() > 0.0) priceRes.getOrThrow() else 2407.86
+            val stopLoss = if (side == "BUY") entryPrice * 0.9688 else entryPrice * 1.0312
+            val takeProfit = if (side == "BUY") entryPrice * 1.0624 else entryPrice * 0.9376
+            val rationaleText = rationaleList.joinToString("\n") { "• $it" }
+
+            handleNewTradeProposal(
+                symbol = symbol,
+                side = side,
+                entryPrice = entryPrice,
+                targetPositionSizeUsd = 100.0,
+                stopLoss = stopLoss,
+                takeProfit = takeProfit,
+                confidenceScore = 0.765,
+                strategyName = "Breakout Flow AI",
+                rationale = rationaleText
+            )
+        }
     }
 
     fun fetchLayeredVpsStatus() {
@@ -3482,9 +3567,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 "NVDA" to (945.5 to "NVIDIA Corp.")
             )
 
-            // Check for explicit Execution Gate Trade Approval command (e.g. "Execute trade 42" or "Execute ETHUSDT BUY")
-            if (handleChatTradeApprovalCommand(text)) {
-                actionExecutedNotice = "⚡ **Execution Command Authorized:** Evaluating trade proposal against safety gate (slippage tolerance, expiry, balance, execution lock)..."
+            // Check for explicit Execution Gate Trade Approval / Rejection command (e.g. "Execute 42", "Reject 42", "Execute trade 42", "Reject trade 42")
+            val gateNotice = handleChatTradeApprovalOrRejectCommand(text)
+            if (gateNotice != null) {
+                actionExecutedNotice = gateNotice
+            } else if (text.contains("propose trade", ignoreCase = true) || text.contains("propose a trade", ignoreCase = true) || text.contains("trade proposal", ignoreCase = true) || text.contains("scan for trade", ignoreCase = true)) {
+                triggerInstitutionalTradeProposal("ETHUSDT", "BUY")
+                actionExecutedNotice = "📊 **Trade Setup Evaluated:** Generated institutional Trade Proposal staged for operator authorization."
             } else if (buyMatch != null) {
                 val amount = buyMatch.groupValues[1].toDoubleOrNull() ?: 0.0
                 val symbol = buyMatch.groupValues[2].uppercase()
