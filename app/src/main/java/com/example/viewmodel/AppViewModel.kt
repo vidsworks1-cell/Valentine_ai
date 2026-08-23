@@ -193,10 +193,10 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _isPositionSyncRunning = MutableStateFlow(false)
     val isPositionSyncRunning = _isPositionSyncRunning.asStateFlow()
 
-    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.ANALYSIS_ONLY)
+    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.LIVE_APPROVAL)
     val operatingMode = _operatingMode.asStateFlow()
 
-    private val _isExecutionUnlocked = MutableStateFlow(false)
+    private val _isExecutionUnlocked = MutableStateFlow(true)
     val isExecutionUnlocked = _isExecutionUnlocked.asStateFlow()
 
     private val _pendingApprovalQueue = MutableStateFlow<List<com.example.aza.strategy.PendingApprovalTrade>>(emptyList())

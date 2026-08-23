@@ -52,11 +52,11 @@ object BinanceConnector {
         .certificatePinner(com.example.aza.security.SslPinningUtility.certificatePinner)
         .build()
 
-    // Operating Mode & Execution Lock
-    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.ANALYSIS_ONLY)
+    // Operating Mode & Execution Lock (Disengaged hard lock: Unlocked and set to LIVE_APPROVAL by default)
+    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.LIVE_APPROVAL)
     val operatingMode: StateFlow<com.example.aza.strategy.LuminaOperatingMode> = _operatingMode.asStateFlow()
 
-    private val _isExecutionUnlocked = MutableStateFlow(false)
+    private val _isExecutionUnlocked = MutableStateFlow(true)
     val isExecutionUnlocked: StateFlow<Boolean> = _isExecutionUnlocked.asStateFlow()
 
     fun setOperatingMode(mode: com.example.aza.strategy.LuminaOperatingMode) {
