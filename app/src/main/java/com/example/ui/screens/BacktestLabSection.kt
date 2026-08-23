@@ -109,11 +109,14 @@ fun BacktestLabSection(
         )
     }
 
-    val availableMarkets = listOf("BTC", "ETH", "AAPL", "NVDA")
+    val availableMarkets = listOf("BTC", "ETH", "SOL", "BNB", "AAPL", "NVDA")
     val availableRegimes = listOf("TREND", "RANGING", "HIGH_VOLATILITY", "FLASH_CRASH", "REVERSAL_SHOCK")
     val candleCounts = listOf(100, 300, 500, 1000)
 
-    var activeSubTab by remember { mutableStateOf(0) } // 0: Engine Controls & Results, 1: 6-Agent Attribution, 2: Multi-Strategy Matrix & Correlation
+    var activeSubTab by remember { mutableStateOf(0) }
+    var showRoomLogsDialog by remember { mutableStateOf(false) }
+    var selectedReportForDialog by remember { mutableStateOf<StrategyBacktestReport?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // Compute sample asset return correlation matrix for UI visualizer
     val correlationResult = remember {
@@ -505,13 +508,36 @@ fun BacktestLabSection(
 
                             Spacer(modifier = Modifier.height(14.dp))
 
-                            // Full Markdown Report Details Box
-                            Text(
-                                text = "DETAILED REPORT & MONTE CARLO AUDIT",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            // Full Markdown Report Details Box with Copy Button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "DETAILED REPORT & MONTE CARLO AUDIT",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+
+                                Button(
+                                    onClick = {
+                                        BacktestReportExporter.copyToClipboard(
+                                            context,
+                                            "Backtest Report",
+                                            BacktestReportExporter.formatSingleBacktest(report)
+                                        )
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Copy Report", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(6.dp))
 
@@ -846,14 +872,95 @@ fun BacktestLabSection(
                                 )
                             }
 
-                            Button(
-                                onClick = { viewModel.runWalkForwardOptimization() },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Run Walk-Forward", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (walkForwardReport != null) {
+                                    Button(
+                                        onClick = {
+                                            walkForwardReport?.let { wf ->
+                                                BacktestReportExporter.copyToClipboard(
+                                                    context,
+                                                    "Walk-Forward Report",
+                                                    BacktestReportExporter.formatWalkForward(wf)
+                                                )
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { viewModel.runWalkForwardOptimization() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Run Walk-Forward", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Walk-Forward Target Strategy Selection
+                        Text(
+                            text = "Target Strategy:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(availableStrategies) { strat ->
+                                FilterChip(
+                                    selected = selectedStrategy == strat,
+                                    onClick = { viewModel.selectBacktestStrategy(strat) },
+                                    label = { Text(strat, fontSize = 11.sp) },
+                                    leadingIcon = if (selectedStrategy == strat) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Target Asset Selection
+                        Text(
+                            text = "Target Market Asset & Candle Window:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+                                items(availableMarkets) { market ->
+                                    FilterChip(
+                                        selected = selectedMarket == market,
+                                        onClick = { viewModel.selectBacktestMarket(market) },
+                                        label = { Text(market, fontSize = 11.sp) }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                items(candleCounts) { count ->
+                                    FilterChip(
+                                        selected = candleCount == count,
+                                        onClick = { viewModel.setBacktestCandleCount(count) },
+                                        label = { Text("${count}c", fontSize = 10.sp) }
+                                    )
+                                }
                             }
                         }
 
@@ -1100,14 +1207,92 @@ fun BacktestLabSection(
                                 )
                             }
 
-                            Button(
-                                onClick = { viewModel.runMultiStrategyComparison() },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Compare, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Run Compare", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (multiStrategyReport != null) {
+                                    Button(
+                                        onClick = {
+                                            multiStrategyReport?.let { comp ->
+                                                BacktestReportExporter.copyToClipboard(
+                                                    context,
+                                                    "Multi-Strategy Comparison",
+                                                    BacktestReportExporter.formatMultiStrategy(comp)
+                                                )
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { viewModel.runMultiStrategyComparison() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Compare, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Run Compare", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Target Asset & Candle Selection
+                        Text(
+                            text = "Target Market Asset & Candles:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+                                items(availableMarkets) { market ->
+                                    FilterChip(
+                                        selected = selectedMarket == market,
+                                        onClick = { viewModel.selectBacktestMarket(market) },
+                                        label = { Text(market, fontSize = 11.sp) }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                items(candleCounts) { count ->
+                                    FilterChip(
+                                        selected = candleCount == count,
+                                        onClick = { viewModel.setBacktestCandleCount(count) },
+                                        label = { Text("${count}c", fontSize = 10.sp) }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Target Market Regime
+                        Text(
+                            text = "Market Regime:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(availableRegimes) { regime ->
+                                FilterChip(
+                                    selected = selectedPattern == regime,
+                                    onClick = { viewModel.selectBacktestPattern(regime) },
+                                    label = { Text(regime, fontSize = 10.5.sp) }
+                                )
                             }
                         }
 
@@ -1219,19 +1404,64 @@ fun BacktestLabSection(
                                 )
                             }
 
-                            Button(
-                                onClick = { viewModel.runMonteCarloSimulation() },
-                                enabled = !isBacktesting,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Run Monte Carlo", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (monteCarloReport != null) {
+                                    Button(
+                                        onClick = {
+                                            monteCarloReport?.let { mc ->
+                                                BacktestReportExporter.copyToClipboard(
+                                                    context,
+                                                    "Monte Carlo Audit",
+                                                    BacktestReportExporter.formatMonteCarlo(mc, selectedStrategy)
+                                                )
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { viewModel.runMonteCarloSimulation() },
+                                    enabled = !isBacktesting,
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Run Monte Carlo", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Target Strategy Selection for Monte Carlo
+                        Text(
+                            text = "Target Strategy to Reshuffle:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(availableStrategies) { strat ->
+                                FilterChip(
+                                    selected = selectedStrategy == strat,
+                                    onClick = { viewModel.selectBacktestStrategy(strat) },
+                                    label = { Text(strat, fontSize = 11.sp) },
+                                    leadingIcon = if (selectedStrategy == strat) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
                             text = "Simulation Iterations:",
@@ -1359,15 +1589,73 @@ fun BacktestLabSection(
                                 )
                             }
 
-                            Button(
-                                onClick = { viewModel.runAgentPipelineAttribution() },
-                                enabled = !isBacktesting,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Evaluate Agents", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = {
+                                        val agentSummary = BacktestReportExporter.formatAgentAttribution(agentPerformanceMetrics, selectedStrategy, selectedMarket)
+                                        BacktestReportExporter.copyToClipboard(context, "Agent Attribution", agentSummary)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = { viewModel.runAgentPipelineAttribution() },
+                                    enabled = !isBacktesting,
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Evaluate Agents", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Target Strategy Selection for Agent Attribution
+                        Text(
+                            text = "Target Strategy for Agent Evaluation:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(availableStrategies) { strat ->
+                                FilterChip(
+                                    selected = selectedStrategy == strat,
+                                    onClick = { viewModel.selectBacktestStrategy(strat) },
+                                    label = { Text(strat, fontSize = 11.sp) },
+                                    leadingIcon = if (selectedStrategy == strat) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Target Asset Selection
+                        Text(
+                            text = "Market Asset Context:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(availableMarkets) { market ->
+                                FilterChip(
+                                    selected = selectedMarket == market,
+                                    onClick = { viewModel.selectBacktestMarket(market) },
+                                    label = { Text(market, fontSize = 11.sp) }
+                                )
                             }
                         }
 
@@ -1490,14 +1778,71 @@ fun BacktestLabSection(
                                 )
                             }
 
-                            Button(
-                                onClick = { viewModel.calculateCorrelationMatrices() },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Analytics, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Compute R", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = {
+                                        val targetMat = if (showAssetMatrix) {
+                                            assetCorrelationMatrix ?: correlationResult
+                                        } else {
+                                            strategyCorrelationMatrix ?: BacktestEngine.calculateStrategyCorrelationMatrix()
+                                        }
+                                        val matrixType = if (showAssetMatrix) "Asset Price Pearson Correlation" else "Strategy Return Pearson Correlation"
+                                        val sb = StringBuilder()
+                                        sb.appendLine("==========================================")
+                                        sb.appendLine("  LUMINA $matrixType Matrix (R)")
+                                        sb.appendLine("==========================================")
+                                        sb.appendLine("Explanation: Pearson coefficient (r) measures linear co-movement (-1.0 to +1.0).")
+                                        sb.appendLine("• r > +0.70: High positive correlation (shared risk exposure)")
+                                        sb.appendLine("• r ~ 0.00: Uncorrelated (optimal portfolio diversification)")
+                                        sb.appendLine("• r < -0.20: Negative correlation (natural downside hedge)\n")
+                                        sb.appendLine("Matrix Values:")
+                                        val labels = targetMat.labels
+                                        sb.append(String.format(Locale.US, "%-14s", "Asset/Strat"))
+                                        labels.forEach { l -> sb.append(String.format(Locale.US, "%-10s", l)) }
+                                        sb.appendLine()
+                                        targetMat.matrix.forEachIndexed { rIdx, row ->
+                                            sb.append(String.format(Locale.US, "%-14s", labels[rIdx]))
+                                            row.forEach { v -> sb.append(String.format(Locale.US, "%-10.2f", v)) }
+                                            sb.appendLine()
+                                        }
+                                        BacktestReportExporter.copyToClipboard(context, matrixType, sb.toString())
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Copy R", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = { viewModel.calculateCorrelationMatrices() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Analytics, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Compute R", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Guide Pill explaining Pearson R
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Pearson R measures co-movement: +1.0 = identical direction, 0.0 = zero overlap (best diversification), -1.0 = inverse hedge.",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
 
@@ -1635,7 +1980,10 @@ fun BacktestLabSection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
@@ -1646,23 +1994,102 @@ fun BacktestLabSection(
                                 )
                             }
 
-                            Button(
-                                onClick = { viewModel.runGeminiMetaStrategyFusion() },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Psychology, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Run AI Fusion", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = {
+                                        val fusionSummary = """
+                                            [GEMINI AI VIBE CODE FUSION ARCHITECTURE]
+                                            Primary Constituent: ${metaStrategyFusion.primaryStrategy}
+                                            Secondary Constituent: ${metaStrategyFusion.secondaryStrategy}
+                                            Batch Correlation Score: ${String.format(Locale.US, "%.2f", metaStrategyFusion.batchCorrelationScore)}
+                                            Fusion Architecture: ${metaStrategyFusion.fusionType}
+                                            Projected Combined Sharpe: ${String.format(Locale.US, "%.2f", metaStrategyFusion.projectedCombinedSharpe)}
+                                            Max Drawdown Reduction: -${String.format(Locale.US, "%.1f", metaStrategyFusion.projectedDrawdownReductionPct)}%
+                                            
+                                            Code & Vibe Analysis:
+                                            ${metaStrategyFusion.geminiVibeCodeAnalysis}
+                                        """.trimIndent()
+                                        BacktestReportExporter.copyToClipboard(context, "AI Fusion Architecture", fusionSummary)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Copy Fusion", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = { viewModel.runGeminiMetaStrategyFusion() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Psychology, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Run AI Fusion", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Runs batch correlation analysis between ETH Confidence Model, BNB Reversion Engine, and active strategies to identify opportunities for signal hybridization and fusion.",
+                            text = "Synthesizes multi-model alpha signals into unified meta-strategies with cross-asset diversification filters.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Interactive Hybrid Target Option Selector
+                        var selectedFusionTarget by remember { mutableStateOf("ETH Trend + BNB Reversion") }
+                        Text(
+                            text = "Fusion Synthesis Target Model:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val targets = listOf("ETH Trend + BNB Reversion", "SOL Breakout + BTC Trend", "Multi-Asset Alpha Fusion", "Bayesian 3.0 + Volatility Breakout")
+                            items(targets) { target ->
+                                FilterChip(
+                                    selected = selectedFusionTarget == target,
+                                    onClick = { 
+                                        selectedFusionTarget = target
+                                        viewModel.runGeminiMetaStrategyFusion()
+                                    },
+                                    label = { Text(target, fontSize = 11.sp) },
+                                    leadingIcon = if (selectedFusionTarget == target) {
+                                        { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(12.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Optimization Objective Selector
+                        var selectedObjective by remember { mutableStateOf("Maximize Sharpe Ratio") }
+                        Text(
+                            text = "Optimization Objective:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val objectives = listOf("Maximize Sharpe Ratio", "Minimize Drawdown", "Balanced Alpha")
+                            objectives.forEach { obj ->
+                                FilterChip(
+                                    selected = selectedObjective == obj,
+                                    onClick = { 
+                                        selectedObjective = obj
+                                        viewModel.runGeminiMetaStrategyFusion()
+                                    },
+                                    label = { Text(obj, fontSize = 11.sp) }
+                                )
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -1728,7 +2155,10 @@ fun BacktestLabSection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Icon(Icons.Default.Layers, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
@@ -1739,18 +2169,42 @@ fun BacktestLabSection(
                                 )
                             }
 
-                            Button(
-                                onClick = { viewModel.toggleEthBnbHybridLive(!ethBnbHybridLiveState.isLiveModeActive) },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (ethBnbHybridLiveState.isLiveModeActive) Color(0xFF2E7D32) else Color(0xFFE65100)
-                                ),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    text = if (ethBnbHybridLiveState.isLiveModeActive) "LIVE ACTIVE 🟢" else "PAUSED 🟡",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = {
+                                        val hybridSummary = """
+                                            [SYNTHESIZED ETH-BNB HYBRID ENGINE STATUS]
+                                            Live State: ${if (ethBnbHybridLiveState.isLiveModeActive) "LIVE ACTIVE" else "PAUSED"}
+                                            Hybrid Sharpe Ratio: ${String.format(Locale.US, "%.2f", ethBnbHybridLiveState.hybridSharpe)}
+                                            ETH Constituent Sharpe: ${String.format(Locale.US, "%.2f", ethBnbHybridLiveState.ethConstituentSharpe)} (${ethBnbHybridLiveState.ethWeightPct}% Weight)
+                                            BNB Constituent Sharpe: ${String.format(Locale.US, "%.2f", ethBnbHybridLiveState.bnbConstituentSharpe)} (${ethBnbHybridLiveState.bnbWeightPct}% Weight)
+                                            Auto-Rebalance Threshold: ${ethBnbHybridLiveState.autoRebalanceThresholdPct}%
+                                            Last Rebalance: ${ethBnbHybridLiveState.lastRebalanceTimestamp}
+                                            Monitoring Status: ${ethBnbHybridLiveState.monitoringStatus}
+                                        """.trimIndent()
+                                        BacktestReportExporter.copyToClipboard(context, "ETH-BNB Hybrid Status", hybridSummary)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Copy Status", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = { viewModel.toggleEthBnbHybridLive(!ethBnbHybridLiveState.isLiveModeActive) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (ethBnbHybridLiveState.isLiveModeActive) Color(0xFF2E7D32) else Color(0xFFE65100)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = if (ethBnbHybridLiveState.isLiveModeActive) "LIVE ACTIVE 🟢" else "PAUSED 🟡",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
 
@@ -1800,22 +2254,42 @@ fun BacktestLabSection(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = ethBnbHybridLiveState.ethWeightPct == 55,
-                                onClick = { viewModel.rebalanceEthBnbWeights(55, 45) },
-                                label = { Text("⚖️ Optimal (55/45)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                            )
-                            FilterChip(
-                                selected = ethBnbHybridLiveState.ethWeightPct == 65,
-                                onClick = { viewModel.rebalanceEthBnbWeights(65, 35) },
-                                label = { Text("📈 Trend Bias (65/35)", fontSize = 11.sp) }
-                            )
-                            FilterChip(
-                                selected = ethBnbHybridLiveState.ethWeightPct == 40,
-                                onClick = { viewModel.rebalanceEthBnbWeights(40, 60) },
-                                label = { Text("🔄 Reversion Bias (40/60)", fontSize = 11.sp) }
-                            )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                FilterChip(
+                                    selected = ethBnbHybridLiveState.ethWeightPct == 55,
+                                    onClick = { viewModel.rebalanceEthBnbWeights(55, 45) },
+                                    label = { Text("⚖️ Optimal (55/45)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = ethBnbHybridLiveState.ethWeightPct == 65,
+                                    onClick = { viewModel.rebalanceEthBnbWeights(65, 35) },
+                                    label = { Text("📈 Trend Bias (65/35)", fontSize = 11.sp) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = ethBnbHybridLiveState.ethWeightPct == 40,
+                                    onClick = { viewModel.rebalanceEthBnbWeights(40, 60) },
+                                    label = { Text("🔄 Reversion Bias (40/60)", fontSize = 11.sp) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = ethBnbHybridLiveState.ethWeightPct == 50,
+                                    onClick = { viewModel.rebalanceEthBnbWeights(50, 50) },
+                                    label = { Text("⚖️ Equal Weight (50/50)", fontSize = 11.sp) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = ethBnbHybridLiveState.ethWeightPct == 75,
+                                    onClick = { viewModel.rebalanceEthBnbWeights(75, 25) },
+                                    label = { Text("🚀 High Alpha ETH (75/25)", fontSize = 11.sp) }
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -1851,15 +2325,52 @@ fun BacktestLabSection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Icon(Icons.Default.Science, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "MULTI-REGIME SIMULATION & MACRO INTEGRATION LAB",
+                                    text = "MULTI-REGIME SIMULATION & MACRO LAB",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
                                 )
+                            }
+
+                            Button(
+                                onClick = {
+                                    val sim = ethBnbHybridSimulation
+                                    val simReport = """
+                                        [MULTI-REGIME SIMULATION & MACRO INTEGRATION REPORT]
+                                        Duration: ${sim.simulationDays} Days
+                                        Simulated Hybrid Sharpe: ${String.format(Locale.US, "%.2f", sim.hybridSharpe)}
+                                        Standalone ETH Sharpe: ${String.format(Locale.US, "%.2f", sim.ethStandaloneSharpe)}
+                                        Standalone BNB Sharpe: ${String.format(Locale.US, "%.2f", sim.bnbStandaloneSharpe)}
+                                        Maximum Peak Drawdown: ${sim.maxDrawdownPct}%
+                                        Simulated Win Rate: ${sim.winRatePct}%
+                                        
+                                        Regimes Evaluated (${sim.regimesTested.size}):
+                                        ${sim.regimesTested.joinToString("\n") { "• $it" }}
+                                        
+                                        Macroeconomic Signals Integrated:
+                                        ${sim.macroeconomicIndicatorsIntegrated}
+                                        
+                                        Trade Quality Refinements:
+                                        ${sim.tradeQualityEngineRefinements}
+                                        
+                                        Executive Summary:
+                                        ${sim.simulationSummary}
+                                    """.trimIndent()
+                                    BacktestReportExporter.copyToClipboard(context, "Multi-Regime Simulation Report", simReport)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copy Report", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -1872,17 +2383,42 @@ fun BacktestLabSection(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = ethBnbHybridSimulation.simulationDays == 7,
-                                onClick = { viewModel.runEthBnbHybridSimulation(7) },
-                                label = { Text("⚡ 7-Day Multi-Regime Test", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                            )
-                            FilterChip(
-                                selected = ethBnbHybridSimulation.simulationDays == 30,
-                                onClick = { viewModel.runEthBnbHybridSimulation(30) },
-                                label = { Text("🚀 30-Day Comprehensive Test", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
-                            )
+                        Text(
+                            text = "Select Simulation Time Horizon:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                FilterChip(
+                                    selected = ethBnbHybridSimulation.simulationDays == 7,
+                                    onClick = { viewModel.runEthBnbHybridSimulation(7) },
+                                    label = { Text("⚡ 7-Day Sprint", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = ethBnbHybridSimulation.simulationDays == 14,
+                                    onClick = { viewModel.runEthBnbHybridSimulation(14) },
+                                    label = { Text("📊 14-Day Medium", fontSize = 11.sp) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = ethBnbHybridSimulation.simulationDays == 30,
+                                    onClick = { viewModel.runEthBnbHybridSimulation(30) },
+                                    label = { Text("🚀 30-Day Comprehensive", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
+                                )
+                            }
+                            item {
+                                FilterChip(
+                                    selected = ethBnbHybridSimulation.simulationDays == 90,
+                                    onClick = { viewModel.runEthBnbHybridSimulation(90) },
+                                    label = { Text("🛡️ 90-Day Macro Cycle", fontSize = 11.sp) }
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -2002,7 +2538,7 @@ fun BacktestLabSection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "TRADE AUDIT & OUTLIER LEDGER",
                                     style = MaterialTheme.typography.titleSmall,
@@ -2013,6 +2549,50 @@ fun BacktestLabSection(
                                     text = "Stores all trade IDs, entry/exit points, PnL, and flags high-loss/high-profit outliers for manual review.",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = { showRoomLogsDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Storage, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("💾 Room DB Logs (${backtestReportsHistory.size})", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                if (lastReport != null) {
+                                    Button(
+                                        onClick = {
+                                            val singleFormatted = BacktestReportExporter.formatSingleBacktest(lastReport!!)
+                                            BacktestReportExporter.copyToClipboard(context, "Trade Ledger", singleFormatted)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Copy Ledger", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Strategy Selector for fast audit switching
+                        Text("Active Strategy Filter:", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(availableStrategies) { strat ->
+                                FilterChip(
+                                    selected = selectedStrategy == strat,
+                                    onClick = { viewModel.selectBacktestStrategy(strat) },
+                                    label = { Text(strat, fontSize = 10.sp) }
                                 )
                             }
                         }
@@ -2046,7 +2626,7 @@ fun BacktestLabSection(
                         } else {
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "No active backtest report available. Run a simulation under 'Single Backtest' to populate the audit ledger.",
+                                text = "No active backtest report available in current memory. Run a simulation or tap '💾 Room DB Logs' to view permanent history.",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -2064,15 +2644,42 @@ fun BacktestLabSection(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Verified, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "TRADE QUALITY SCORING ENGINE (MAE / MFE)",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Verified, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "TRADE QUALITY SCORING ENGINE (MAE / MFE)",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    val sb = StringBuilder()
+                                    sb.append("=== LUMINA TRADE QUALITY SCORING & MAE/MFE AUDIT ===\n\n")
+                                    tradeQualityScores.forEach { tq ->
+                                        sb.append("Grade: ${tq.qualityGrade} | ID: ${tq.tradeId} | Pair: ${tq.pair} | Strategy: ${tq.strategyName}\n")
+                                        sb.append("  Quality Score: ${tq.qualityScore}/100 | Slippage: ${tq.executionSlippageBps} bps\n")
+                                        sb.append("  MAE: ${tq.maePercent}% | MFE: +${tq.mfePercent}% | Efficiency: ${String.format(Locale.US, "%.0f", tq.tradeEfficiencyRatio * 100)}%\n")
+                                        sb.append("  Feedback: ${tq.feedbackForSelfAdaptation}\n\n")
+                                    }
+                                    BacktestReportExporter.copyToClipboard(context, "Trade Quality Audit", sb.toString())
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copy Scores", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
@@ -2353,35 +2960,100 @@ fun BacktestLabSection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "SCENARIO-BASED RESILIENCE SUITE",
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Simulate extreme shocks, black swan events, and sudden regime shifts",
+                                    text = "Simulate extreme shocks, black swan events, and sudden regime shifts.",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
-                            Button(
-                                onClick = { viewModel.runComprehensiveScenarioSuite() },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Run Full Suite", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (scenarioSuiteReport != null) {
+                                    Button(
+                                        onClick = {
+                                            scenarioSuiteReport?.let { suite ->
+                                                BacktestReportExporter.copyToClipboard(
+                                                    context,
+                                                    "Scenario Resilience Suite",
+                                                    BacktestReportExporter.formatResilienceSuite(suite)
+                                                )
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { viewModel.runComprehensiveScenarioSuite() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Run Full Suite", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Target Strategy Selection for Scenario Testing
+                        Text(
+                            text = "Target Strategy to Test:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(availableStrategies) { strat ->
+                                FilterChip(
+                                    selected = selectedStrategy == strat,
+                                    onClick = { viewModel.selectBacktestStrategy(strat) },
+                                    label = { Text(strat, fontSize = 11.sp) },
+                                    leadingIcon = if (selectedStrategy == strat) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Target Asset Selection
+                        Text(
+                            text = "Target Asset Market:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(availableMarkets) { market ->
+                                FilterChip(
+                                    selected = selectedMarket == market,
+                                    onClick = { viewModel.selectBacktestMarket(market) },
+                                    label = { Text(market, fontSize = 11.sp) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "Individual Scenario Triggers:",
+                            text = "Individual Scenario Stress Triggers:",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2568,6 +3240,37 @@ fun BacktestLabSection(
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val singleScenarioSummary = """
+                                            [LUMINA SCENARIO STRESS AUDIT: ${res.scenarioName}]
+                                            Status: ${res.resilienceStatus} (Score: ${String.format(Locale.US, "%.0f", res.resilienceScore)}/100)
+                                            Description: ${res.description}
+                                            Net Profit: ${if (res.netProfitUSD >= 0) "+" else ""}$${String.format(Locale.US, "%,.2f", res.netProfitUSD)}
+                                            Max Drawdown: ${String.format(Locale.US, "%.2f", res.maxDrawdownPercent)}%
+                                            Sharpe: ${String.format(Locale.US, "%.2f", res.sharpeRatio)} | Sortino: ${String.format(Locale.US, "%.2f", res.sortinoRatio)}
+                                            Trade Win Rate: ${String.format(Locale.US, "%.1f", res.winRatePercent)}% | Trades Executed: ${res.totalTrades}
+                                            Profit Factor: ${String.format(Locale.US, "%.2f", res.profitFactor)}
+                                            Regime Log: Stress injected at high volatility bounds with dynamic position deflation.
+                                        """.trimIndent()
+                                        BacktestReportExporter.copyToClipboard(context, "${res.scenarioName} Log", singleScenarioSummary)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(11.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Copy Scenario Log", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
@@ -5814,6 +6517,14 @@ fun BacktestLabSection(
                 }
             }
         }
+    }
+
+    if (showRoomLogsDialog) {
+        RoomPersistedBacktestLogsDialog(
+            reports = backtestReportsHistory,
+            onDismiss = { showRoomLogsDialog = false },
+            onClearAll = { viewModel.clearPersistedBacktestReports() }
+        )
     }
 }
 

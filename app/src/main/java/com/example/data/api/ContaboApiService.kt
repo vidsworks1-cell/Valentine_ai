@@ -253,6 +253,22 @@ data class MonteCarloResponse(
     val recommendation: MonteCarloRecommendation = MonteCarloRecommendation()
 )
 
+data class StaleTradeMismatch(
+    val symbol: String,
+    @Json(name = "trade_id") val tradeId: Int? = null,
+    val side: String = "BUY",
+    @Json(name = "tracked_size") val trackedSize: Double = 0.0,
+    @Json(name = "spot_free") val spotFree: Double = 0.0,
+    @Json(name = "spot_locked") val spotLocked: Double = 0.0,
+    @Json(name = "discrepancy_type") val discrepancyType: String = "ORPHAN_DATABASE_POSITION",
+    val description: String = "",
+    @Json(name = "entry_price") val entryPrice: Double = 0.0,
+    @Json(name = "current_price") val currentPrice: Double = 0.0,
+    @Json(name = "unrealized_pnl") val unrealizedPnl: Double = 0.0,
+    @Json(name = "entry_time") val entryTime: String = "",
+    @Json(name = "is_stale") val isStale: Boolean = true
+)
+
 data class ExecutionReconciliationResponse(
     val status: String = "RECONCILED",
     @Json(name = "reconciled_at") val reconciledAt: String? = null,
@@ -261,7 +277,12 @@ data class ExecutionReconciliationResponse(
     @Json(name = "rate_limit_available") val rateLimitAvailable: Int = 1200,
     @Json(name = "active_local_positions_count") val activeLocalPositionsCount: Int = 0,
     @Json(name = "discrepancies_found") val discrepanciesFound: Int = 0,
-    @Json(name = "recent_executions") val recentExecutions: List<Map<String, Any>> = emptyList()
+    @Json(name = "recent_executions") val recentExecutions: List<Map<String, Any>> = emptyList(),
+    @Json(name = "mismatches") val mismatches: List<StaleTradeMismatch> = emptyList(),
+    @Json(name = "stale_trades_count") val staleTradesCount: Int = 0,
+    @Json(name = "untracked_spot_count") val untrackedSpotCount: Int = 0,
+    @Json(name = "spot_balances_checked") val spotBalancesChecked: Int = 0,
+    @Json(name = "reconciliation_summary") val reconciliationSummary: String = "All open trades aligned with Binance Spot balances."
 )
 
 data class InstitutionalRiskStatusResponse(

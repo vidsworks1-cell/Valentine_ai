@@ -2399,6 +2399,12 @@ fun PositionManagerSection(
             }
         }
 
+        // 2.5 Binance Spot Balances vs Open Trades Live Reconciliation
+        item {
+            BinanceSpotReconciliationCard(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         // 3. Live Position Monitoring List
         item {
             Text(
@@ -4914,53 +4920,8 @@ fun TradingDiagnosticsDashboard(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // --- PILLAR 1: EXCHANGE EXECUTION LAYER ---
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
-                            border = BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.35f))
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        "⚡ LIVE EXCHANGE EXECUTION LAYER",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF388E3C)
-                                    )
-                                    Badge(containerColor = Color(0xFF388E3C).copy(alpha = 0.2f)) {
-                                        Text(
-                                            executionReconciliation?.connectionStatus ?: "CONNECTED_SYNCED",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF388E3C),
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                executionReconciliation?.let { ex ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column {
-                                            Text("Rate Limit Weight Available: ${ex.rateLimitAvailable} / 1200", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                            Text("Exchange Time Offset: ${ex.exchangeTimeDriftMs} ms", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            Text("Position Discrepancies: ${ex.discrepanciesFound}", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (ex.discrepanciesFound == 0) Color(0xFF388E3C) else Color(0xFFD32F2F))
-                                            Text("Reconciled vs Local: OK (${ex.activeLocalPositionsCount} open)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        // --- PILLAR 1: LIVE EXECUTION RECONCILIATION & STALE TRADE DETECTOR ---
+                        BinanceSpotReconciliationCard(viewModel = viewModel)
 
                         Spacer(modifier = Modifier.height(12.dp))
 

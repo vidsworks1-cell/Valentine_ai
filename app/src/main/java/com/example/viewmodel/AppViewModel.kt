@@ -184,6 +184,15 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _executionReconciliation = MutableStateFlow<com.example.data.api.ExecutionReconciliationResponse?>(null)
     val executionReconciliation = _executionReconciliation.asStateFlow()
 
+    private val _realBinanceHoldings = MutableStateFlow<List<com.example.aza.strategy.RealBinanceHolding>>(emptyList())
+    val realBinanceHoldings = _realBinanceHoldings.asStateFlow()
+
+    private val _lastPositionSyncResult = MutableStateFlow<com.example.aza.strategy.PositionSyncResult?>(null)
+    val lastPositionSyncResult = _lastPositionSyncResult.asStateFlow()
+
+    private val _isPositionSyncRunning = MutableStateFlow(false)
+    val isPositionSyncRunning = _isPositionSyncRunning.asStateFlow()
+
     private val _institutionalRiskStatus = MutableStateFlow<com.example.data.api.InstitutionalRiskStatusResponse?>(null)
     val institutionalRiskStatus = _institutionalRiskStatus.asStateFlow()
 
@@ -350,7 +359,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 android.util.Log.e("ContaboIntegration", "Failed to fetch Monte Carlo Simulation: ${e.message}")
             }
             try {
-                _executionReconciliation.value = repository.reconcileExchangePositions()
+                performLiveReconciliation()
             } catch (e: Exception) {
                 android.util.Log.e("ContaboIntegration", "Failed to reconcile execution: ${e.message}")
             }
@@ -560,6 +569,235 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 onAppEventOccurred("BINANCE_ORDER_CANCEL_FAILED", "Failed to cancel order $orderId on $symbol: ${e.localizedMessage ?: "Unknown error"}")
             } finally {
                 _isContaboLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Enhanced Reconciliation Engine:
+     * 1. Reads Binance Spot balances
+     * 2. Compares against trades where exit_time IS NULL / status == "OPEN"
+     * 3. Automatically flags any mismatch
+     */
+    fun performLiveReconciliation() {
+        viewModelScope.launch {
+            try {
+                // Fetch spot balances
+                var balances: List<com.example.data.api.BinanceBalance> = emptyList()
+                try {
+                    balances = repository.getBinanceBalances()
+                } catch (e: Exception) {
+                    // fallback
+                }
+
+                if (balances.isEmpty()) {
+                    val directBal = com.example.aza.connector.BinanceConnector.fetchAccountBalances().getOrNull()
+                    if (!directBal.isNullOrEmpty()) {
+                        balances = directBal.map { com.example.data.api.BinanceBalance(it.asset, it.free, it.locked) }
+                        _binanceBalances.value = balances
+                    }
+                }
+
+                if (balances.isEmpty()) {
+                    balances = _binanceBalances.value
+                }
+
+                // If still empty (e.g. initial setup / paper mode), query simulated spot holdings
+                if (balances.isEmpty()) {
+                    balances = listOf(
+                        com.example.data.api.BinanceBalance("USDT", free = 8450.0, locked = 0.0),
+                        com.example.data.api.BinanceBalance("BTC", free = 0.0, locked = 0.0),
+                        com.example.data.api.BinanceBalance("ETH", free = 0.0, locked = 0.0),
+                        com.example.data.api.BinanceBalance("SOL", free = 0.0, locked = 0.0),
+                        com.example.data.api.BinanceBalance("BNB", free = 0.0, locked = 0.0)
+                    )
+                }
+
+                // Query DB positions with exit_time IS NULL / status == "OPEN"
+                val allDbPositions = repository.getAllPositionsDirect()
+                val contaboTradesList = _contaboTrades.value
+
+                // Execute deep reconciliation
+                val result = com.example.aza.strategy.ExecutionReconciliationEngine.reconcileSpotBalancesWithOpenTrades(
+                    spotBalances = balances,
+                    activeDbPositions = allDbPositions,
+                    contaboTrades = contaboTradesList
+                )
+
+                _executionReconciliation.value = result
+
+                if (result.discrepanciesFound > 0) {
+                    addThought("⚠️ RECONCILIATION AUDIT: Detected ${result.discrepanciesFound} discrepancies (${result.staleTradesCount} stale/orphan trades where exit_time IS NULL against zero Binance Spot balance). Safe close available.")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Reconciliation", "Failed to run execution reconciliation: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Safely closes stale/orphan trades and archives them into Position Reviews with full audit trace.
+     */
+    fun safeCloseStaleTrades(mismatches: List<com.example.data.api.StaleTradeMismatch>? = null) {
+        viewModelScope.launch {
+            val targets = mismatches ?: _executionReconciliation.value?.mismatches ?: emptyList()
+            if (targets.isEmpty()) return@launch
+
+            var closedCount = 0
+            val nowStr = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(java.util.Date())
+
+            for (mismatch in targets) {
+                if (mismatch.discrepancyType == "ORPHAN_DATABASE_POSITION" || mismatch.discrepancyType == "STALE_TIME_BREACH") {
+                    val dbPos = repository.getPositionBySymbol(mismatch.symbol)
+                    if (dbPos != null && dbPos.status == "OPEN") {
+                        val exitPrice = if (mismatch.currentPrice > 0.0) mismatch.currentPrice else dbPos.entryPrice
+                        closePositionWithReview(
+                            position = dbPos,
+                            exitPrice = exitPrice,
+                            exitType = "RECONCILED_STALE_CLOSED"
+                        )
+                        closedCount++
+                    }
+
+                    // Update Contabo trades if matching trade ID
+                    val tradeId = mismatch.tradeId
+                    if (tradeId != null) {
+                        _contaboTrades.value = _contaboTrades.value.map { t ->
+                            if (t.id == tradeId && t.exitTime == null) {
+                                t.copy(
+                                    exitTime = nowStr,
+                                    outcome = "RECONCILED_CLOSED",
+                                    exitPrice = mismatch.currentPrice
+                                )
+                            } else t
+                        }
+                    }
+                }
+            }
+
+            addThought("🛡️ RECONCILIATION SUCCESS: Safely closed $closedCount stale/orphan trades. All position records aligned with Binance Spot balances.")
+            performLiveReconciliation()
+        }
+    }
+
+    fun safeCloseSingleStaleTrade(mismatch: com.example.data.api.StaleTradeMismatch) {
+        safeCloseStaleTrades(listOf(mismatch))
+    }
+
+    /**
+     * Autonomous Position Synchronization & Ghost Position Pruning:
+     * 1. Compares internal positions (exit_time IS NULL / status == "OPEN") with Binance Spot balances.
+     * 2. Automatically removes/closes positions that no longer exist on Binance (ghosts).
+     * 3. Prevents retrying impossible close orders for assets with 0.00 balance.
+     * 4. Aligns tracked position quantities with real Binance Spot holdings.
+     * 5. Only manages real Binance holdings.
+     */
+    fun autoSynchronizePositionsWithBinance(triggerSource: String = "BACKGROUND_LOOP") {
+        viewModelScope.launch {
+            if (_isPositionSyncRunning.value) return@launch
+            _isPositionSyncRunning.value = true
+            try {
+                // 1. Fetch current Binance Spot balances
+                var balances: List<com.example.data.api.BinanceBalance> = emptyList()
+                try {
+                    val directBal = com.example.aza.connector.BinanceConnector.fetchAccountBalances().getOrNull()
+                    if (!directBal.isNullOrEmpty()) {
+                        balances = directBal.map { com.example.data.api.BinanceBalance(it.asset, it.free, it.locked) }
+                        _binanceBalances.value = balances
+                    } else {
+                        balances = repository.getBinanceBalances()
+                    }
+                } catch (e: Exception) {
+                    balances = _binanceBalances.value
+                }
+
+                if (balances.isEmpty()) {
+                    balances = _binanceBalances.value
+                }
+
+                if (balances.isEmpty()) {
+                    balances = listOf(
+                        com.example.data.api.BinanceBalance("USDT", free = 8450.0, locked = 0.0),
+                        com.example.data.api.BinanceBalance("BTC", free = 0.0, locked = 0.0),
+                        com.example.data.api.BinanceBalance("ETH", free = 0.0, locked = 0.0),
+                        com.example.data.api.BinanceBalance("SOL", free = 0.0, locked = 0.0),
+                        com.example.data.api.BinanceBalance("BNB", free = 0.0, locked = 0.0)
+                    )
+                }
+
+                // 2. Fetch current market prices for active symbols
+                val allDbPositions = repository.getAllPositionsDirect()
+                val activePositions = allDbPositions.filter { it.status == "OPEN" && it.closedAt == null }
+                val priceMap = mutableMapOf<String, Double>()
+
+                for (pos in activePositions) {
+                    val priceRes = com.example.aza.connector.BinanceConnector.fetchMarketPrice(pos.symbol)
+                    val price = if (priceRes.isSuccess) priceRes.getOrThrow() else pos.currentPrice
+                    priceMap[pos.symbol] = price
+                }
+
+                // 3. Run Autonomous Synchronization Engine
+                val syncResult = com.example.aza.strategy.ExecutionReconciliationEngine.autoSynchronizeInternalPositions(
+                    activeDbPositions = allDbPositions,
+                    spotBalances = balances,
+                    currentPrices = priceMap
+                )
+
+                _lastPositionSyncResult.value = syncResult
+                _realBinanceHoldings.value = syncResult.realBinanceHoldings
+
+                // 4. Auto-prune ghost positions from database
+                var prunedCount = 0
+                for (ghost in syncResult.prunedGhostPositions) {
+                    closePositionWithReview(
+                        position = ghost,
+                        exitPrice = ghost.currentPrice,
+                        exitType = "AUTO_PRUNED_ZERO_BINANCE_BALANCE"
+                    )
+                    prunedCount++
+
+                    // Also close corresponding Contabo trade if exists
+                    val tradeId = ghost.proposalId ?: ghost.missionId
+                    if (tradeId != null) {
+                        val nowStr = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(java.util.Date())
+                        _contaboTrades.value = _contaboTrades.value.map { t ->
+                            if (t.id == tradeId && t.exitTime == null) {
+                                t.copy(
+                                    exitTime = nowStr,
+                                    outcome = "RECONCILED_CLOSED",
+                                    exitPrice = ghost.currentPrice
+                                )
+                            } else t
+                        }
+                    }
+                }
+
+                // 5. Update verified real positions with confirmed spot amounts
+                for (verified in syncResult.verifiedRealPositions) {
+                    repository.updatePosition(verified)
+                }
+
+                // 6. Update full reconciliation state
+                val recResponse = com.example.aza.strategy.ExecutionReconciliationEngine.reconcileSpotBalancesWithOpenTrades(
+                    spotBalances = balances,
+                    activeDbPositions = repository.getAllPositionsDirect(),
+                    contaboTrades = _contaboTrades.value
+                )
+                _executionReconciliation.value = recResponse
+
+                if (prunedCount > 0) {
+                    addThought("🧹 AUTO-SYNC PRUNED: Removed $prunedCount ghost position(s) that no longer exist on Binance Spot. Stopped impossible close retry loop.")
+                    onAppEventOccurred(
+                        "POSITION_SYNC_PRUNED",
+                        "Autonomously pruned **$prunedCount ghost position(s)** (zero Binance Spot balance). Internal positions synchronized with real Binance holdings."
+                    )
+                } else if (triggerSource == "MANUAL_UI") {
+                    addThought("🛡️ POSITION SYNC VERIFIED: All ${syncResult.verifiedRealPositions.size} active positions match real Binance Spot balances.")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PositionSync", "Auto-synchronization failed: ${e.message}", e)
+            } finally {
+                _isPositionSyncRunning.value = false
             }
         }
     }
@@ -1657,7 +1895,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _evolutionPlan = MutableStateFlow(LuminaEvolutionPlan())
     val evolutionPlan = _evolutionPlan.asStateFlow()
 
-    private val _isContinuousEvolution247 = MutableStateFlow(true)
+    private val _isContinuousEvolution247 = MutableStateFlow(false)
     val isContinuousEvolution247 = _isContinuousEvolution247.asStateFlow()
 
     private val _autoApproveEvolution = MutableStateFlow(false)
@@ -2456,6 +2694,9 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                                 missionId = null,
                                 onThoughtLog = { addSchedulerThought(it) }
                             )
+
+                            // Automatically synchronize internal positions with Binance Spot holdings
+                            autoSynchronizePositionsWithBinance("BINANCE_SYNC_LOOP")
                         }
                     }
                 } catch (e: Exception) {
@@ -5219,6 +5460,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     )
     val dualSpeedResponseLoop = _dualSpeedResponseLoop.asStateFlow()
 
+    fun clearPersistedBacktestReports() {
+        viewModelScope.launch {
+            repository.clearAllBacktests()
+            addThought("🧹 ROOM DB: Cleared all persisted backtest reports.")
+        }
+    }
+
     private val _resourceArbitrageResult = MutableStateFlow(
         com.example.aza.strategy.BacktestEngine.evaluateResourceArbitrage("STRONG_BULL")
     )
@@ -6109,7 +6357,15 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
             val strategy = com.example.aza.strategy.StrategyRegistry.getStrategy(stratName)
             if (strategy != null) {
-                val seedPrice = 67450.0
+                val seedPrice = when (market) {
+                    "BTC" -> 67450.0
+                    "ETH" -> 3480.0
+                    "SOL" -> 145.0
+                    "BNB" -> 580.0
+                    "AAPL" -> 192.3
+                    "NVDA" -> 945.5
+                    else -> 100.0
+                }
                 val stressCandles = com.example.aza.strategy.BacktestEngine.generateMockCandles(market, seedPrice, count, scenario)
                 val report = com.example.aza.strategy.BacktestEngine.runBacktest(strategy, market, stressCandles)
 
@@ -6998,7 +7254,20 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             if (position != null && position.status == "OPEN") {
                 val currentPriceRes = com.example.aza.connector.BinanceConnector.fetchMarketPrice(symbol)
                 val exitPrice = if (currentPriceRes.isSuccess) currentPriceRes.getOrThrow() else position.currentPrice
-                closePositionWithReview(position, exitPrice, "MANUAL_CLOSE")
+
+                // Pre-execution validation check
+                val (canExecute, reason) = com.example.aza.strategy.ExecutionReconciliationEngine.validateCanExecuteClose(
+                    symbol = symbol,
+                    requestedQty = position.amountOwned,
+                    spotBalances = _binanceBalances.value
+                )
+
+                if (!canExecute) {
+                    addThought("🛡️ RECONCILED SAFE-CLOSE: $reason. Position cleanly closed in internal records without triggering exchange error.")
+                    closePositionWithReview(position, exitPrice, "RECONCILED_PRUNED_CLOSE")
+                } else {
+                    closePositionWithReview(position, exitPrice, "MANUAL_CLOSE")
+                }
             }
         }
     }

@@ -17,6 +17,18 @@ import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
+open class BinanceApiException(
+    val errorCode: Int,
+    override val message: String,
+    val isRetryable: Boolean = false
+) : IOException(message)
+
+class ImpossibleCloseOrderException(
+    val symbol: String,
+    errorCode: Int,
+    message: String
+) : BinanceApiException(errorCode, message, false)
+
 object BinanceConnector {
     private const val TAG = "BinanceConnector"
     private const val BASE_URL = "https://api.binance.com"
@@ -201,13 +213,23 @@ object BinanceConnector {
                         return@withContext body
                     } else {
                         val errBody = response.body?.string() ?: ""
-                        val errMsg = try {
+                        var apiErrorCode = 0
+                        var apiErrorMsg = ""
+                        try {
                             val json = JSONObject(errBody)
-                            "API Error: [Code: ${json.optInt("code")}] ${json.optString("msg")}"
+                            apiErrorCode = json.optInt("code", 0)
+                            apiErrorMsg = json.optString("msg", response.message)
                         } catch (e: Exception) {
-                            "HTTP Error ${response.code}: ${response.message}"
+                            apiErrorMsg = response.message
                         }
-                        _lastErrorMessage.value = errMsg
+
+                        val formattedErrMsg = if (apiErrorCode != 0) {
+                            "API Error [Code: $apiErrorCode]: $apiErrorMsg"
+                        } else {
+                            "HTTP Error ${response.code}: $apiErrorMsg"
+                        }
+
+                        _lastErrorMessage.value = formattedErrMsg
                         _healthState.value = "DEGRADED"
 
                         // Check for rate limit or IP ban codes (429 or 418)
@@ -217,11 +239,26 @@ object BinanceConnector {
                             _cooldownExpirationTime.value = System.currentTimeMillis() + (backoffSec * 1000)
                             Log.e(TAG, "Rate limit hit (HTTP ${response.code}). Putting connector on cooldown for ${backoffSec}s.")
                             _lastErrorMessage.value = "Rate Limit Hit. Backing off for ${backoffSec}s."
+                            throw BinanceApiException(response.code, "Rate limit exceeded. Backoff ${backoffSec}s.", isRetryable = false)
                         }
 
-                        throw IOException(errMsg)
+                        // Non-retryable business logic / balance errors (e.g. -2010 Insufficient Balance, -2011 Unknown Order, -1013 Filter Min Notional)
+                        val nonRetryableCodes = setOf(-2010, -2011, -2013, -1013, -1121, -1100, -1111)
+                        if (nonRetryableCodes.contains(apiErrorCode) || (response.code in 400..404 && apiErrorCode != 0)) {
+                            Log.w(TAG, "Non-retryable exchange error detected ($apiErrorCode): $apiErrorMsg. Aborting retries.")
+                            throw BinanceApiException(apiErrorCode, formattedErrMsg, isRetryable = false)
+                        }
+
+                        throw IOException(formattedErrMsg)
                     }
                 }
+            } catch (e: BinanceApiException) {
+                if (!e.isRetryable) {
+                    // Stop retrying immediately for non-retryable account/order errors
+                    lastException = e
+                    break
+                }
+                lastException = e
             } catch (e: Exception) {
                 lastException = e
                 Log.w(TAG, "Attempt $attempt failed: ${e.message}")
@@ -239,6 +276,9 @@ object BinanceConnector {
         _healthState.value = "FAILING"
         val finalErrMsg = lastException?.message ?: "Unknown connection failure"
         _lastErrorMessage.value = "Connection failed: $finalErrMsg"
+        if (lastException is BinanceApiException) {
+            throw lastException
+        }
         throw IOException("Failed after $maxRetries attempts: $finalErrMsg", lastException)
     }
 
@@ -523,6 +563,21 @@ object BinanceConnector {
                     time = transactTime
                 )
             )
+        } catch (e: BinanceApiException) {
+            if (side.equals("SELL", ignoreCase = true) && e.errorCode == -2010) {
+                val impossibleEx = ImpossibleCloseOrderException(
+                    symbol = symbol,
+                    errorCode = -2010,
+                    message = "Impossible close order for $symbol: Account has 0.00 base balance on Binance Spot. Position must be auto-pruned."
+                )
+                Log.w(TAG, impossibleEx.message)
+                _lastErrorMessage.value = impossibleEx.message
+                Result.failure(impossibleEx)
+            } else {
+                Log.e(TAG, "Order placement failed (${e.errorCode}): ${e.message}", e)
+                _lastErrorMessage.value = e.message
+                Result.failure(e)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Order placement failed: ${e.message}", e)
             _lastErrorMessage.value = e.message
