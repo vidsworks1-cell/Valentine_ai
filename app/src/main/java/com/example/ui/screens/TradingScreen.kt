@@ -193,12 +193,26 @@ fun TradingScreen(
                             fontSize = 11.sp,
                             letterSpacing = 1.sp
                         )
-                        IconButton(onClick = {}) {
-                            Icon(
-                                imageVector = Icons.Default.Shield,
-                                contentDescription = "Secure Portfolio Link",
-                                tint = Color(0xFF21005D)
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    viewModel.fetchLiveBinanceBalances()
+                                    viewModel.fetchLayeredVpsStatus()
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Sync Live Binance Balance",
+                                    tint = Color(0xFF21005D)
+                                )
+                            }
+                            IconButton(onClick = {}) {
+                                Icon(
+                                    imageVector = Icons.Default.Shield,
+                                    contentDescription = "Secure Portfolio Link",
+                                    tint = Color(0xFF21005D)
+                                )
+                            }
                         }
                     }
 
@@ -2123,13 +2137,33 @@ fun PositionManagerSection(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        "PORTFOLIO HEALTH INDEX",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "PORTFOLIO HEALTH INDEX",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(
+                            onClick = {
+                                viewModel.fetchLiveBinanceBalances()
+                                viewModel.fetchLayeredVpsStatus()
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Sync Live Binance Balance",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         "$${String.format(Locale.US, "%,.2f", totalPortfolioValue)}",
                         style = MaterialTheme.typography.headlineLarge,

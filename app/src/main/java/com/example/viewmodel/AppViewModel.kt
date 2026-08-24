@@ -2586,6 +2586,63 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         }
     }
 
+    /**
+     * Queries live balance — prioritizing the Backend VPS and falling back to direct Binance Spot REST.
+     */
+    fun fetchLiveBinanceBalances(customApiKey: String? = null, customApiSecret: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // If custom credentials provided, update SecureCredentialStore and connector
+                if (!customApiKey.isNullOrBlank() && !customApiSecret.isNullOrBlank()) {
+                    com.example.aza.security.SecureCredentialStore.saveBinanceCredentials(
+                        apiKey = customApiKey,
+                        secretKey = customApiSecret,
+                        env = com.example.aza.security.SecureCredentialStore.getBinanceEnv(),
+                        tradingMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
+                    )
+                    com.example.aza.connector.BinanceConnector.updateCredentials(customApiKey, customApiSecret)
+                }
+
+                // 1. PRIMARY: Refresh backend VPS status & paper wallet
+                try {
+                    val status = repository.getLayeredVpsStatus()
+                    _layeredVpsStatus.value = status
+                    val wallet = repository.getContaboPaperWallet("default_account")
+                    _contaboPaperWallet.value = wallet
+                } catch (e: Exception) {
+                    // Ignore backend unreachable
+                }
+
+                // 2. Fetch live balances from Binance Connector
+                com.example.aza.connector.BinanceConnector.syncServerTime()
+                val balanceResult = com.example.aza.connector.BinanceConnector.fetchAccountBalances()
+                if (balanceResult.isSuccess) {
+                    val balances = balanceResult.getOrThrow()
+                    val usdtBal = balances.find { it.asset == "USDT" }?.total ?: 0.0
+                    val usdcBal = balances.find { it.asset == "USDC" }?.total ?: 0.0
+                    val btcBal = balances.find { it.asset == "BTC" }?.total ?: 0.0
+                    val ethBal = balances.find { it.asset == "ETH" }?.total ?: 0.0
+                    val solBal = balances.find { it.asset == "SOL" }?.total ?: 0.0
+                    val bnbBal = balances.find { it.asset == "BNB" }?.total ?: 0.0
+
+                    val totalLiquidUsd = usdtBal + usdcBal
+                    addSchedulerThought("💰 BINANCE SYNC: Live Wallet Balance: USDT=$$usdtBal, BTC=$btcBal BTC, ETH=$ethBal ETH, BNB=$bnbBal BNB. Total Liquid: $$totalLiquidUsd")
+                } else {
+                    val err = balanceResult.exceptionOrNull()?.message ?: "Direct API query failed"
+                    addSchedulerThought("⚠️ BINANCE SYNC: Notice: $err")
+                }
+            } catch (e: Exception) {
+                addSchedulerThought("⚠️ BINANCE SYNC ERROR: ${e.message}")
+            }
+        }
+    }
+
+    fun syncFromBinance(apiKey: String? = null, apiSecret: String? = null) {
+        val targetKey = apiKey ?: com.example.aza.security.SecureCredentialStore.getBinanceApiKey()
+        val targetSecret = apiSecret ?: com.example.aza.security.SecureCredentialStore.getBinanceApiSecret()
+        fetchLiveBinanceBalances(targetKey, targetSecret)
+    }
+
     // Aza Autonomous Scheduler and Mission simulation properties
     val scheduler = com.example.aza.execution.AzaAutonomousScheduler(repository, planningEngine, viewModelScope, capabilityRegistry)
     val executiveBrain = scheduler.executiveBrain
