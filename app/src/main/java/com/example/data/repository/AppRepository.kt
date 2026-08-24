@@ -91,7 +91,13 @@ class AppRepository(private val db: AppDatabase) {
     }
 
     suspend fun getBinanceBalances(): List<com.example.data.api.BinanceBalance> = withContext(Dispatchers.IO) {
-        contaboService.getBinanceBalances()
+        val directResult = com.example.aza.connector.BinanceConnector.fetchAccountBalances()
+        if (directResult.isSuccess) {
+            val list = directResult.getOrThrow()
+            list.map { com.example.data.api.BinanceBalance(asset = it.asset, free = it.free, locked = it.locked) }
+        } else {
+            emptyList()
+        }
     }
 
     suspend fun getBinanceOrders(symbol: String? = null): List<com.example.data.api.BinanceOpenOrder> = withContext(Dispatchers.IO) {
