@@ -519,6 +519,14 @@ class AppRepository(private val db: AppDatabase) {
         portfolioDao.insertAsset(asset)
     }
 
+    suspend fun insertAssets(assets: List<PortfolioAsset>) = withContext(Dispatchers.IO) {
+        portfolioDao.insertAssets(assets)
+    }
+
+    suspend fun clearPortfolioAssets() = withContext(Dispatchers.IO) {
+        portfolioDao.clearAllAssets()
+    }
+
     suspend fun updateAsset(asset: PortfolioAsset) = withContext(Dispatchers.IO) {
         portfolioDao.updateAsset(asset)
     }

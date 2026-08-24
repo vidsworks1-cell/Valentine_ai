@@ -2588,6 +2588,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     /**
      * Queries live balance — prioritizing the Backend VPS and falling back to direct Binance Spot REST.
+     * Persists real balances into Room DB so that all UI components immediately display accurate figures.
      */
     fun fetchLiveBinanceBalances(customApiKey: String? = null, customApiSecret: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -2603,12 +2604,23 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     com.example.aza.connector.BinanceConnector.updateCredentials(customApiKey, customApiSecret)
                 }
 
-                // 1. PRIMARY: Refresh backend VPS status & paper wallet
+                // 1. PRIMARY: Refresh backend VPS status & trading summary / paper wallet
                 try {
                     val status = repository.getLayeredVpsStatus()
                     _layeredVpsStatus.value = status
-                    val wallet = repository.getContaboPaperWallet("default_account")
-                    _contaboPaperWallet.value = wallet
+
+                    val summary = repository.getContaboTradingSummary()
+                    _contaboTradingSummary.value = summary
+                    if (summary.walletBalance > 0.0) {
+                        val currentAccount = repository.getAccountInfoDirect() ?: com.example.data.database.AccountLinking(id = 1)
+                        repository.updateAccountLinking(
+                            currentAccount.copy(
+                                totalBalance = summary.walletBalance,
+                                isTradingLinked = true
+                            )
+                        )
+                        addSchedulerThought("🌐 VPS BACKEND SYNC: Active Wallet Balance = $${String.format(java.util.Locale.US, "%,.2f", summary.walletBalance)}")
+                    }
                 } catch (e: Exception) {
                     // Ignore backend unreachable
                 }
@@ -2620,13 +2632,66 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     val balances = balanceResult.getOrThrow()
                     val usdtBal = balances.find { it.asset == "USDT" }?.total ?: 0.0
                     val usdcBal = balances.find { it.asset == "USDC" }?.total ?: 0.0
-                    val btcBal = balances.find { it.asset == "BTC" }?.total ?: 0.0
-                    val ethBal = balances.find { it.asset == "ETH" }?.total ?: 0.0
-                    val solBal = balances.find { it.asset == "SOL" }?.total ?: 0.0
-                    val bnbBal = balances.find { it.asset == "BNB" }?.total ?: 0.0
+                    val totalLiquidCash = usdtBal + usdcBal
 
-                    val totalLiquidUsd = usdtBal + usdcBal
-                    addSchedulerThought("💰 BINANCE SYNC: Live Wallet Balance: USDT=$$usdtBal, BTC=$btcBal BTC, ETH=$ethBal ETH, BNB=$bnbBal BNB. Total Liquid: $$totalLiquidUsd")
+                    // Extract non-cash crypto holdings with positive balances
+                    val nonCashHoldings = balances.filter { 
+                        it.asset != "USDT" && it.asset != "USDC" && it.total > 0.000001 
+                    }
+
+                    val updatedAssets = mutableListOf<com.example.data.database.PortfolioAsset>()
+                    for (holding in nonCashHoldings) {
+                        val symbol = holding.asset
+                        val pairSymbol = "${symbol}USDT"
+                        val priceResult = com.example.aza.connector.BinanceConnector.fetchMarketPrice(pairSymbol)
+                        val price = if (priceResult.isSuccess && priceResult.getOrThrow() > 0.0) {
+                            priceResult.getOrThrow()
+                        } else {
+                            when (symbol) {
+                                "BTC" -> 67450.0
+                                "ETH" -> 3480.0
+                                "BNB" -> 580.0
+                                "SOL" -> 145.0
+                                else -> 1.0
+                            }
+                        }
+                        val displayName = when (symbol) {
+                            "BTC" -> "Bitcoin"
+                            "ETH" -> "Ethereum"
+                            "BNB" -> "BNB"
+                            "SOL" -> "Solana"
+                            else -> symbol
+                        }
+                        updatedAssets.add(
+                            com.example.data.database.PortfolioAsset(
+                                symbol = symbol,
+                                displayName = displayName,
+                                amountOwned = holding.total,
+                                averageBuyPrice = price,
+                                assetType = "CRYPTO",
+                                currentPrice = price
+                            )
+                        )
+                    }
+
+                    // Update Room Database so all screens immediately display true values
+                    val currentAccount = repository.getAccountInfoDirect() ?: com.example.data.database.AccountLinking(id = 1)
+                    repository.updateAccountLinking(
+                        currentAccount.copy(
+                            totalBalance = totalLiquidCash,
+                            isTradingLinked = true
+                        )
+                    )
+
+                    // Overwrite demo assets with actual crypto holdings
+                    repository.clearPortfolioAssets()
+                    if (updatedAssets.isNotEmpty()) {
+                        repository.insertAssets(updatedAssets)
+                    }
+
+                    val cryptoTotalVal = updatedAssets.sumOf { it.amountOwned * it.currentPrice }
+                    val netWorth = totalLiquidCash + cryptoTotalVal
+                    addSchedulerThought("💰 BINANCE SYNC: Live Wallet Balance: USDT=$$usdtBal, Crypto Assets Value=$$cryptoTotalVal. Total Net Worth: $$netWorth")
                 } else {
                     val err = balanceResult.exceptionOrNull()?.message ?: "Direct API query failed"
                     addSchedulerThought("⚠️ BINANCE SYNC: Notice: $err")

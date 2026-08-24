@@ -170,8 +170,9 @@ fun TradingScreen(
             ) {
         // Hero Balance Card
         item {
-            val totalPortfolioValue = assets.sumOf { it.amountOwned * it.currentPrice }
+            val investedCapitalValue = assets.filter { it.symbol != "USDT" && it.symbol != "USDC" }.sumOf { it.amountOwned * it.currentPrice }
             val linkedBalance = accountInfo?.totalBalance ?: 0.0
+            val totalPortfolioValue = linkedBalance + investedCapitalValue
 
             Box(
                 modifier = Modifier
@@ -219,7 +220,7 @@ fun TradingScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "$${String.format(Locale.US, "%,.2f", linkedBalance + totalPortfolioValue)}",
+                        text = "$${String.format(Locale.US, "%,.2f", totalPortfolioValue)}",
                         color = Color(0xFF21005D),
                         fontSize = 32.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -252,7 +253,7 @@ fun TradingScreen(
                                 fontSize = 11.sp
                             )
                             Text(
-                                "$${String.format(Locale.US, "%,.2f", totalPortfolioValue)}",
+                                "$${String.format(Locale.US, "%,.2f", investedCapitalValue)}",
                                 color = Color(0xFF6750A4),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp

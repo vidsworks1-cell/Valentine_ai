@@ -11,11 +11,17 @@ interface PortfolioDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAsset(asset: PortfolioAsset)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAssets(assets: List<PortfolioAsset>)
+
     @Update
     suspend fun updateAsset(asset: PortfolioAsset)
 
     @Delete
     suspend fun deleteAsset(asset: PortfolioAsset)
+
+    @Query("DELETE FROM portfolio_assets")
+    suspend fun clearAllAssets()
 
     @Query("SELECT * FROM portfolio_assets WHERE symbol = :symbol LIMIT 1")
     suspend fun getAssetBySymbol(symbol: String): PortfolioAsset?
