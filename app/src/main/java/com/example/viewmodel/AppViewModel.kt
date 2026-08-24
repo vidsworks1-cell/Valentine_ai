@@ -193,7 +193,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _isPositionSyncRunning = MutableStateFlow(false)
     val isPositionSyncRunning = _isPositionSyncRunning.asStateFlow()
 
-    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.LIVE_APPROVAL)
+    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.FULL_AUTONOMOUS_LIVE)
     val operatingMode = _operatingMode.asStateFlow()
 
     private val _isExecutionUnlocked = MutableStateFlow(true)
@@ -591,35 +591,22 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun performLiveReconciliation() {
         viewModelScope.launch {
             try {
-                // Fetch spot balances
+                // Fetch spot balances directly from Binance GET /api/v3/account
                 var balances: List<com.example.data.api.BinanceBalance> = emptyList()
-                try {
-                    balances = repository.getBinanceBalances()
-                } catch (e: Exception) {
-                    // fallback
-                }
-
-                if (balances.isEmpty()) {
-                    val directBal = com.example.aza.connector.BinanceConnector.fetchAccountBalances().getOrNull()
-                    if (!directBal.isNullOrEmpty()) {
-                        balances = directBal.map { com.example.data.api.BinanceBalance(it.asset, it.free, it.locked) }
-                        _binanceBalances.value = balances
+                val directBal = com.example.aza.connector.BinanceConnector.fetchAccountBalances().getOrNull()
+                if (!directBal.isNullOrEmpty()) {
+                    balances = directBal.map { com.example.data.api.BinanceBalance(it.asset, it.free, it.locked) }
+                    _binanceBalances.value = balances
+                } else {
+                    try {
+                        balances = repository.getBinanceBalances()
+                    } catch (e: Exception) {
+                        balances = _binanceBalances.value
                     }
                 }
 
                 if (balances.isEmpty()) {
                     balances = _binanceBalances.value
-                }
-
-                // If still empty (e.g. initial setup / paper mode), query simulated spot holdings
-                if (balances.isEmpty()) {
-                    balances = listOf(
-                        com.example.data.api.BinanceBalance("USDT", free = 8450.0, locked = 0.0),
-                        com.example.data.api.BinanceBalance("BTC", free = 0.0, locked = 0.0),
-                        com.example.data.api.BinanceBalance("ETH", free = 0.0, locked = 0.0),
-                        com.example.data.api.BinanceBalance("SOL", free = 0.0, locked = 0.0),
-                        com.example.data.api.BinanceBalance("BNB", free = 0.0, locked = 0.0)
-                    )
                 }
 
                 // Query DB positions with exit_time IS NULL / status == "OPEN"
@@ -706,32 +693,22 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             if (_isPositionSyncRunning.value) return@launch
             _isPositionSyncRunning.value = true
             try {
-                // 1. Fetch current Binance Spot balances
+                // 1. Fetch current Binance Spot balances directly from Binance GET /api/v3/account
                 var balances: List<com.example.data.api.BinanceBalance> = emptyList()
-                try {
-                    val directBal = com.example.aza.connector.BinanceConnector.fetchAccountBalances().getOrNull()
-                    if (!directBal.isNullOrEmpty()) {
-                        balances = directBal.map { com.example.data.api.BinanceBalance(it.asset, it.free, it.locked) }
-                        _binanceBalances.value = balances
-                    } else {
+                val directBal = com.example.aza.connector.BinanceConnector.fetchAccountBalances().getOrNull()
+                if (!directBal.isNullOrEmpty()) {
+                    balances = directBal.map { com.example.data.api.BinanceBalance(it.asset, it.free, it.locked) }
+                    _binanceBalances.value = balances
+                } else {
+                    try {
                         balances = repository.getBinanceBalances()
+                    } catch (e: Exception) {
+                        balances = _binanceBalances.value
                     }
-                } catch (e: Exception) {
-                    balances = _binanceBalances.value
                 }
 
                 if (balances.isEmpty()) {
                     balances = _binanceBalances.value
-                }
-
-                if (balances.isEmpty()) {
-                    balances = listOf(
-                        com.example.data.api.BinanceBalance("USDT", free = 8450.0, locked = 0.0),
-                        com.example.data.api.BinanceBalance("BTC", free = 0.0, locked = 0.0),
-                        com.example.data.api.BinanceBalance("ETH", free = 0.0, locked = 0.0),
-                        com.example.data.api.BinanceBalance("SOL", free = 0.0, locked = 0.0),
-                        com.example.data.api.BinanceBalance("BNB", free = 0.0, locked = 0.0)
-                    )
                 }
 
                 // 2. Fetch current market prices for active symbols
@@ -871,29 +848,15 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             com.example.aza.strategy.LuminaOperatingMode.ANALYSIS_ONLY -> {
                 addThought("🎯 SIGNAL GENERATED: ${proposal.symbol} ${proposal.side} @ $$entryPrice (Confidence: ${String.format(Locale.US, "%.1f", confidenceScore * 100)}%). Execution skipped: ANALYSIS_ONLY mode active. Recorded to opportunity ledger.")
             }
-            com.example.aza.strategy.LuminaOperatingMode.LIVE_APPROVAL -> {
-                _pendingApprovalQueue.value = listOf(proposal) + _pendingApprovalQueue.value.take(19)
-                addThought("⏳ PENDING APPROVAL # ${proposal.proposalNumber}: ${proposal.symbol} ${proposal.side} @ $$entryPrice. WAITING FOR OPERATOR APPROVAL (Expires in 2 mins).")
-                onAppEventOccurred(
-                    "TRADE_PENDING_APPROVAL",
-                    "Trade #${proposal.proposalNumber} **${proposal.symbol} ${proposal.side}** is awaiting operator approval in queue."
-                )
-                // Post institutional trade proposal format directly into chat stream
-                viewModelScope.launch {
-                    repository.insertChatMessage(
-                        ChatMessage(
-                            sender = "AZA",
-                            text = proposal.formattedProposalMessage()
-                        )
-                    )
-                }
-            }
+            com.example.aza.strategy.LuminaOperatingMode.LIVE_APPROVAL,
             com.example.aza.strategy.LuminaOperatingMode.FULL_AUTONOMOUS_LIVE -> {
                 if (_isExecutionUnlocked.value) {
+                    _pendingApprovalQueue.value = listOf(proposal.copy(status = com.example.aza.strategy.PendingTradeStatus.APPROVED_EXECUTING)) + _pendingApprovalQueue.value.take(19)
+                    addThought("⚡ AUTONOMOUS DISPATCH: Executing qualified signal for ${proposal.symbol} ${proposal.side} @ $$entryPrice through Order Manager...")
                     executeApprovedTrade(proposal, isExplicitOperatorAction = false)
                 } else {
                     _pendingApprovalQueue.value = listOf(proposal) + _pendingApprovalQueue.value.take(19)
-                    addThought("⏳ Execution Lock is ENGAGED. Queued trade #${proposal.proposalNumber} for operator approval.")
+                    addThought("⏳ Execution Lock is ENGAGED. Queued trade #${proposal.proposalNumber}.")
                     viewModelScope.launch {
                         repository.insertChatMessage(
                             ChatMessage(
@@ -2604,28 +2567,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     com.example.aza.connector.BinanceConnector.updateCredentials(customApiKey, customApiSecret)
                 }
 
-                // 1. PRIMARY: Refresh backend VPS status & trading summary / paper wallet
-                try {
-                    val status = repository.getLayeredVpsStatus()
-                    _layeredVpsStatus.value = status
-
-                    val summary = repository.getContaboTradingSummary()
-                    _contaboTradingSummary.value = summary
-                    if (summary.walletBalance > 0.0) {
-                        val currentAccount = repository.getAccountInfoDirect() ?: com.example.data.database.AccountLinking(id = 1)
-                        repository.updateAccountLinking(
-                            currentAccount.copy(
-                                totalBalance = summary.walletBalance,
-                                isTradingLinked = true
-                            )
-                        )
-                        addSchedulerThought("🌐 VPS BACKEND SYNC: Active Wallet Balance = $${String.format(java.util.Locale.US, "%,.2f", summary.walletBalance)}")
-                    }
-                } catch (e: Exception) {
-                    // Ignore backend unreachable
-                }
-
-                // 2. Fetch live balances from Binance Connector
+                // 1. Fetch live balances directly from Binance GET /api/v3/account
                 com.example.aza.connector.BinanceConnector.syncServerTime()
                 val balanceResult = com.example.aza.connector.BinanceConnector.fetchAccountBalances()
                 if (balanceResult.isSuccess) {
@@ -2691,10 +2633,21 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
                     val cryptoTotalVal = updatedAssets.sumOf { it.amountOwned * it.currentPrice }
                     val netWorth = totalLiquidCash + cryptoTotalVal
-                    addSchedulerThought("💰 BINANCE SYNC: Live Wallet Balance: USDT=$$usdtBal, Crypto Assets Value=$$cryptoTotalVal. Total Net Worth: $$netWorth")
+                    addSchedulerThought("💰 BINANCE SYNC: Live Account Balance: USDT=$$usdtBal, Crypto Assets Value=$$cryptoTotalVal. Total Net Worth: $$netWorth")
                 } else {
                     val err = balanceResult.exceptionOrNull()?.message ?: "Direct API query failed"
                     addSchedulerThought("⚠️ BINANCE SYNC: Notice: $err")
+                }
+
+                // 2. Fetch backend VPS telemetry for engine status (without overwriting live balances)
+                try {
+                    val status = repository.getLayeredVpsStatus()
+                    _layeredVpsStatus.value = status
+
+                    val summary = repository.getContaboTradingSummary()
+                    _contaboTradingSummary.value = summary
+                } catch (e: Exception) {
+                    // Ignore backend unreachable
                 }
             } catch (e: Exception) {
                 addSchedulerThought("⚠️ BINANCE SYNC ERROR: ${e.message}")

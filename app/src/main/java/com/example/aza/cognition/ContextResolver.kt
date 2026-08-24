@@ -71,43 +71,47 @@ object ContextResolver {
         val atrMultiplier = try { com.example.aza.security.SecureCredentialStore.getAtrMultiplier() } catch (e: Exception) { 2.0 }
         val positionSlicePercent = try { com.example.aza.security.SecureCredentialStore.getPositionSlicePercent() } catch (e: Exception) { 10.0 }
 
-        // Fetch live balances from backend repository (VPS service)
-        val (backendSuccess, liveBalancesText) = try {
-            val balances = repository.getBinanceBalances()
-            val text = if (balances.isEmpty()) {
-                "No non-zero balances found on Binance Spot account."
-            } else {
-                balances.joinToString(", ") { "${it.asset}: ${it.free} (Locked: ${it.locked})" }
-            }
-            Pair(true, text)
+        // Direct live balance fetch from Binance GET /api/v3/account (Signed Request)
+        val directResult = try {
+            com.example.aza.connector.BinanceConnector.fetchAccountBalances()
         } catch (e: Exception) {
-            Pair(false, "")
+            Result.failure(e)
         }
 
         val finalBalancesText: String
-        if (backendSuccess) {
+        if (directResult.isSuccess) {
             isConnected = true
-            if (maskedKey == "None") maskedKey = "Server-Configured (VPS)"
             resolvedMode = "LIVE"
-            finalBalancesText = liveBalancesText
-        } else if (isConnected) {
-            val result = try {
-                com.example.aza.connector.BinanceConnector.fetchAccountBalances()
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-            finalBalancesText = if (result.isSuccess) {
-                val list = result.getOrThrow()
-                if (list.isEmpty()) {
-                    "No assets with non-zero balances found on Binance."
-                } else {
-                    list.joinToString(", ") { "${it.asset}: ${String.format(java.util.Locale.US, "%.6f", it.total)} (Free: ${String.format(java.util.Locale.US, "%.6f", it.free)}, Locked: ${String.format(java.util.Locale.US, "%.6f", it.locked)})" }
-                }
+            val list = directResult.getOrThrow()
+            finalBalancesText = if (list.isEmpty()) {
+                "No assets with non-zero balances found on Binance Spot."
             } else {
-                "Failed to fetch live balances: ${result.exceptionOrNull()?.message}"
+                list.joinToString(", ") { "${it.asset}: ${String.format(java.util.Locale.US, "%.6f", it.total)} (Free: ${String.format(java.util.Locale.US, "%.6f", it.free)}, Locked: ${String.format(java.util.Locale.US, "%.6f", it.locked)})" }
             }
         } else {
-            finalBalancesText = "N/A (Integration inactive)"
+            // Fallback to backend service if direct call fails
+            val (backendSuccess, liveBalancesText) = try {
+                val balances = repository.getBinanceBalances()
+                val text = if (balances.isEmpty()) {
+                    "No non-zero balances found on Binance Spot account."
+                } else {
+                    balances.joinToString(", ") { "${it.asset}: ${it.free} (Locked: ${it.locked})" }
+                }
+                Pair(true, text)
+            } catch (e: Exception) {
+                Pair(false, "")
+            }
+
+            if (backendSuccess) {
+                isConnected = true
+                if (maskedKey == "None") maskedKey = "Server-Configured (VPS)"
+                resolvedMode = "LIVE"
+                finalBalancesText = liveBalancesText
+            } else if (isConnected) {
+                finalBalancesText = "Failed to fetch live balances: ${directResult.exceptionOrNull()?.message}"
+            } else {
+                finalBalancesText = "N/A (Integration inactive / No API keys configured)"
+            }
         }
 
         return UnifiedContext(

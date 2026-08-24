@@ -52,8 +52,8 @@ object BinanceConnector {
         .certificatePinner(com.example.aza.security.SslPinningUtility.certificatePinner)
         .build()
 
-    // Operating Mode & Execution Lock (Disengaged hard lock: Unlocked and set to LIVE_APPROVAL by default)
-    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.LIVE_APPROVAL)
+    // Operating Mode & Execution Lock (Disengaged manual approval: Unlocked and set to FULL_AUTONOMOUS_LIVE by default)
+    private val _operatingMode = MutableStateFlow(com.example.aza.strategy.LuminaOperatingMode.FULL_AUTONOMOUS_LIVE)
     val operatingMode: StateFlow<com.example.aza.strategy.LuminaOperatingMode> = _operatingMode.asStateFlow()
 
     private val _isExecutionUnlocked = MutableStateFlow(true)
@@ -305,9 +305,16 @@ object BinanceConnector {
     }
 
     /**
-     * Fetch user's spot account balance information.
+     * Fetch user's spot account balance information directly from Binance GET /api/v3/account.
      */
     suspend fun fetchAccountBalances(): Result<List<BinanceAssetBalance>> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || apiSecret.isBlank()) {
+            val key = try { com.example.aza.security.SecureCredentialStore.getBinanceApiKey() } catch(e: Exception) { "" }
+            val secret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }
+            if (key.isNotBlank() && secret.isNotBlank()) {
+                updateCredentials(key, secret)
+            }
+        }
         if (apiKey.isBlank() || apiSecret.isBlank()) {
             return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
         }

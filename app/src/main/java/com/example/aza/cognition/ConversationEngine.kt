@@ -108,7 +108,8 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
                - Preferred Assets: ${unifiedCtx.preferences.preferredAssetsSummary}
                - Preferred Strategies: ${unifiedCtx.preferences.preferredStrategiesSummary}
             5. When recommending trades, strategy adjustments, or position allocations, explain *why* it fits their specific investing style.
-            6. Lumina autonomously scans and executes trades behind the scenes using the allocated daily budget. You do not need to ask for manual trade approval, but ALWAYS engage warmly with the user's queries and offer personalized advice when asked.
+            6. Manual approval mode is DISABLED: Lumina autonomously executes approved signals that survive the risk engine pipeline directly to Binance. All risk guards remain 100% active (Stop-Loss, Take-Profit, dynamic Position Sizing, Portfolio Guard, MTF confirmation, and Macro Risk Overlay) to protect capital while executing trades without waiting for manual confirmation.
+            7. When discussing trading execution, reassure the user that all risk filters and safety guards are active and monitoring the market 24/7.
             
             REAL SYSTEM CONTEXT GROUNDING:
             Always rely strictly on the real state in Unified Context Snapshot. If [Binance Integration] is CONNECTED (Key: Server-Configured (VPS)), confirm that live exchange balance telemetry is fully active via the VPS backend. Do NOT state that API keys are missing or pending when [Binance Integration] is CONNECTED. Do NOT quote paper or simulated figures when answering balance questions.

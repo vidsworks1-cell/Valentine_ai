@@ -145,13 +145,8 @@ object ExecutionGateManager {
             )
         }
 
-        // Tier 3: Human-In-The-Loop Approval requirement
-        if (operatingMode == LuminaOperatingMode.LIVE_APPROVAL && !isOperatorExplicitAction) {
-            return ExecutionGateDecision.Blocked(
-                reason = "Live Approval Mode requires explicit operator authorization.",
-                suggestedAction = "Approve trade in the Pending Approval Queue."
-            )
-        }
+        // Tier 3: Human-In-The-Loop Approval requirement (Disabled manual approval per operator directive)
+        // Order Manager automatically executes signals that pass the risk pipeline. All other risk guards remain ACTIVE.
 
         // Tier 4: Validation on Pending Trade Proposal (TTL & Slippage Tolerance)
         if (pendingTrade != null) {
