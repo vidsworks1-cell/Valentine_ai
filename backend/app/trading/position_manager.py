@@ -54,6 +54,12 @@ class PositionManager:
         if "lowest_price" not in position_details or position_details["lowest_price"] is None or position_details["lowest_price"] <= 0.0:
             position_details["lowest_price"] = entry
 
+        # Ensure trailing_stop and stop_loss are always present
+        if "trailing_stop" not in position_details or position_details["trailing_stop"] is None:
+            position_details["trailing_stop"] = float(position_details.get("stop_loss", 0.0))
+        if "stop_loss" not in position_details or position_details["stop_loss"] is None:
+            position_details["stop_loss"] = float(position_details.get("trailing_stop", 0.0))
+
         # Spacing based on final take profit, or default to an estimate if not present
         total_dist = abs(tp - entry) if tp > 0 else (entry * 0.05)
         
@@ -143,8 +149,14 @@ class PositionManager:
                     side = pos["side"]
                     entry = pos["entry_price"]
                     size = pos["position_size"]
-                    tp = pos["take_profit"]
-                    sl = pos["stop_loss"]
+                    tp = pos.get("take_profit", 0.0)
+                    sl = pos.get("stop_loss", 0.0)
+                    if "trailing_stop" not in pos or pos["trailing_stop"] is None:
+                        pos["trailing_stop"] = float(sl)
+                    if "highest_price" not in pos or pos["highest_price"] is None or float(pos.get("highest_price", 0.0)) <= 0.0:
+                        pos["highest_price"] = entry
+                    if "lowest_price" not in pos or pos["lowest_price"] is None or float(pos.get("lowest_price", 0.0)) <= 0.0:
+                        pos["lowest_price"] = entry
                     
                     current_price = cache.get_price(symbol)
                     if current_price <= 0.0:

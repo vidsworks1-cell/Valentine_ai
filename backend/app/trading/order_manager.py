@@ -125,6 +125,23 @@ class OrderManager:
                     if usdt_balance <= 0.0:
                         usdt_balance = 10000.0 if trading_mode == "TESTNET" else 1000.0
                     balance = usdt_balance
+
+                    # Spot Trading Safety Guard: In Binance Spot, a new SELL order requires holding the base asset
+                    if opportunity.get("side", "").upper() == "SELL":
+                        base_asset = symbol.replace("USDT", "").replace("USDC", "").replace("FDUSD", "").upper()
+                        base_free = next((float(b["free"]) for b in balances if b["asset"] == base_asset), 0.0)
+                        if base_free <= 0.00001:
+                            logger.warning(f"⚠️ [SPOT SHORT NOT SUPPORTED] Rejected {symbol} SELL order: Spot account holds 0 {base_asset}. (Binance Spot only allows BUY to enter and SELL to exit held assets).")
+                            try:
+                                await AuditService.create_audit_log(db, AuditLogCreate(
+                                    level="WARNING",
+                                    category="TRADING",
+                                    message=f"Spot shorting suppressed for {symbol}",
+                                    details=f"Binance Spot mode cannot open naked short without {base_asset} balance."
+                                ))
+                            except Exception:
+                                pass
+                            return
                 else:
                     wallet = await PaperTradingService.get_wallet(db, "lumina_default")
                     if not wallet:
@@ -319,6 +336,10 @@ class OrderManager:
                         ))
                     except Exception as ae:
                         logger.error(f"Failed to log risk rejected audit event: {ae}")
+                    return
+
+                if position_size <= 0.0:
+                    logger.warning(f"[STAGE: RISK] REJECTED. Position size for {opportunity['symbol']} calculated as {position_size} (balance ${balance:.2f} insufficient for minimum trade increment).")
                     return
 
                 logger.info(f"[STAGE: RISK] PASSED. Calculated position size: {position_size} units, allowed risk amount: {allowed_risk_amt} USD.")

@@ -144,6 +144,10 @@ class StateRecoveryEngine:
                             pos["highest_price"] = entry_px
                         if "lowest_price" not in pos or pos.get("lowest_price") is None or float(pos.get("lowest_price", 0.0)) <= 0.0:
                             pos["lowest_price"] = entry_px
+                        if "trailing_stop" not in pos or pos.get("trailing_stop") is None:
+                            pos["trailing_stop"] = float(pos.get("stop_loss", 0.0))
+                        if "stop_loss" not in pos or pos.get("stop_loss") is None:
+                            pos["stop_loss"] = float(pos.get("trailing_stop", 0.0))
                         pm._positions[trade_id] = pos
                         restored_counts["positions"] += 1
                     except Exception as pe:

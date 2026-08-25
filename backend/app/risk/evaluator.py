@@ -105,15 +105,20 @@ class RiskEvaluator:
 
         if actual_risk > max_allowed_risk:
             excess = actual_risk - max_allowed_risk
-            tolerance = max(1.0, max_allowed_risk * 0.001)
+            tolerance = max(0.5, max_allowed_risk * 0.05)
             if excess <= tolerance:
                 clamped_size = math.floor((max_allowed_risk / stop_distance) * 10000) / 10000.0
-                logger.info(f"Clamping position size from {size} to {clamped_size} to satisfy risk constraint (excess was {excess:.6f} <= {tolerance:.6f})")
-                order["position_size"] = clamped_size
-                actual_risk = round(stop_distance * clamped_size, 4)
+                if clamped_size > 0:
+                    logger.info(f"Clamping position size from {size} to {clamped_size} to satisfy risk constraint (excess was {excess:.6f} <= {tolerance:.6f})")
+                    order["position_size"] = clamped_size
+                    actual_risk = round(stop_distance * clamped_size, 4)
 
-            if actual_risk > max_allowed_risk:
-                logger.warning(f"Order exceeds max risk allocation: Actual Risk ${actual_risk:.2f} > Allowed Risk ${max_allowed_risk:.2f} (Diff: ${diff:.2f})")
+            if actual_risk > max_allowed_risk or order.get("position_size", 0.0) <= 0:
+                logger.warning(f"Order exceeds max risk allocation: Actual Risk ${actual_risk:.2f} > Allowed Risk ${max_allowed_risk:.2f} (Size: {order.get('position_size', 0.0)})")
                 return False
+
+        if order.get("position_size", 0.0) <= 0:
+            logger.warning(f"Order validation failed: final position size {order.get('position_size')} is <= 0")
+            return False
 
         return True
