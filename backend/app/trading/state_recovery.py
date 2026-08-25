@@ -120,6 +120,11 @@ class StateRecoveryEngine:
                 for key, pos in snapshot["positions"].items():
                     try:
                         trade_id = int(key) if str(key).isdigit() else key
+                        entry_px = float(pos.get("entry_price", 0.0))
+                        if "highest_price" not in pos or pos.get("highest_price") is None or float(pos.get("highest_price", 0.0)) <= 0.0:
+                            pos["highest_price"] = entry_px
+                        if "lowest_price" not in pos or pos.get("lowest_price") is None or float(pos.get("lowest_price", 0.0)) <= 0.0:
+                            pos["lowest_price"] = entry_px
                         pm._positions[trade_id] = pos
                         restored_counts["positions"] += 1
                     except Exception as pe:

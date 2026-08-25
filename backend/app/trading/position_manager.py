@@ -48,6 +48,12 @@ class PositionManager:
         tp = position_details["take_profit"]
         side = position_details["side"]
         
+        # Ensure highest_price and lowest_price are always initialized for peak & drawdown tracking
+        if "highest_price" not in position_details or position_details["highest_price"] is None or position_details["highest_price"] <= 0.0:
+            position_details["highest_price"] = entry
+        if "lowest_price" not in position_details or position_details["lowest_price"] is None or position_details["lowest_price"] <= 0.0:
+            position_details["lowest_price"] = entry
+
         # Spacing based on final take profit, or default to an estimate if not present
         total_dist = abs(tp - entry) if tp > 0 else (entry * 0.05)
         
