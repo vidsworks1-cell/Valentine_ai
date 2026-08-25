@@ -1,7 +1,10 @@
 import asyncio
 import logging
+import os
+import json
 import time
 from typing import Optional, Tuple
+from datetime import datetime, timezone
 from app.workers.websocket_worker import BinanceWebSocketWorker
 from app.ai.reasoning import AiReasoningEngine
 from app.trading.position_manager import PositionManager
@@ -9,6 +12,8 @@ from app.trading.exchange_reconciliation import ExchangeReconciliationEngine
 from app.workers.price_cache import PriceCache
 
 logger = logging.getLogger("lumina.scheduler.manager")
+
+CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "system_config.json")
 
 class LayeredSchedulerManager:
     """Orchestrates background loops across Layer 2, Layer 3, and Layer 4."""
@@ -23,9 +28,55 @@ class LayeredSchedulerManager:
         self.running = False
         self._recon_task: Optional[asyncio.Task] = None
         
-        # Core safeguards and modes
+        # Core safeguards and modes - restored from persistent config if available
         self.global_trading_mode: str = "PAPER"  # OFF, PAPER, TESTNET, LIVE
         self.emergency_stop_active: bool = False
+        self.load_persistent_config()
+
+    def load_persistent_config(self):
+        """Loads persistent system configuration from data/system_config.json or environment."""
+        env_mode = os.getenv("GLOBAL_TRADING_MODE") or os.getenv("TRADING_MODE")
+        if env_mode and env_mode.upper() in ["OFF", "PAPER", "TESTNET", "LIVE"]:
+            self.global_trading_mode = env_mode.upper()
+            logger.info(f"Loaded global trading mode from environment: {self.global_trading_mode}")
+            return
+
+        if os.path.exists(CONFIG_FILE_PATH):
+            try:
+                with open(CONFIG_FILE_PATH, "r") as f:
+                    cfg = json.load(f)
+                    saved_mode = cfg.get("global_trading_mode")
+                    if saved_mode and str(saved_mode).upper() in ["OFF", "PAPER", "TESTNET", "LIVE"]:
+                        self.global_trading_mode = str(saved_mode).upper()
+                        logger.info(f"💾 Loaded persistent global trading mode: {self.global_trading_mode} from '{CONFIG_FILE_PATH}'")
+                    if "emergency_stop_active" in cfg:
+                        self.emergency_stop_active = bool(cfg.get("emergency_stop_active"))
+            except Exception as e:
+                logger.error(f"Failed loading persistent config from {CONFIG_FILE_PATH}: {e}")
+
+    def save_persistent_config(self):
+        """Saves current global trading mode and safeguards to persistent storage."""
+        try:
+            os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
+            cfg_data = {
+                "global_trading_mode": self.global_trading_mode,
+                "emergency_stop_active": self.emergency_stop_active,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            with open(CONFIG_FILE_PATH, "w") as f:
+                json.dump(cfg_data, f, indent=2)
+            logger.info(f"💾 Saved persistent global trading mode '{self.global_trading_mode}' to '{CONFIG_FILE_PATH}'")
+        except Exception as e:
+            logger.error(f"Failed saving persistent config to {CONFIG_FILE_PATH}: {e}")
+
+    def set_trading_mode(self, mode: str) -> str:
+        """Sets trading mode in memory and persists to storage."""
+        mode_upper = mode.upper()
+        if mode_upper not in ["OFF", "PAPER", "TESTNET", "LIVE"]:
+            raise ValueError(f"Invalid trading mode: {mode}. Allowed: OFF, PAPER, TESTNET, LIVE")
+        self.global_trading_mode = mode_upper
+        self.save_persistent_config()
+        return self.global_trading_mode
 
     @classmethod
     async def get_instance(cls) -> 'LayeredSchedulerManager':

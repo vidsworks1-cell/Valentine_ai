@@ -38,8 +38,17 @@ async def lifespan(app: FastAPI):
             except Exception as mig_err:
                 logging.warning(f"Schema migration check note: {mig_err}")
             
-    # Start the Layered VPS Operational Daemon (Layer 2, 3, and 4)
+    # Restore persistent institutional system state (positions, strategy weights, cooldowns, and trading mode)
+    try:
+        from app.trading.state_recovery import StateRecoveryEngine
+        state_recovery = StateRecoveryEngine.get_instance()
+        state_recovery.restore_system_state()
+    except Exception as sr_err:
+        logging.error(f"State recovery during startup note: {sr_err}")
+
+    # Start the Layered VPS Operational Daemon (Layer 2, 3, and 4) with restored trading mode
     scheduler_manager = await LayeredSchedulerManager.get_instance()
+    scheduler_manager.load_persistent_config()
     await scheduler_manager.start_all()
     
     yield

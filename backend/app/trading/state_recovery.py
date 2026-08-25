@@ -38,12 +38,21 @@ class StateRecoveryEngine:
         snapshot: Dict[str, Any] = {
             "version": "1.0",
             "saved_at": datetime.now(timezone.utc).isoformat(),
+            "global_trading_mode": "PAPER",
             "positions": {},
             "cooldowns": {},
             "strategy_stats": {},
             "market_memory": {},
             "capital_allocations": {}
         }
+
+        # 0. Capture Global Trading Mode
+        try:
+            from app.scheduler.manager import LayeredSchedulerManager
+            if LayeredSchedulerManager._instance is not None:
+                snapshot["global_trading_mode"] = LayeredSchedulerManager._instance.global_trading_mode
+        except Exception as e:
+            logger.error(f"[STATE RECOVERY] Failed to capture global trading mode: {e}")
 
         # 1. Capture Active Positions
         try:
@@ -107,11 +116,21 @@ class StateRecoveryEngine:
                 snapshot = json.load(f)
 
             restored_counts = {
+                "global_trading_mode": snapshot.get("global_trading_mode", "PAPER"),
                 "positions": 0,
                 "cooldowns": 0,
                 "strategy_stats": 0,
                 "capital_allocations": 0
             }
+
+            # 0. Restore Global Trading Mode
+            if "global_trading_mode" in snapshot:
+                try:
+                    from app.scheduler.manager import LayeredSchedulerManager
+                    if LayeredSchedulerManager._instance is not None:
+                        LayeredSchedulerManager._instance.set_trading_mode(snapshot["global_trading_mode"])
+                except Exception as me:
+                    logger.error(f"Failed restoring global trading mode: {me}")
 
             # 1. Restore Active Positions
             if "positions" in snapshot and snapshot["positions"]:

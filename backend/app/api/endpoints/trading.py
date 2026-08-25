@@ -122,7 +122,13 @@ async def _set_global_trading_mode(mode: str):
         raise HTTPException(status_code=400, detail="Invalid global trading mode. Allowed: OFF, PAPER, TESTNET, LIVE")
         
     manager = await LayeredSchedulerManager.get_instance()
-    manager.global_trading_mode = mode_upper
+    manager.set_trading_mode(mode_upper)
+    
+    # Immediately trigger reconciliation for the newly selected mode
+    try:
+        await manager.reconciliation_engine.reconcile_state()
+    except Exception as re_err:
+        logger.warning(f"Immediate reconciliation upon mode switch warning: {re_err}")
     
     return {
         "status": "SUCCESS",
