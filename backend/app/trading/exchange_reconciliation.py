@@ -82,17 +82,18 @@ class ExchangeReconciliationEngine:
                         
                         symbol = f"{asset}USDT"
                         current_px = cache.get_price(symbol)
-                        notional_val = total_qty * (current_px if current_px > 0 else 0.0)
+                        notional_val = total_qty * current_px if current_px > 0 else 0.0
                         
-                        # Only consider non-dust holdings (> $2.00 notional or significant quantity)
-                        if total_qty > 0.0001 and (current_px <= 0 or notional_val >= 2.0):
+                        # Only consider real actively traded positions (must have valid price and notional value >= $5.00)
+                        # Filter out dust, unlisted airdrops, and untracked micro-balances
+                        if current_px > 0 and notional_val >= 5.0 and total_qty > 0.0001:
                             exchange_positions.append({
                                 "symbol": symbol,
                                 "side": "BUY",
                                 "position_size": total_qty,
-                                "entry_price": current_px if current_px > 0 else 0.0,
-                                "stop_loss": 0.0,
-                                "take_profit": 0.0,
+                                "entry_price": current_px,
+                                "stop_loss": current_px * 0.95,
+                                "take_profit": current_px * 1.10,
                                 "asset": asset
                             })
                 else:

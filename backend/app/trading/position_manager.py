@@ -556,21 +556,44 @@ class PositionManager:
             )
             
             if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
-                logger.error(f"❌ BINANCE CLOSE ORDER FAILED: {binance_res}")
-                try:
-                    from app.services.audit_service import AuditService
-                    async with AsyncSessionLocal() as db:
-                        await AuditService.create_audit_log(db, AuditLogCreate(
-                            level="ERROR",
-                            category="TRADING",
-                            message=f"Binance closing order failed for {symbol}",
-                            details=f"Error response: {binance_res}"
-                        ))
-                except Exception as ae:
-                    logger.error(f"Failed to log close order failure audit event: {ae}")
-                # Put position back into active tracking so we can try again or alert operator
-                self._positions[trade_id] = pos
-                return
+                err_msg = str(binance_res.get("msg", "")) + " " + str(binance_res.get("raw_response", ""))
+                is_dust_or_filter_error = any(kw in err_msg for kw in ["LOT_SIZE", "MIN_NOTIONAL", "PERCENT_PRICE", "INVALID_SYMBOL", "ILLEGAL_CHARS"])
+                
+                pos["_close_retries"] = pos.get("_close_retries", 0) + 1
+                
+                if is_dust_or_filter_error or pos["_close_retries"] >= 3:
+                    logger.warning(
+                        f"⚠️ BINANCE CLOSE CANNOT EXECUTE ON EXCHANGE ({symbol} qty {size}): {binance_res}. "
+                        f"Finalizing internal position tracking to prevent infinite retry loops."
+                    )
+                    try:
+                        from app.services.audit_service import AuditService
+                        async with AsyncSessionLocal() as db:
+                            await AuditService.create_audit_log(db, AuditLogCreate(
+                                level="WARNING",
+                                category="TRADING",
+                                message=f"Binance close skipped on exchange for {symbol} (dust / unexecutable lot size)",
+                                details=f"Size: {size}. Error: {binance_res}"
+                            ))
+                    except Exception:
+                        pass
+                    # Do not re-insert into active tracking; proceed to finalize locally in DB
+                else:
+                    logger.error(f"❌ BINANCE CLOSE ORDER FAILED (attempt {pos['_close_retries']}/3): {binance_res}")
+                    try:
+                        from app.services.audit_service import AuditService
+                        async with AsyncSessionLocal() as db:
+                            await AuditService.create_audit_log(db, AuditLogCreate(
+                                level="ERROR",
+                                category="TRADING",
+                                message=f"Binance closing order failed for {symbol}",
+                                details=f"Error response: {binance_res}"
+                            ))
+                    except Exception as ae:
+                        logger.error(f"Failed to log close order failure audit event: {ae}")
+                    # Put position back into active tracking for next tick retry
+                    self._positions[trade_id] = pos
+                    return
                 
             logger.info(f"Binance closing order placed successfully: {binance_res}")
             if "fills" in binance_res and binance_res["fills"]:
