@@ -8,12 +8,7 @@ class PriceCache:
     _lock = asyncio.Lock()
 
     def __init__(self):
-        self._prices: Dict[str, float] = {
-            "BTCUSDT": 92500.0,
-            "ETHUSDT": 3450.0,
-            "BNBUSDT": 580.0,
-            "SOLUSDT": 175.0
-        }
+        self._prices: Dict[str, float] = {}
         self._updates_count: Dict[str, int] = {}
         self._symbol_last_update_time: Dict[str, float] = {}
         self._symbol_synchronized: Dict[str, bool] = {}

@@ -2037,7 +2037,7 @@ class SelfAdaptationEngine:
                     )
                 else:
                     reasons.append(
-                        f"[STRATEGY ALPHA MEMORY] Champion bonus WITHHELD for '{strategy}': Recent expectancy (+{s_exp:.2f}R, {s_wr:.1f}% WR) is deteriorating. Decaying Champion advantage."
+                        f"[STRATEGY ALPHA MEMORY] Champion bonus WITHHELD for '{strategy}': Recent expectancy ({s_exp:+.2f}R, {s_wr:.1f}% WR) is deteriorating. Decaying Champion advantage."
                     )
         except Exception:
             pass

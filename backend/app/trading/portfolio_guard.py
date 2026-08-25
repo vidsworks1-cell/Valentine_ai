@@ -227,8 +227,8 @@ class PortfolioGuard:
             active_positions = PositionManager.get_instance().get_active_positions(trading_mode=active_mode)
             open_count = len(active_positions)
 
-            # 1c. Crypto Beta Exposure Cap Guard (Don't open another long if portfolio is already 80%+ crypto beta)
-            if proposed_side == "BUY" and open_count > 0:
+            # 1c. Crypto Beta Exposure Cap Guard (Don't open another long if portfolio has >=3 positions and is 80%+ crypto beta, or >=4 long positions)
+            if proposed_side == "BUY" and open_count >= 3:
                 long_crypto_count = sum(
                     1 for p in active_positions 
                     if p.get("side", "BUY").upper() == "BUY" and self.get_symbol_sector_cluster(p.get("symbol", "")) in ["LAYER_1", "DEFI", "MEMES", "AI_TOKENS", "GENERAL_ALT"]

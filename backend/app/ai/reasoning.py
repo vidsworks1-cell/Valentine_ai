@@ -98,15 +98,16 @@ class AiReasoningEngine:
                     percent_move = (abs_diff / rej_price) * 100.0
                     atr_pct = percent_move
 
-                    # Sanity Check: Reject impossible jump values (> 20.0%)
+                    # Sanity Check: If price discrepancy exceeds 20.0%, resync reference price to avoid warning spam
                     if percent_move > 20.0:
                         logger.warning(
                             f"⚠️ [COOLDOWN INVALIDATION REJECTED] {sym} ({sd}) calculated move {percent_move:.2f}% exceeds sanity threshold (20.0%).\n"
-                            f"  - Cooldown Reference Price: ${rej_price:.4f}\n"
+                            f"  - Cooldown Reference Price: ${rej_price:.4f} -> Resyncing to live ${c_price:.4f}\n"
                             f"  - Current Price: ${c_price:.4f}\n"
                             f"  - Absolute Difference: ${abs_diff:.4f}\n"
-                            f"  - Cooldown maintained to prevent false resets."
+                            f"  - Cooldown maintained with updated live reference price."
                         )
+                        entry["rejected_price"] = c_price
                     elif percent_move >= 1.5:
                         logger.info(
                             f"⚡ [COOLDOWN INVALIDATED EARLY] {sym} ({sd})\n"
