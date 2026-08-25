@@ -237,10 +237,23 @@ class BinanceConnector:
                         "msg": response.text
                     }
 
+                # Format log data cleanly by omitting hundreds of zero balances
+                log_data = data
+                if isinstance(data, dict) and "balances" in data and isinstance(data["balances"], list):
+                    non_zero = [
+                        b for b in data["balances"]
+                        if float(b.get("free", 0.0)) > 0 or float(b.get("locked", 0.0)) > 0
+                    ]
+                    log_data = {
+                        k: v for k, v in data.items() if k != "balances"
+                    }
+                    log_data["non_zero_balances"] = non_zero
+                    log_data["_zero_balances_omitted"] = len(data["balances"]) - len(non_zero)
+
                 logger.info(
                     f"[BinanceConnector] Response Received | Environment: {exec_env} | Mode: {mode_upper} | "
                     f"BaseURL: {base_url} | Path: {path} | HTTP Status: {response.status_code} | "
-                    f"Full Binance JSON Response: {data}"
+                    f"Response: {log_data}"
                 )
 
                 if response.status_code != 200:
