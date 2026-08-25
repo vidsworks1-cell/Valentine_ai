@@ -51,9 +51,9 @@ class PriceCache:
 
     @classmethod
     def get_price(cls, symbol: str) -> float:
-        """Retrieves the latest price from the cache with fallback to standard reference."""
+        """Retrieves the latest price from the cache or returns 0.0 if untracked."""
         inst = cls.get_instance_sync()
-        return inst._prices.get(symbol.upper(), 92500.0 if "BTC" in symbol.upper() else 3450.0)
+        return inst._prices.get(symbol.upper(), 0.0)
 
     @classmethod
     def get_all_prices(cls) -> Dict[str, float]:

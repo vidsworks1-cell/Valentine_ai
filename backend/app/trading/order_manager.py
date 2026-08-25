@@ -338,6 +338,29 @@ class OrderManager:
                         logger.error(f"Failed to log risk rejected audit event: {ae}")
                     return
 
+                # Enforce Binance Spot LOT_SIZE step sizes and MIN_NOTIONAL (>= 5.0 USDT)
+                step_precision = {
+                    "BTCUSDT": 5,
+                    "ETHUSDT": 4,
+                    "BNBUSDT": 3,
+                    "SOLUSDT": 2
+                }
+                prec = step_precision.get(opportunity["symbol"].upper(), 4)
+                factor = 10 ** prec
+                position_size = round(position_size, prec)
+
+                # In LIVE/TESTNET Binance Spot BUY: enforce min notional >= 5.20 USDT
+                if trading_mode in ["TESTNET", "LIVE"] and opportunity["side"].upper() == "BUY":
+                    notional_val = position_size * price
+                    if notional_val < 5.20:
+                        if balance >= 5.50:
+                            target_qty = 5.50 / price
+                            position_size = math.ceil(target_qty * factor) / float(factor)
+                            logger.info(f"⚡ [BINANCE SPOT NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} USDT) to satisfy Binance Spot MIN_NOTIONAL ($5.00).")
+                        else:
+                            logger.warning(f"⚠️ [BINANCE SPOT NOTIONAL INSUFFICIENT] Wallet balance ${balance:.2f} cannot satisfy Binance Spot MIN_NOTIONAL ($5.00) for {opportunity['symbol']}.")
+                            return
+
                 if position_size <= 0.0:
                     logger.warning(f"[STAGE: RISK] REJECTED. Position size for {opportunity['symbol']} calculated as {position_size} (balance ${balance:.2f} insufficient for minimum trade increment).")
                     return
@@ -353,7 +376,8 @@ class OrderManager:
                         symbol=opportunity["symbol"],
                         side=opportunity["side"],
                         order_type=order_routing,
-                        quantity=position_size
+                        quantity=position_size,
+                        price=price if order_routing == "LIMIT" else None
                     )
                     
                     if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):

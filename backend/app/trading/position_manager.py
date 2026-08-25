@@ -546,13 +546,21 @@ class PositionManager:
         from app.services.binance_connector import BinanceConnector
         if trading_mode in ["TESTNET", "LIVE"]:
             opposite_side = "SELL" if side == "BUY" else "BUY"
-            logger.info(f"Placing real Binance Spot close order for {symbol} ({opposite_side} qty: {size}) in {trading_mode} mode...")
+            step_precision = {
+                "BTCUSDT": 5,
+                "ETHUSDT": 4,
+                "BNBUSDT": 3,
+                "SOLUSDT": 2
+            }
+            prec = step_precision.get(symbol.upper(), 4)
+            close_qty = round(size, prec)
+            logger.info(f"Placing real Binance Spot close order for {symbol} ({opposite_side} qty: {close_qty}) in {trading_mode} mode...")
             binance_res = await BinanceConnector.get_instance().create_order(
                 mode=trading_mode,
                 symbol=symbol,
                 side=opposite_side,
                 order_type="MARKET",
-                quantity=size
+                quantity=close_qty
             )
             
             if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
