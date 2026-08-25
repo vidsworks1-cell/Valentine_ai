@@ -181,6 +181,11 @@ class PortfolioGuard:
             proposed_side = opportunity.get("side", "BUY").upper()
             incoming_conf = float(opportunity.get("confidence_score", opportunity.get("confidence", 0.78)))
 
+            # Obtain current active trading mode
+            from app.scheduler.manager import LayeredSchedulerManager
+            scheduler = await LayeredSchedulerManager.get_instance()
+            active_mode = getattr(scheduler, "global_trading_mode", "PAPER").upper()
+
             # 1. Daily Loss Circuit Breaker Check
             today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
             daily_realized_pnl = 0.0
@@ -190,7 +195,8 @@ class PortfolioGuard:
                     async with AsyncSessionLocal() as db:
                         query = select(func.sum(Trade.profit_loss)).where(
                             Trade.exit_price.isnot(None),
-                            Trade.exit_time >= today_start
+                            Trade.exit_time >= today_start,
+                            Trade.trading_mode == active_mode
                         )
                         res = await db.execute(query)
                         daily_realized_pnl = res.scalar() or 0.0
@@ -216,9 +222,9 @@ class PortfolioGuard:
                 self._record_rejected_opportunity(opportunity, log_msg, incoming_conf)
                 return PortfolioDecision(approved=False, action_type="REJECT", reason=log_msg)
 
-            # Retrieve active positions
+            # Retrieve active positions filtered strictly by active trading mode
             from app.trading.position_manager import PositionManager
-            active_positions = PositionManager.get_instance().get_active_positions()
+            active_positions = PositionManager.get_instance().get_active_positions(trading_mode=active_mode)
             open_count = len(active_positions)
 
             # 1c. Crypto Beta Exposure Cap Guard (Don't open another long if portfolio is already 80%+ crypto beta)
@@ -263,14 +269,16 @@ class PortfolioGuard:
             # 2. Check for Pyramid Scale-In or Opposite Direction Partial Rebalance
             existing_pos = next((p for p in active_positions if p.get("symbol") == symbol), None)
 
-            # Check DB for unclosed trades if not found in in-memory PositionManager
+            # Check DB for unclosed trades in the current trading mode if not found in in-memory PositionManager
             if not existing_pos:
                 try:
                     async with AsyncSessionLocal() as db:
                         if select:
                             query = select(Trade).where(
                                 Trade.symbol == symbol,
-                                Trade.exit_price.is_(None)
+                                Trade.exit_price.is_(None),
+                                Trade.exit_time.is_(None),
+                                Trade.trading_mode == active_mode
                             )
                             res = await db.execute(query)
                             db_trade = res.scalars().first()
@@ -282,7 +290,8 @@ class PortfolioGuard:
                                     "side": db_trade.side,
                                     "entry_price": db_trade.entry_price,
                                     "profit_loss": db_trade.profit_loss or 0.0,
-                                    "thesis_strength": 0.75
+                                    "thesis_strength": 0.75,
+                                    "trading_mode": db_trade.trading_mode
                                 }
                 except Exception as de:
                     logger.error(f"Error checking DB for unclosed trade in PortfolioGuard: {de}")

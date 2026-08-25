@@ -31,6 +31,7 @@ try:
         risk_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
         risk_pct: Mapped[float] = mapped_column(Float, default=0.0, nullable=False) # Percentage risk relative to wallet size
         outcome: Mapped[Optional[str]] = mapped_column(String(50), nullable=True) # WIN, LOSS, STOPPED_OUT, TAKE_PROFIT, BREAKEVEN
+        trading_mode: Mapped[str] = mapped_column(String(10), default="PAPER", nullable=False, index=True) # "PAPER", "TESTNET", "LIVE"
 except ImportError:
     class Trade:
         pass

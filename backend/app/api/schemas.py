@@ -29,6 +29,7 @@ class TradeBase(BaseModel):
     atr: float = Field(0.0, ge=0.0, description="Average True Range at entry")
     risk_amount: float = Field(0.0, ge=0.0, description="Absolute risk size in quote currency")
     risk_pct: float = Field(0.0, ge=0.0, description="Percent of account size risked")
+    trading_mode: str = Field("PAPER", description="Execution mode: PAPER, TESTNET, or LIVE")
 
 class TradeCreate(TradeBase):
     pass

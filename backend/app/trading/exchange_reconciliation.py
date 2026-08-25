@@ -2,20 +2,28 @@ import asyncio
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
+from sqlalchemy.future import select
+from app.database.session import AsyncSessionLocal
+from app.models.trading import Trade
+from app.api.schemas import TradeUpdate, AuditLogCreate
+from app.services.audit_service import AuditService
 
 logger = logging.getLogger("lumina.trading.exchange_reconciliation")
 
 class ExchangeReconciliationEngine:
     """
     Pillar 2: Exchange Reconciliation Engine.
-    Periodically compares Lumina's internal position and order tracking with 
+    Periodically compares Lumina's internal position and database tracking with 
     the actual exchange account state to detect and resolve discrepancies automatically:
+    - Stale / Ghost internal positions in DB or memory (closed on exchange or never opened live)
     - Orphaned exchange positions (positions opened manually or via API cutoffs)
-    - Ghost internal positions (positions closed on exchange but active in Lumina)
     - Position size or side mismatches
-    - Missing or misaligned stop-loss / take-profit protective orders
+    - Safe closure of unclosed DB trades without deleting historical records
     """
     _instance: Optional['ExchangeReconciliationEngine'] = None
+
+    # Stablecoins and quote currencies to ignore when discovering spot positions from balances
+    QUOTE_AND_FIAT_ASSETS = {"USDT", "USDC", "USD", "BUSD", "FDUSD", "TUSD", "EUR", "GBP"}
 
     def __init__(self):
         self.last_reconciliation_at: Optional[str] = None
@@ -33,24 +41,66 @@ class ExchangeReconciliationEngine:
     async def reconcile_state(self, simulated_exchange_positions: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Executes complete exchange vs internal state reconciliation.
-        If simulated_exchange_positions is provided, uses that (e.g., during chaos testing or paper trading);
-        otherwise defaults to querying the active live/paper execution manager.
+        If simulated_exchange_positions is provided, uses that (e.g., during testing or paper trading);
+        otherwise queries BinanceConnector for LIVE/TESTNET modes or synchronizes PAPER mode.
         """
+        from app.scheduler.manager import LayeredSchedulerManager
         from app.trading.position_manager import PositionManager
-        pm = PositionManager.get_instance()
-        internal_positions = pm.get_active_positions()
+        from app.services.binance_connector import BinanceConnector
+        from app.workers.price_cache import PriceCache
 
-        # Build mapping of internal positions by symbol
+        scheduler = await LayeredSchedulerManager.get_instance()
+        active_mode = getattr(scheduler, "global_trading_mode", "PAPER").upper()
+        pm = PositionManager.get_instance()
+        cache = await PriceCache.get_instance()
+
+        internal_positions = pm.get_active_positions(trading_mode=active_mode)
+
+        # Build mapping of internal in-memory positions by symbol
         internal_by_sym: Dict[str, Dict[str, Any]] = {
             pos.get("symbol", "").upper(): pos for pos in internal_positions if pos.get("symbol")
         }
 
-        # Retrieve exchange positions
+        # 1. Retrieve exchange positions
         exchange_positions: List[Dict[str, Any]] = []
+        
         if simulated_exchange_positions is not None:
             exchange_positions = simulated_exchange_positions
+        elif active_mode in ["LIVE", "TESTNET"]:
+            connector = BinanceConnector.get_instance()
+            try:
+                balances_res = await connector.get_wallet_balances(active_mode)
+                if isinstance(balances_res, list):
+                    for b in balances_res:
+                        asset = b.get("asset", "").upper()
+                        if asset in self.QUOTE_AND_FIAT_ASSETS:
+                            continue
+                        
+                        free = float(b.get("free", 0.0))
+                        locked = float(b.get("locked", 0.0))
+                        total_qty = free + locked
+                        
+                        symbol = f"{asset}USDT"
+                        current_px = cache.get_price(symbol)
+                        notional_val = total_qty * (current_px if current_px > 0 else 0.0)
+                        
+                        # Only consider non-dust holdings (> $2.00 notional or significant quantity)
+                        if total_qty > 0.0001 and (current_px <= 0 or notional_val >= 2.0):
+                            exchange_positions.append({
+                                "symbol": symbol,
+                                "side": "BUY",
+                                "position_size": total_qty,
+                                "entry_price": current_px if current_px > 0 else 0.0,
+                                "stop_loss": 0.0,
+                                "take_profit": 0.0,
+                                "asset": asset
+                            })
+                else:
+                    logger.warning(f"[RECONCILIATION] Could not fetch wallet balances from Binance ({active_mode}): {balances_res}")
+            except Exception as be:
+                logger.error(f"[RECONCILIATION] Error querying exchange balances for {active_mode}: {be}")
         else:
-            # Fallback to simulated paper/live position match
+            # For PAPER mode, exchange positions match internal positions
             for pos in internal_positions:
                 exchange_positions.append({
                     "symbol": pos.get("symbol"),
@@ -70,23 +120,24 @@ class ExchangeReconciliationEngine:
 
         all_symbols = set(internal_by_sym.keys()).union(set(exchange_by_sym.keys()))
 
+        # 2. Check in-memory vs exchange positions
         for sym in all_symbols:
             int_pos = internal_by_sym.get(sym)
             exc_pos = exchange_by_sym.get(sym)
 
-            # Case A: Ghost Internal Position (Exists in Lumina, but closed on exchange)
+            # Case A: Ghost Internal Position in Memory (Exists in Lumina memory, but closed on exchange)
             if int_pos and not exc_pos:
                 disc = {
                     "type": "GHOST_INTERNAL_POSITION",
                     "symbol": sym,
                     "internal_size": int_pos.get("position_size"),
                     "exchange_size": 0.0,
-                    "description": f"Position for {sym} exists in Lumina internal state but is closed on Exchange."
+                    "description": f"Position for {sym} exists in Lumina internal memory but is closed on Exchange ({active_mode})."
                 }
                 discrepancies.append(disc)
                 
-                # Auto-resolve: Remove from internal positions
-                trade_id = next((tid for tid, p in pm._positions.items() if p.get("symbol") == sym), None)
+                # Auto-resolve: Remove from internal positions and close in DB if exists
+                trade_id = next((tid for tid, p in pm._positions.items() if p.get("symbol") == sym and p.get("trading_mode", "PAPER").upper() == active_mode), None)
                 if trade_id is not None:
                     del pm._positions[trade_id]
                     resolutions.append({
@@ -115,10 +166,11 @@ class ExchangeReconciliationEngine:
                     "side": exc_pos.get("side", "BUY"),
                     "position_size": exc_pos.get("position_size", 1.0),
                     "entry_price": exc_pos.get("entry_price", 100.0),
-                    "stop_loss": exc_pos.get("stop_loss", 95.0),
-                    "take_profit": exc_pos.get("take_profit", 110.0),
+                    "stop_loss": exc_pos.get("stop_loss", 0.0),
+                    "take_profit": exc_pos.get("take_profit", 0.0),
                     "strategy": "Exchange_Reconciliation_Adopted",
-                    "confidence": 0.85
+                    "confidence": 0.85,
+                    "trading_mode": active_mode
                 }
                 await pm.track_position(new_trade_id, pos_details)
                 resolutions.append({
@@ -128,7 +180,7 @@ class ExchangeReconciliationEngine:
                     "status": "RESOLVED"
                 })
 
-            # Case C: Both exist -> check quantity or price alignment
+            # Case C: Both exist -> check quantity alignment
             elif int_pos and exc_pos:
                 int_size = float(int_pos.get("position_size", 0.0))
                 exc_size = float(exc_pos.get("position_size", 0.0))
@@ -142,7 +194,6 @@ class ExchangeReconciliationEngine:
                     }
                     discrepancies.append(disc)
                     
-                    # Auto-resolve: Sync internal size to match exchange truth
                     int_pos["position_size"] = exc_size
                     resolutions.append({
                         "symbol": sym,
@@ -151,6 +202,62 @@ class ExchangeReconciliationEngine:
                         "status": "RESOLVED"
                     })
 
+        # 3. Synchronize unclosed Database Trade Records for the active mode
+        if active_mode in ["LIVE", "TESTNET"]:
+            try:
+                async with AsyncSessionLocal() as db:
+                    query = select(Trade).where(
+                        Trade.trading_mode == active_mode,
+                        Trade.exit_time.is_(None)
+                    )
+                    res = await db.execute(query)
+                    unclosed_db_trades = res.scalars().all()
+                    
+                    for dbt in unclosed_db_trades:
+                        sym = dbt.symbol.upper()
+                        # If this trade has no matching position on exchange
+                        if sym not in exchange_by_sym:
+                            curr_px = cache.get_price(sym)
+                            exit_px = curr_px if curr_px > 0 else dbt.entry_price
+                            pnl = 0.0
+                            if dbt.side.upper() == "BUY":
+                                pnl = (exit_px - dbt.entry_price) * dbt.position_size
+                            else:
+                                pnl = (dbt.entry_price - exit_px) * dbt.position_size
+                            
+                            disc = {
+                                "type": "STALE_DATABASE_TRADE",
+                                "trade_id": dbt.id,
+                                "symbol": sym,
+                                "mode": active_mode,
+                                "description": f"Trade #{dbt.id} ({sym}) in DB had exit_time IS NULL but no active position exists on Binance ({active_mode})."
+                            }
+                            discrepancies.append(disc)
+                            
+                            # Gracefully close DB trade without deleting historical record
+                            dbt.exit_time = datetime.now(timezone.utc)
+                            dbt.exit_price = exit_px
+                            dbt.profit_loss = round(pnl, 4)
+                            dbt.outcome = "RECONCILED_CLOSED"
+                            db.add(dbt)
+                            
+                            # Also ensure purged from memory
+                            if dbt.id in pm._positions:
+                                del pm._positions[dbt.id]
+                                
+                            resolutions.append({
+                                "symbol": sym,
+                                "trade_id": dbt.id,
+                                "action": "AUTO_CLOSED_STALE_DB_TRADE",
+                                "exit_price": exit_px,
+                                "profit_loss": pnl,
+                                "status": "RESOLVED"
+                            })
+                            
+                    await db.commit()
+            except Exception as dbe:
+                logger.error(f"[RECONCILIATION] Error reconciling unclosed database trades: {dbe}")
+
         self.last_reconciliation_at = datetime.now(timezone.utc).isoformat()
         self.total_reconciliations_run += 1
         self.discrepancies_detected_count += len(discrepancies)
@@ -158,6 +265,7 @@ class ExchangeReconciliationEngine:
 
         report = {
             "reconciled_at": self.last_reconciliation_at,
+            "mode": active_mode,
             "status": "HEALTHY_IN_SYNC" if not discrepancies else "DISCREPANCIES_RESOLVED",
             "symbols_audited_count": len(all_symbols),
             "discrepancies_found": len(discrepancies),
@@ -170,7 +278,11 @@ class ExchangeReconciliationEngine:
         if len(self.recent_reports) > 10:
             self.recent_reports.pop(0)
 
-        logger.info(f"🔄 [EXCHANGE RECONCILIATION] Run #{self.total_reconciliations_run} finished. Audited: {len(all_symbols)} symbols | Discrepancies: {len(discrepancies)} | Auto-Fixed: {len(resolutions)}")
+        if discrepancies:
+            logger.info(f"🔄 [EXCHANGE RECONCILIATION] Run #{self.total_reconciliations_run} ({active_mode}). Audited: {len(all_symbols)} | Discrepancies: {len(discrepancies)} | Auto-Resolved: {len(resolutions)}")
+        else:
+            logger.info(f"🔄 [EXCHANGE RECONCILIATION] Run #{self.total_reconciliations_run} ({active_mode}) IN SYNC. Audited: {len(all_symbols)} | Zero discrepancies.")
+
         return report
 
     def get_telemetry(self) -> Dict[str, Any]:

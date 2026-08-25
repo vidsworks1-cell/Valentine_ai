@@ -403,7 +403,8 @@ class OrderManager:
                     indicators=json.dumps({"binance_order_id": binance_order_id}) if binance_order_id else "{}",
                     atr=opportunity["atr"],
                     risk_amount=allowed_risk_amt,
-                    risk_pct=risk_pct * 100.0
+                    risk_pct=risk_pct * 100.0,
+                    trading_mode=trading_mode
                 )
                 
                 trade = await TradingService.create_trade(db, trade_create)
@@ -476,6 +477,7 @@ class OrderManager:
                     "confidence": opportunity.get("confidence_score", 0.83),
                     "strategy": opportunity.get("strategy_used", "Volatility Expansion Breakout"),
                     "risk_pct": risk_pct,
+                    "trading_mode": trading_mode,
                     "scale_ins": 0,
                     "entry_time": datetime.utcnow(),
                     "is_probationary_trade": opportunity.get("is_probationary_trade", False),

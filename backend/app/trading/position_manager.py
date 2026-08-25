@@ -79,10 +79,16 @@ class PositionManager:
         position_details["invalidation_first_detected_at"] = 0.0
         position_details["trend_history"] = []
 
-        self._positions[trade_id] = position_details
-        logger.info(f"PositionManager started tracking trade {trade_id} ({position_details['symbol']}) with TP stages: {position_details['tp_stages']} | Stale limit: {round(position_details['stale_threshold_sec']/3600, 1)}h")
+        if "trading_mode" not in position_details:
+            position_details["trading_mode"] = "PAPER"
 
-    def get_active_positions(self) -> List[Dict[str, Any]]:
+        self._positions[trade_id] = position_details
+        logger.info(f"PositionManager started tracking trade {trade_id} ({position_details['symbol']}) [Mode: {position_details['trading_mode']}] with TP stages: {position_details['tp_stages']} | Stale limit: {round(position_details['stale_threshold_sec']/3600, 1)}h")
+
+    def get_active_positions(self, trading_mode: Optional[str] = None) -> List[Dict[str, Any]]:
+        if trading_mode:
+            mode_upper = trading_mode.upper()
+            return [pos for pos in self._positions.values() if pos.get("trading_mode", "PAPER").upper() == mode_upper]
         return list(self._positions.values())
 
     async def scale_in_position(self, symbol: str, additional_size: float, add_price: float, added_risk_pct: float = 0.0) -> Optional[Dict[str, Any]]:

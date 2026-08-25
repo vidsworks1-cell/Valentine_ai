@@ -27,6 +27,16 @@ async def lifespan(app: FastAPI):
         # Create tables automatically for ease of local evaluation / development
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            try:
+                from sqlalchemy import text
+                # Non-destructive check for trading_mode column on trades table
+                result = await conn.execute(text("PRAGMA table_info(trades)"))
+                columns = [row[1] for row in result.fetchall()]
+                if columns and "trading_mode" not in columns:
+                    await conn.execute(text("ALTER TABLE trades ADD COLUMN trading_mode VARCHAR(10) DEFAULT 'PAPER'"))
+                    logging.info("Migrated trades table: added trading_mode column.")
+            except Exception as mig_err:
+                logging.warning(f"Schema migration check note: {mig_err}")
             
     # Start the Layered VPS Operational Daemon (Layer 2, 3, and 4)
     scheduler_manager = await LayeredSchedulerManager.get_instance()

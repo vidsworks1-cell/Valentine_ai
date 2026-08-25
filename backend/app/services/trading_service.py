@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.trading import Trade
@@ -7,9 +8,12 @@ class TradingService:
     """Service handling trading and transaction audit logs business logic."""
     
     @staticmethod
-    async def get_trades(db: AsyncSession, skip: int = 0, limit: int = 100):
+    async def get_trades(db: AsyncSession, skip: int = 0, limit: int = 100, trading_mode: Optional[str] = None):
         """Fetch multiple trade objects using modern SQLAlchemy 2.0 scalar streams."""
-        query = select(Trade).order_by(Trade.entry_time.desc()).offset(skip).limit(limit)
+        query = select(Trade)
+        if trading_mode:
+            query = query.where(Trade.trading_mode == trading_mode.upper())
+        query = query.order_by(Trade.entry_time.desc()).offset(skip).limit(limit)
         result = await db.execute(query)
         return result.scalars().all()
 

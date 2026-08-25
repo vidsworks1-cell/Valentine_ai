@@ -154,10 +154,11 @@ async def trigger_emergency_liquidation():
 async def read_trades(
     skip: int = 0,
     limit: int = 100,
+    trading_mode: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """Query recent trade operations list."""
-    return await TradingService.get_trades(db, skip=skip, limit=limit)
+    """Query recent trade operations list with optional trading_mode filtering."""
+    return await TradingService.get_trades(db, skip=skip, limit=limit, trading_mode=trading_mode)
 
 @router.post("", response_model=TradeResponse, status_code=status.HTTP_201_CREATED)
 async def create_trade(trade_in: TradeCreate, db: AsyncSession = Depends(get_db)):

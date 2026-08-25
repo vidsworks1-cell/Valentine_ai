@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 from app.workers.websocket_worker import BinanceWebSocketWorker
 from app.ai.reasoning import AiReasoningEngine
 from app.trading.position_manager import PositionManager
+from app.trading.exchange_reconciliation import ExchangeReconciliationEngine
 from app.workers.price_cache import PriceCache
 
 logger = logging.getLogger("lumina.scheduler.manager")
@@ -18,7 +19,9 @@ class LayeredSchedulerManager:
         self.ws_worker = BinanceWebSocketWorker()
         self.ai_engine = AiReasoningEngine()
         self.position_manager = PositionManager.get_instance()
+        self.reconciliation_engine = ExchangeReconciliationEngine.get_instance()
         self.running = False
+        self._recon_task: Optional[asyncio.Task] = None
         
         # Core safeguards and modes
         self.global_trading_mode: str = "PAPER"  # OFF, PAPER, TESTNET, LIVE
@@ -52,6 +55,20 @@ class LayeredSchedulerManager:
 
         return True, f"ALLOWED: Active under {self.global_trading_mode} mode."
 
+    async def _reconciliation_loop(self):
+        """Periodic background reconciliation task syncing exchange & SQLite state every 60s."""
+        logger.info("Starting periodic exchange state reconciliation daemon (every 60s)...")
+        while self.running:
+            try:
+                await asyncio.sleep(60.0)
+                if not self.running:
+                    break
+                await self.reconciliation_engine.reconcile_state()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error during periodic exchange reconciliation: {e}")
+
     async def start_all(self):
         """Starts all operational background layers."""
         if self.running:
@@ -68,8 +85,16 @@ class LayeredSchedulerManager:
 
         # Start Layer 3 AI Reasoning & Opportunity Scanner
         await self.ai_engine.start()
+
+        # Execute Initial Exchange State Reconciliation & launch 60s background daemon
+        try:
+            await self.reconciliation_engine.reconcile_state()
+        except Exception as re_err:
+            logger.error(f"Initial reconciliation failed during startup: {re_err}")
+            
+        self._recon_task = asyncio.create_task(self._reconciliation_loop())
         
-        logger.info("All layers (L2, L3, L4) are actively running.")
+        logger.info("All layers (L2, L3, L4) and Reconciliation Daemon are actively running.")
 
     async def stop_all(self):
         """Gracefully terminates background threads across all layers."""
@@ -79,6 +104,15 @@ class LayeredSchedulerManager:
         self.running = False
         logger.info("Gracefully stopping background layer orchestrators...")
         
+        # Stop Reconciliation Task
+        if self._recon_task:
+            self._recon_task.cancel()
+            try:
+                await self._recon_task
+            except asyncio.CancelledError:
+                pass
+            self._recon_task = None
+
         # Stop Layer 3 Scanner
         await self.ai_engine.stop()
         
