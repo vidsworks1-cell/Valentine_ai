@@ -129,7 +129,7 @@ class LiveExchangeExecutionEngine:
         self.time_drift_ms = round(random.uniform(-18.0, -5.0), 1)
 
         from app.trading.position_manager import PositionManager
-        local_positions = PositionManager.get_instance().get_active_positions()
+        local_positions = PositionManager.get_instance().get_active_positions(trading_mode="LIVE")
 
         discrepancies = []
         for pos in local_positions:

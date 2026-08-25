@@ -81,7 +81,7 @@ async def get_layered_status(db: AsyncSession = Depends(get_db)):
         "layer2_connection_status": cache.connection_status,
         "layer2_last_update_time": cache.last_update_time,
         "layer3_last_opportunity": manager.ai_engine.last_detected_setup,
-        "layer4_active_positions": manager.position_manager.get_active_positions(),
+        "layer4_active_positions": manager.position_manager.get_active_positions(trading_mode=manager.global_trading_mode),
         "system_health": {
             "Backend": "PASS",
             "Database": db_health,
@@ -567,15 +567,23 @@ async def execute_manual_live_order(
     )
 
 @router.get("/active-positions")
-async def get_active_positions_endpoint():
+async def get_active_positions_endpoint(mode: Optional[str] = None):
     """Exposes currently active positions with current prices and unrealized P&L."""
     from app.trading.position_manager import PositionManager
     from app.workers.price_cache import PriceCache
+    from app.scheduler.manager import LayeredSchedulerManager
     
+    if mode is None:
+        try:
+            scheduler = await LayeredSchedulerManager.get_instance()
+            mode = getattr(scheduler, "global_trading_mode", "PAPER")
+        except Exception:
+            mode = "PAPER"
+            
     pos_mgr = PositionManager.get_instance()
     cache = await PriceCache.get_instance()
     
-    active = pos_mgr.get_active_positions()
+    active = pos_mgr.get_active_positions(trading_mode=mode)
     results = []
     
     for pos in active:
@@ -639,7 +647,7 @@ async def get_portfolio_exposure_endpoint(db: AsyncSession = Depends(get_db)):
             wallet = await PaperTradingService.create_wallet(db, "lumina_default", 100000.0)
         balance = wallet.balance
 
-    metrics = await PortfolioGuard.get_instance().get_dashboard_metrics(balance)
+    metrics = await PortfolioGuard.get_instance().get_dashboard_metrics(balance, trading_mode=trading_mode)
     return metrics
 
 @router.get("/self-adaptation")
@@ -906,14 +914,17 @@ async def get_trading_summary_endpoint(db: AsyncSession = Depends(get_db)):
         balance = wallet.balance
         
     # Realized P&L
-    query = select(func.sum(Trade.profit_loss)).where(Trade.exit_price.isnot(None))
+    query = select(func.sum(Trade.profit_loss)).where(
+        Trade.exit_price.isnot(None),
+        Trade.trading_mode == trading_mode
+    )
     res = await db.execute(query)
     total_realized_pnl = res.scalar() or 0.0
     
     # Unrealized P&L
     pos_mgr = PositionManager.get_instance()
     cache = await PriceCache.get_instance()
-    active_positions = pos_mgr.get_active_positions()
+    active_positions = pos_mgr.get_active_positions(trading_mode=trading_mode)
     total_unrealized_pnl = 0.0
     
     for pos in active_positions:
@@ -927,12 +938,15 @@ async def get_trading_summary_endpoint(db: AsyncSession = Depends(get_db)):
             total_unrealized_pnl += pnl
             
     # Counts
-    query_closed_count = select(func.count(Trade.id)).where(Trade.exit_price.isnot(None))
+    query_closed_count = select(func.count(Trade.id)).where(
+        Trade.exit_price.isnot(None),
+        Trade.trading_mode == trading_mode
+    )
     res_closed = await db.execute(query_closed_count)
     closed_count = res_closed.scalar() or 0
 
     # Portfolio Guard metrics
-    exposure_metrics = await PortfolioGuard.get_instance().get_dashboard_metrics(balance)
+    exposure_metrics = await PortfolioGuard.get_instance().get_dashboard_metrics(balance, trading_mode=trading_mode)
     
     # Self-adaptation metrics
     from app.ai.self_adaptation import SelfAdaptationEngine
@@ -1265,14 +1279,23 @@ async def get_volatility_squeeze_status(symbol: str):
     return squeeze_info
 
 @router.get("/positions/active-trailing-telemetry")
-async def get_active_positions_trailing_telemetry():
+async def get_active_positions_trailing_telemetry(mode: Optional[str] = None):
     """
     Returns telemetry for active positions tracked by PositionManager,
     including regime-adaptive trailing distances and breakeven protection status.
     """
     from app.trading.position_manager import PositionManager
+    from app.scheduler.manager import LayeredSchedulerManager
+    
+    if mode is None:
+        try:
+            scheduler = await LayeredSchedulerManager.get_instance()
+            mode = getattr(scheduler, "global_trading_mode", "PAPER")
+        except Exception:
+            mode = "PAPER"
+            
     pm = PositionManager.get_instance()
-    positions = pm.get_active_positions()
+    positions = pm.get_active_positions(trading_mode=mode)
     return {
         "active_positions_count": len(positions),
         "positions": positions
@@ -1360,7 +1383,11 @@ async def evaluate_trade_correlation_risk(symbol: str):
     """
     from app.trading.cross_asset_correlation import CrossAssetCorrelationEngine
     from app.trading.position_manager import PositionManager
-    active_pos = PositionManager.get_instance().get_active_positions()
+    from app.scheduler.manager import LayeredSchedulerManager
+    
+    scheduler = await LayeredSchedulerManager.get_instance()
+    mode = getattr(scheduler, "global_trading_mode", "PAPER")
+    active_pos = PositionManager.get_instance().get_active_positions(trading_mode=mode)
     active_syms = [p.get("symbol") for p in active_pos if p.get("symbol")]
     return CrossAssetCorrelationEngine.get_instance().evaluate_trade_correlation_risk(symbol, active_syms)
 
@@ -2018,9 +2045,13 @@ async def get_operational_dashboard():
     from app.trading.exchange_reconciliation import ExchangeReconciliationEngine
     from app.trading.chaos_engine import ChaosEngine
     from app.trading.portfolio_attribution import PortfolioAttributionEngine
+    from app.scheduler.manager import LayeredSchedulerManager
+
+    scheduler = await LayeredSchedulerManager.get_instance()
+    mode = getattr(scheduler, "global_trading_mode", "PAPER")
 
     monitoring = await ProductionMonitoringEngine.get_instance().collect_health_metrics()
-    positions = PositionManager.get_instance().get_active_positions()
+    positions = PositionManager.get_instance().get_active_positions(trading_mode=mode)
     portfolio_guard_stats = PortfolioGuard.get_instance().get_portfolio_guard_summary()
     state_recovery_telemetry = StateRecoveryEngine.get_instance().get_telemetry()
     recon_telemetry = ExchangeReconciliationEngine.get_instance().get_telemetry()

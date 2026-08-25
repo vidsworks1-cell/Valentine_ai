@@ -86,8 +86,17 @@ class PositionManager:
         logger.info(f"PositionManager started tracking trade {trade_id} ({position_details['symbol']}) [Mode: {position_details['trading_mode']}] with TP stages: {position_details['tp_stages']} | Stale limit: {round(position_details['stale_threshold_sec']/3600, 1)}h")
 
     def get_active_positions(self, trading_mode: Optional[str] = None) -> List[Dict[str, Any]]:
-        if trading_mode:
-            mode_upper = trading_mode.upper()
+        target_mode = trading_mode
+        if target_mode is None:
+            try:
+                from app.scheduler.manager import LayeredSchedulerManager
+                if LayeredSchedulerManager._instance is not None:
+                    target_mode = getattr(LayeredSchedulerManager._instance, "global_trading_mode", None)
+            except Exception:
+                target_mode = None
+
+        if target_mode and target_mode.upper() != "ALL":
+            mode_upper = target_mode.upper()
             return [pos for pos in self._positions.values() if pos.get("trading_mode", "PAPER").upper() == mode_upper]
         return list(self._positions.values())
 

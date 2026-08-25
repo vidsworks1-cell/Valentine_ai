@@ -99,7 +99,8 @@ class OrderManager:
             # 0d. Cross-Asset Correlation & Concentration Risk Check
             from app.trading.cross_asset_correlation import CrossAssetCorrelationEngine
             from app.trading.position_manager import PositionManager
-            active_pos = PositionManager.get_instance().get_active_positions()
+            active_mode = scheduler.global_trading_mode
+            active_pos = PositionManager.get_instance().get_active_positions(trading_mode=active_mode)
             active_syms = [p.get("symbol") for p in active_pos if p.get("symbol")]
             corr_info = CrossAssetCorrelationEngine.get_instance().evaluate_trade_correlation_risk(symbol, active_syms)
 
@@ -218,7 +219,7 @@ class OrderManager:
                     try:
                         from app.trading.position_manager import PositionManager
                         pm = PositionManager.get_instance()
-                        target_pos = next((p for p in pm.get_active_positions() if p.get("trade_id") == pg_decision.swap_trade_id or p.get("id") == pg_decision.swap_trade_id), None)
+                        target_pos = next((p for p in pm.get_active_positions(trading_mode=trading_mode) if p.get("trade_id") == pg_decision.swap_trade_id or p.get("id") == pg_decision.swap_trade_id), None)
                         if target_pos:
                             half_sz = round(target_pos.get("position_size", 0.0) * 0.5, 6)
                             if half_sz > 0:

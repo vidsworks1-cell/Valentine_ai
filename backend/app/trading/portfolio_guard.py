@@ -584,12 +584,22 @@ class PortfolioGuard:
             "risk_level": risk_lvl
         }
 
-    async def get_dashboard_metrics(self, balance: float = 100000.0) -> Dict[str, Any]:
+    async def get_dashboard_metrics(self, balance: float = 100000.0, trading_mode: Optional[str] = None) -> Dict[str, Any]:
         """Returns metrics required for Android dashboard & UI integration."""
         try:
             self._check_circuit_breaker_reset()
+
+            active_mode = trading_mode
+            if active_mode is None:
+                try:
+                    from app.scheduler.manager import LayeredSchedulerManager
+                    scheduler = await LayeredSchedulerManager.get_instance()
+                    active_mode = getattr(scheduler, "global_trading_mode", "PAPER").upper()
+                except Exception:
+                    active_mode = "PAPER"
+
             from app.trading.position_manager import PositionManager
-            active_positions = PositionManager.get_instance().get_active_positions()
+            active_positions = PositionManager.get_instance().get_active_positions(trading_mode=active_mode)
             open_positions_count = len(active_positions)
             
             current_portfolio_risk_pct = 0.0
@@ -610,7 +620,8 @@ class PortfolioGuard:
                 try:
                     query = select(func.sum(Trade.profit_loss)).where(
                         Trade.exit_price.isnot(None),
-                        Trade.exit_time >= today_start
+                        Trade.exit_time >= today_start,
+                        Trade.trading_mode == active_mode
                     )
                     res = await db.execute(query)
                     daily_realized_pnl = res.scalar() or 0.0

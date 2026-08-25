@@ -127,9 +127,12 @@ class SystemicMacroGuardEngine:
         # Pre-emptive De-risking Action during Systemic Cascade (Only on critical risk or BTC impulse drop)
         if regime == "SYSTEMIC_CASCADE_WARNING" or (regime == "ELEVATED_MACRO_RISK" and btc_impulse_drop):
             try:
+                from app.scheduler.manager import LayeredSchedulerManager
                 from app.trading.position_manager import PositionManager
+                scheduler = await LayeredSchedulerManager.get_instance()
+                active_mode = getattr(scheduler, "global_trading_mode", "PAPER")
                 pm = PositionManager.get_instance()
-                active_positions = pm.get_active_positions()
+                active_positions = pm.get_active_positions(trading_mode=active_mode)
 
                 for pos in active_positions:
                     symbol = pos.get("symbol")
