@@ -322,6 +322,35 @@ data class ValidationMetrics(
     @Json(name = "avg_slippage_bps") val avgSlippageBps: Double = 1.2
 )
 
+data class ExecutionStateRecord(
+    val symbol: String = "",
+    val side: String = "BUY",
+    val state: String = "SIGNAL_DETECTED",
+    val stage: String? = null,
+    val reason: String? = null,
+    @Json(name = "order_id") val orderId: String? = null,
+    val price: Double? = null,
+    val quantity: Double? = null,
+    @Json(name = "trading_mode") val tradingMode: String = "PAPER",
+    @Json(name = "is_live") val isLive: Boolean = false,
+    @Json(name = "user_message") val userMessage: String = "",
+    val metadata: Map<String, Any> = emptyMap(),
+    val timestamp: String = "",
+    @Json(name = "timestamp_ms") val timestampMs: Double? = null
+)
+
+data class ExecutionStatesResponse(
+    @Json(name = "current_states") val currentStates: Map<String, ExecutionStateRecord> = emptyMap(),
+    @Json(name = "recent_history") val recentHistory: List<ExecutionStateRecord> = emptyList()
+)
+
+data class ExecutionVerifyResponse(
+    val symbol: String = "",
+    @Json(name = "is_confirmed") val isConfirmed: Boolean = false,
+    val reason: String = "",
+    val position: Map<String, Any>? = null
+)
+
 data class PaperValidationReportResponse(
     val status: String = "VALIDATED",
     @Json(name = "evaluated_at") val evaluatedAt: String? = null,
@@ -508,6 +537,18 @@ interface ContaboApiService {
 
     @POST("trading/paper-validation/promote-phase")
     suspend fun promoteRolloutPhase(@Query("target_phase") targetPhase: String): Map<String, Any>
+
+    @GET("trading/execution/states")
+    suspend fun getExecutionStates(): ExecutionStatesResponse
+
+    @GET("trading/execution/status/{symbol}")
+    suspend fun getSymbolExecutionStatus(@Path("symbol") symbol: String): ExecutionStateRecord
+
+    @GET("trading/execution/verify/{symbol}")
+    suspend fun verifyTradeExecution(
+        @Path("symbol") symbol: String,
+        @Query("trading_mode") tradingMode: String = "LIVE"
+    ): ExecutionVerifyResponse
 }
 
 

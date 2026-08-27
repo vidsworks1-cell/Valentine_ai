@@ -37,6 +37,55 @@ enum class PendingTradeStatus {
     EXECUTED_SUCCESS
 }
 
+/**
+ * Backend Execution State Lifecycle.
+ * The Android UI uses backend verification as the only source of truth.
+ *
+ * Mapping:
+ * SIGNAL_DETECTED → "Opportunity detected"
+ * OPPORTUNITY_APPROVED → "AI approved, awaiting risk"
+ * RISK_APPROVED → "Risk approved"
+ * ORDER_PENDING → "Order pending"
+ * ORDER_SUBMITTED → "Order sent to Binance"
+ * PARTIALLY_FILLED → "Order partially filled"
+ * FILLED → "Trade filled"
+ * POSITION_REGISTERED → "Active position"
+ * REJECTED → "Trade rejected"
+ * CANCELLED → "Trade cancelled"
+ */
+enum class ExecutionState(val rawValue: String, val uiDisplayLabel: String) {
+    SIGNAL_DETECTED("SIGNAL_DETECTED", "Opportunity detected"),
+    OPPORTUNITY_APPROVED("OPPORTUNITY_APPROVED", "AI approved, awaiting risk"),
+    RISK_APPROVED("RISK_APPROVED", "Risk approved"),
+    ORDER_PENDING("ORDER_PENDING", "Order pending"),
+    ORDER_SUBMITTED("ORDER_SUBMITTED", "Order sent to Binance"),
+    PARTIALLY_FILLED("PARTIALLY_FILLED", "Order partially filled"),
+    FILLED("FILLED", "Trade filled"),
+    POSITION_REGISTERED("POSITION_REGISTERED", "Active position"),
+    REJECTED("REJECTED", "Trade rejected"),
+    CANCELLED("CANCELLED", "Trade cancelled");
+
+    companion object {
+        fun fromString(value: String?): ExecutionState? {
+            if (value == null) return null
+            return values().firstOrNull { it.rawValue.equals(value, ignoreCase = true) }
+        }
+
+        fun toDisplayLabel(value: String?): String {
+            val state = fromString(value)
+            return state?.uiDisplayLabel ?: (value ?: "Unknown")
+        }
+
+        /**
+         * HARD RULE: Returns true ONLY if backend confirms POSITION_REGISTERED.
+         * The UI must NEVER claim or display a trade as "Executed" otherwise.
+         */
+        fun isConfirmedExecuted(state: String?): Boolean {
+            return state.equals("POSITION_REGISTERED", ignoreCase = true)
+        }
+    }
+}
+
 object ProposalSequence {
     private val counter = AtomicInteger(42)
     fun next(): Int = counter.getAndIncrement()

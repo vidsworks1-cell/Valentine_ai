@@ -1507,4 +1507,17 @@ class AppRepository(private val db: AppDatabase) {
     suspend fun clearTradeReviews() = withContext(Dispatchers.IO) {
         tradeReviewDao.clearAllReviews()
     }
+
+    // --- Synchronized Execution State Lifecycle Methods ---
+    suspend fun getExecutionStates(): com.example.data.api.ExecutionStatesResponse = withContext(Dispatchers.IO) {
+        contaboService.getExecutionStates()
+    }
+
+    suspend fun getSymbolExecutionStatus(symbol: String): com.example.data.api.ExecutionStateRecord = withContext(Dispatchers.IO) {
+        contaboService.getSymbolExecutionStatus(symbol)
+    }
+
+    suspend fun verifyTradeExecution(symbol: String, tradingMode: String = "LIVE"): com.example.data.api.ExecutionVerifyResponse = withContext(Dispatchers.IO) {
+        contaboService.verifyTradeExecution(symbol, tradingMode)
+    }
 }

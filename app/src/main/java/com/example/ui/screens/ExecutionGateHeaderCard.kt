@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.aza.strategy.ExecutionState
 import com.example.aza.strategy.LuminaOperatingMode
 import com.example.aza.strategy.PendingApprovalTrade
 import com.example.aza.strategy.PendingTradeStatus
@@ -31,6 +32,8 @@ fun ExecutionGateHeaderCard(
     val operatingMode by viewModel.operatingMode.collectAsState()
     val isExecutionUnlocked by viewModel.isExecutionUnlocked.collectAsState()
     val pendingQueue by viewModel.pendingApprovalQueue.collectAsState()
+    val executionStates by viewModel.executionStates.collectAsState()
+    val executionVerifications by viewModel.executionVerifications.collectAsState()
 
     var showUnlockConfirmDialog by remember { mutableStateOf(false) }
     var showModeSelectorDialog by remember { mutableStateOf(false) }
@@ -287,6 +290,188 @@ fun ExecutionGateHeaderCard(
                                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Execute ${trade.proposalNumber}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // BACKEND SYNCHRONIZED EXECUTION LIFECYCLE (Backend as Single Source of Truth)
+            if (executionStates.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Sync,
+                            contentDescription = null,
+                            tint = Color(0xFF00897B),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            "BACKEND EXECUTION STATE LIFECYCLE",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF00897B)
+                        )
+                    }
+
+                    Badge(containerColor = Color(0xFF00897B).copy(alpha = 0.15f)) {
+                        Text(
+                            "BACKEND VERIFIED SOURCE OF TRUTH",
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF00897B)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                executionStates.values.forEach { record ->
+                    val stateEnum = ExecutionState.fromString(record.state)
+                    val displayLabel = stateEnum?.uiDisplayLabel ?: record.state
+                    val isConfirmedPosition = ExecutionState.isConfirmedExecuted(record.state)
+
+                    val stateBadgeColor = when (record.state) {
+                        "SIGNAL_DETECTED" -> Color(0xFF1E88E5)
+                        "OPPORTUNITY_APPROVED" -> Color(0xFF8E24AA)
+                        "RISK_APPROVED" -> Color(0xFF3949AB)
+                        "ORDER_PENDING" -> Color(0xFFFB8C00)
+                        "ORDER_SUBMITTED" -> Color(0xFF00ACC1)
+                        "PARTIALLY_FILLED" -> Color(0xFFFDD835)
+                        "FILLED" -> Color(0xFF43A047)
+                        "POSITION_REGISTERED" -> Color(0xFF2E7D32)
+                        "REJECTED" -> Color(0xFFE53935)
+                        "CANCELLED" -> Color(0xFF757575)
+                        else -> Color(0xFF757575)
+                    }
+
+                    val verification = executionVerifications[record.symbol.uppercase()]
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, stateBadgeColor.copy(alpha = 0.35f))
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        record.symbol,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.5.sp
+                                    )
+                                    Badge(
+                                        containerColor = if (record.side == "BUY") Color(0xFF2E7D32) else Color(0xFFC62828)
+                                    ) {
+                                        Text(record.side, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 8.5.sp)
+                                    }
+                                    if (record.isLive) {
+                                        Badge(containerColor = Color(0xFFE53935).copy(alpha = 0.15f)) {
+                                            Text("LIVE", color = Color(0xFFE53935), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    } else {
+                                        Badge(containerColor = Color(0xFF1E88E5).copy(alpha = 0.15f)) {
+                                            Text("PAPER", color = Color(0xFF1E88E5), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = stateBadgeColor.copy(alpha = 0.18f)
+                                ) {
+                                    Text(
+                                        text = displayLabel,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = stateBadgeColor,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            if (record.userMessage.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = record.userMessage,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            if (record.orderId != null || record.price != null) {
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    record.orderId?.let {
+                                        Text("Exchange Order: #$it", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    record.price?.let {
+                                        Text("Price: $$it", fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+
+                            // Verification confirmation (Hard rule: Only confirmed when POSITION_REGISTERED)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isConfirmedPosition) Icons.Default.CheckCircle else Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = if (isConfirmedPosition) Color(0xFF2E7D32) else Color(0xFFFB8C00),
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = if (isConfirmedPosition) "Position Registered on Exchange" else if (record.state == "REJECTED") "Terminal: Trade Rejected" else "Lifecycle in progress",
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isConfirmedPosition) Color(0xFF2E7D32) else Color(0xFFFB8C00)
+                                    )
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        viewModel.verifyTradeExecution(record.symbol, record.tradingMode) { res ->
+                                            Toast.makeText(
+                                                context,
+                                                if (res.isConfirmed) "Verified: ${res.reason}" else "Not registered: ${res.reason}",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(22.dp)
+                                ) {
+                                    Text("Verify Backend", fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

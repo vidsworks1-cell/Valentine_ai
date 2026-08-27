@@ -2255,6 +2255,47 @@ async def diagnose_trade_outcome(trade_payload: Dict[str, Any]):
     from app.trading.portfolio_attribution import PortfolioAttributionEngine
     return PortfolioAttributionEngine.get_instance().diagnose_trade_outcome_cause(trade_payload)
 
+@router.get("/execution/states")
+async def get_execution_states():
+    """Returns active and recent synchronized execution states across all symbols."""
+    from app.trading.execution_state import ExecutionStateTracker
+    tracker = ExecutionStateTracker.get_instance()
+    return {
+        "current_states": tracker.get_all_states(),
+        "recent_history": tracker.get_history(limit=50)
+    }
+
+@router.get("/execution/status/{symbol}")
+async def get_symbol_execution_status(symbol: str):
+    """Returns the verified execution state and user-facing message for a specific symbol."""
+    from app.trading.execution_state import ExecutionStateTracker
+    tracker = ExecutionStateTracker.get_instance()
+    state = tracker.get_state(symbol)
+    if not state:
+        return {
+            "symbol": symbol.upper(),
+            "state": "IDLE",
+            "user_message": f"No active execution pipeline for {symbol.upper()}."
+        }
+    return state
+
+@router.get("/execution/verify/{symbol}")
+async def verify_trade_claim(symbol: str, trading_mode: str = "LIVE"):
+    """
+    Hard Rule Verification Endpoint:
+    Checks if a live trade claim is valid (PositionManager confirmed + exchange order ID present).
+    """
+    from app.trading.execution_state import ExecutionStateTracker
+    tracker = ExecutionStateTracker.get_instance()
+    confirmed, reason, pos = tracker.verify_live_trade_claims(symbol, trading_mode=trading_mode)
+    return {
+        "symbol": symbol.upper(),
+        "is_confirmed": confirmed,
+        "reason": reason,
+        "position": pos
+    }
+
+
 
 
 

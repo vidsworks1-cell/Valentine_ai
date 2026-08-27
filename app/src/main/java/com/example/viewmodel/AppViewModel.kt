@@ -254,6 +254,16 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _binanceOpenOrders = MutableStateFlow<List<com.example.data.api.BinanceOpenOrder>>(emptyList())
     val binanceOpenOrders = _binanceOpenOrders.asStateFlow()
 
+    // --- Backend Execution State Lifecycle (Single Source of Truth) ---
+    private val _executionStates = MutableStateFlow<Map<String, com.example.data.api.ExecutionStateRecord>>(emptyMap())
+    val executionStates = _executionStates.asStateFlow()
+
+    private val _executionHistory = MutableStateFlow<List<com.example.data.api.ExecutionStateRecord>>(emptyList())
+    val executionHistory = _executionHistory.asStateFlow()
+
+    private val _executionVerifications = MutableStateFlow<Map<String, com.example.data.api.ExecutionVerifyResponse>>(emptyMap())
+    val executionVerifications = _executionVerifications.asStateFlow()
+
     // Real-time tracking of connection and critical system states for Lumina Chat Guardian
     private var lastEmergencyStopActive: Boolean? = null
     private var lastCircuitBreakerAllowed: Boolean? = null
@@ -387,7 +397,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             } catch (e: Exception) {
                 android.util.Log.e("ContaboIntegration", "Failed to fetch validation report: ${e.message}")
             }
-
+            try {
+                fetchExecutionStates()
+            } catch (e: Exception) {
+                android.util.Log.e("ContaboIntegration", "Failed to fetch execution states: ${e.message}")
+            }
 
             fetchLayeredVpsStatus()
             fetchBinanceData()
@@ -578,6 +592,56 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 onAppEventOccurred("BINANCE_ORDER_CANCEL_FAILED", "Failed to cancel order $orderId on $symbol: ${e.localizedMessage ?: "Unknown error"}")
             } finally {
                 _isContaboLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Synchronized Backend Execution State Lifecycle.
+     * Android UI uses backend verification as the single source of truth.
+     */
+    fun fetchExecutionStates() {
+        viewModelScope.launch {
+            try {
+                val res = repository.getExecutionStates()
+                _executionStates.value = res.currentStates
+                _executionHistory.value = res.recentHistory
+            } catch (e: Exception) {
+                android.util.Log.e("ExecutionSync", "Failed to fetch backend execution states: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchSymbolExecutionStatus(symbol: String) {
+        viewModelScope.launch {
+            try {
+                val res = repository.getSymbolExecutionStatus(symbol)
+                _executionStates.value = _executionStates.value + (symbol.uppercase() to res)
+            } catch (e: Exception) {
+                android.util.Log.e("ExecutionSync", "Failed to fetch symbol status for $symbol: ${e.message}")
+            }
+        }
+    }
+
+    fun verifyTradeExecution(
+        symbol: String,
+        tradingMode: String = "LIVE",
+        onResult: ((com.example.data.api.ExecutionVerifyResponse) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                val res = repository.verifyTradeExecution(symbol, tradingMode)
+                _executionVerifications.value = _executionVerifications.value + (symbol.uppercase() to res)
+                onResult?.invoke(res)
+            } catch (e: Exception) {
+                android.util.Log.e("ExecutionSync", "Failed to verify trade execution for $symbol: ${e.message}")
+                val fallback = com.example.data.api.ExecutionVerifyResponse(
+                    symbol = symbol,
+                    isConfirmed = false,
+                    reason = "Backend verification unreachable: ${e.localizedMessage ?: "Timeout"}"
+                )
+                _executionVerifications.value = _executionVerifications.value + (symbol.uppercase() to fallback)
+                onResult?.invoke(fallback)
             }
         }
     }

@@ -338,6 +338,10 @@ fun TradingScreen(
         }
 
         item {
+            ExecutionGateHeaderCard(viewModel = viewModel)
+        }
+
+        item {
             BinanceConnectorHealthPanel(viewModel)
         }
 

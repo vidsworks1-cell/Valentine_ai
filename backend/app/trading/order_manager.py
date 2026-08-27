@@ -8,6 +8,7 @@ from app.risk.evaluator import RiskEvaluator
 from app.database.session import AsyncSessionLocal
 from app.services.binance_connector import BinanceConnector
 from app.api.schemas import TradeCreate, AuditLogCreate
+from app.trading.execution_state import ExecutionState, ExecutionStateTracker
 
 logger = logging.getLogger("lumina.trading.order_manager")
 
@@ -32,6 +33,20 @@ class OrderManager:
             side = opportunity["side"]
             
             logger.info(f"[STAGE: SIGNAL] Reviewing trade opportunity from AI Scanner: {symbol} ({side}) at {opportunity['entry_price']} via {opportunity['strategy_used']}")
+            ExecutionStateTracker.get_instance().transition(
+                symbol=symbol,
+                state=ExecutionState.SIGNAL_DETECTED,
+                side=side,
+                stage="SCANNER_SIGNAL",
+                price=float(opportunity.get("entry_price", 0.0))
+            )
+            ExecutionStateTracker.get_instance().transition(
+                symbol=symbol,
+                state=ExecutionState.OPPORTUNITY_APPROVED,
+                side=side,
+                stage="META_REASONING",
+                price=float(opportunity.get("entry_price", 0.0))
+            )
             
             # 0. Check central circuit breakers and global trading modes
             from app.scheduler.manager import LayeredSchedulerManager
@@ -39,6 +54,14 @@ class OrderManager:
             allowed, reason = await scheduler.is_trading_enabled()
             if not allowed:
                 logger.warning(f"⚠️ ORDER PIPELINE REJECTED: {reason}")
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=symbol,
+                    state=ExecutionState.REJECTED,
+                    side=side,
+                    stage="CIRCUIT_BREAKER",
+                    reason=reason,
+                    price=float(opportunity.get("entry_price", 0.0))
+                )
                 try:
                     from app.services.audit_service import AuditService
                     async with AsyncSessionLocal() as db:
@@ -58,6 +81,14 @@ class OrderManager:
             passed_md, md_reason = cache.validate_market_data(symbol, max_age_seconds=5.0)
             if not passed_md:
                 logger.warning(md_reason)
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=symbol,
+                    state=ExecutionState.REJECTED,
+                    side=side,
+                    stage="MARKET_DATA_GUARD",
+                    reason=md_reason,
+                    price=float(opportunity.get("entry_price", 0.0))
+                )
                 try:
                     from app.services.audit_service import AuditService
                     async with AsyncSessionLocal() as db:
@@ -122,6 +153,14 @@ class OrderManager:
             )
             if not thesis_allowed:
                 logger.info(f"🚫 [THESIS PERSISTENCE LAYER] Suppressed noise signal: {thesis_reason}")
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=symbol,
+                    state=ExecutionState.REJECTED,
+                    side=side,
+                    stage="THESIS_PERSISTENCE",
+                    reason=thesis_reason,
+                    price=float(opportunity.get("entry_price", 0.0))
+                )
                 return
 
         from app.services.trading_service import TradingService
@@ -146,6 +185,15 @@ class OrderManager:
                         base_free = next((float(b["free"]) for b in balances if b["asset"] == base_asset), 0.0)
                         if base_free <= 0.00001:
                             logger.warning(f"⚠️ [SPOT SHORT NOT SUPPORTED] Rejected {symbol} SELL order: Spot account holds 0 {base_asset}. (Binance Spot only allows BUY to enter and SELL to exit held assets).")
+                            ExecutionStateTracker.get_instance().transition(
+                                symbol=symbol,
+                                state=ExecutionState.REJECTED,
+                                side=side,
+                                stage="SPOT_SHORT_GUARD",
+                                reason=f"Binance Spot account holds 0 {base_asset}",
+                                price=float(opportunity.get("entry_price", 0.0)),
+                                trading_mode=trading_mode
+                            )
                             try:
                                 await AuditService.create_audit_log(db, AuditLogCreate(
                                     level="WARNING",
@@ -216,6 +264,15 @@ class OrderManager:
                 )
 
                 if not pg_decision.approved:
+                    ExecutionStateTracker.get_instance().transition(
+                        symbol=symbol,
+                        state=ExecutionState.REJECTED,
+                        side=side,
+                        stage="PORTFOLIO_GUARD",
+                        reason=pg_decision.reason,
+                        price=price,
+                        trading_mode=trading_mode
+                    )
                     try:
                         from app.ai.reasoning import AiReasoningEngine
                         pg_cat = "CORRELATION_CLUSTER" if "CORRELATION" in pg_decision.reason.upper() else "PORTFOLIO_RISK_HEAT"
@@ -341,6 +398,16 @@ class OrderManager:
                 
                 if not passed_risk:
                     logger.warning(f"[STAGE: RISK] REJECTED. Failed risk checks for {opportunity['symbol']}. Position size {position_size} exceeds risk limits.")
+                    ExecutionStateTracker.get_instance().transition(
+                        symbol=opportunity["symbol"],
+                        state=ExecutionState.REJECTED,
+                        side=opportunity["side"],
+                        stage="RISK_VALIDATION",
+                        reason=f"Position size {position_size} exceeds risk limits (Max allowed risk: ${allowed_risk_amt:.2f})",
+                        price=price,
+                        quantity=position_size,
+                        trading_mode=trading_mode
+                    )
                     try:
                         await AuditService.create_audit_log(db, AuditLogCreate(
                             level="WARNING",
@@ -374,13 +441,49 @@ class OrderManager:
                             logger.info(f"⚡ [BINANCE SPOT NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} USDT) to satisfy Binance Spot MIN_NOTIONAL ($5.00).")
                         else:
                             logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) is insufficient for minimum Binance Spot trade of {min_target_qty} {opportunity['symbol']} (${min_required_cost:.2f} USDT). Preserving cash buffer.")
+                            ExecutionStateTracker.get_instance().transition(
+                                symbol=opportunity["symbol"],
+                                state=ExecutionState.REJECTED,
+                                side=opportunity["side"],
+                                stage="RISK_SIZING",
+                                reason=f"Available balance (${balance:.2f} USDT) insufficient for minimum Binance Spot notional ($5.00 USDT)",
+                                price=price,
+                                quantity=position_size,
+                                trading_mode=trading_mode
+                            )
                             return
 
                 if position_size <= 0.0:
                     logger.warning(f"[STAGE: RISK] REJECTED. Position size for {opportunity['symbol']} calculated as {position_size} (balance ${balance:.2f} insufficient for minimum trade increment).")
+                    ExecutionStateTracker.get_instance().transition(
+                        symbol=opportunity["symbol"],
+                        state=ExecutionState.REJECTED,
+                        side=opportunity["side"],
+                        stage="RISK_SIZING",
+                        reason=f"Position size calculated as {position_size} (insufficient balance for minimum increment)",
+                        price=price,
+                        quantity=position_size,
+                        trading_mode=trading_mode
+                    )
                     return
 
                 logger.info(f"[STAGE: RISK] PASSED. Calculated position size: {position_size} units, allowed risk amount: {allowed_risk_amt} USD.")
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=opportunity["symbol"],
+                    state=ExecutionState.RISK_APPROVED,
+                    side=opportunity["side"],
+                    price=price,
+                    quantity=position_size,
+                    trading_mode=trading_mode
+                )
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=opportunity["symbol"],
+                    state=ExecutionState.ORDER_PENDING,
+                    side=opportunity["side"],
+                    price=price,
+                    quantity=position_size,
+                    trading_mode=trading_mode
+                )
 
                 # If we are in TESTNET or LIVE mode, we place the real order on Binance first!
                 binance_order_id = None
@@ -388,6 +491,14 @@ class OrderManager:
 
                 if trading_mode in ["TESTNET", "LIVE"]:
                     logger.info(f"[STAGE: EXECUTION] Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}, type: {order_routing}) in {trading_mode} mode...")
+                    ExecutionStateTracker.get_instance().transition(
+                        symbol=opportunity["symbol"],
+                        state=ExecutionState.ORDER_SUBMITTED,
+                        side=opportunity["side"],
+                        price=price,
+                        quantity=position_size,
+                        trading_mode=trading_mode
+                    )
                     req_payload = {
                         "symbol": opportunity["symbol"],
                         "side": opportunity["side"],
@@ -421,6 +532,16 @@ class OrderManager:
                             f"  - Exchange Message: \"{err_msg}\"\n"
                             f"  - Actionable Diagnosis: {err_advice}\n"
                             f"  - Full Response Payload: {raw_payload}"
+                        )
+                        ExecutionStateTracker.get_instance().transition(
+                            symbol=opportunity["symbol"],
+                            state=ExecutionState.REJECTED,
+                            side=opportunity["side"],
+                            stage="BINANCE_EXCHANGE",
+                            reason=f"{err_title} (Code {err_code}): {err_msg}",
+                            price=price,
+                            quantity=position_size,
+                            trading_mode=trading_mode
                         )
                         # Record in Execution Outcome Database for comprehensive training and analysis
                         try:
@@ -664,6 +785,17 @@ class OrderManager:
                     "probation_trigger": opportunity.get("probation_trigger"),
                     "probation_metadata": opportunity.get("probation_metadata")
                 })
+
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=trade.symbol,
+                    state=ExecutionState.POSITION_REGISTERED,
+                    side=trade.side,
+                    order_id=binance_order_id,
+                    price=trade.entry_price,
+                    quantity=trade.position_size,
+                    trading_mode=trading_mode,
+                    metadata={"trade_id": trade.id, "strategy": trade.strategy_used}
+                )
 
                 # Register active market thesis in ThesisPersistenceEngine to prevent chop flip-flopping
                 try:
