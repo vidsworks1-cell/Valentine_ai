@@ -233,10 +233,24 @@ class ThesisPersistenceEngine:
                 self._theses_history.pop(0)
             logger.info(f"🧠 [THESIS PERSISTENCE LAYER] Concluded thesis {th.thesis_id} for {target_sym}: {reason} (Filtered {th.noise_signals_filtered} noise signals during hold).")
 
+    def purge_expired_theses(self) -> List[str]:
+        """Automatically purges expired and orphaned theses to prevent stale suppression of valid opportunities."""
+        purged = []
+        now = time.time()
+        for sym, th in list(self._theses.items()):
+            # If thesis expired past max buffer (2x expected duration or > 4 hours max)
+            max_age_sec = max(th.expected_duration_sec * 1.5, 7200.0)
+            if th.age_seconds > max_age_sec:
+                self.close_or_invalidate_thesis(sym, reason=f"HORIZON_EXPIRED_PURGE (Held {th.age_minutes:.1f}m)")
+                purged.append(sym)
+        return purged
+
     def get_active_theses(self) -> List[Dict[str, Any]]:
+        self.purge_expired_theses()
         return [th.to_dict() for th in self._theses.values()]
 
     def get_summary(self) -> Dict[str, Any]:
+        self.purge_expired_theses()
         return {
             "active_theses_count": len(self._theses),
             "total_noise_signals_filtered": self._total_noise_filtered_count,

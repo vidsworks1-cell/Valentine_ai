@@ -384,8 +384,18 @@ class OrderManager:
 
                 # If we are in TESTNET or LIVE mode, we place the real order on Binance first!
                 binance_order_id = None
+                order_submit_start_ms = time.time() * 1000.0
+
                 if trading_mode in ["TESTNET", "LIVE"]:
                     logger.info(f"[STAGE: EXECUTION] Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}, type: {order_routing}) in {trading_mode} mode...")
+                    req_payload = {
+                        "symbol": opportunity["symbol"],
+                        "side": opportunity["side"],
+                        "type": order_routing,
+                        "quantity": position_size,
+                        "price": price if order_routing == "LIMIT" else None,
+                        "mode": trading_mode
+                    }
                     binance_res = await BinanceConnector.get_instance().create_order(
                         mode=trading_mode,
                         symbol=opportunity["symbol"],
@@ -394,6 +404,7 @@ class OrderManager:
                         quantity=position_size,
                         price=price if order_routing == "LIMIT" else None
                     )
+                    order_latency_ms = max(1.0, (time.time() * 1000.0) - order_submit_start_ms)
                     
                     if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
                         err_code = binance_res.get("code", binance_res.get("status_code", -1))
@@ -411,6 +422,34 @@ class OrderManager:
                             f"  - Actionable Diagnosis: {err_advice}\n"
                             f"  - Full Response Payload: {raw_payload}"
                         )
+                        # Record in Execution Outcome Database for comprehensive training and analysis
+                        try:
+                            from app.trading.execution_database import ExecutionOutcomeDatabase
+                            ExecutionOutcomeDatabase.get_instance().record_attempt(
+                                symbol=opportunity["symbol"],
+                                side=opportunity["side"],
+                                order_type=order_routing,
+                                trading_mode=trading_mode,
+                                strategy_used=opportunity.get("strategy_used", "General"),
+                                confidence_score=float(opportunity.get("confidence_score", 0.8)),
+                                market_regime=opportunity.get("market_regime", "TRENDING"),
+                                requested_quantity=position_size,
+                                requested_price=price,
+                                stop_loss=stop_loss,
+                                take_profit=opportunity.get("take_profit", 0.0),
+                                exchange_endpoint="/api/v3/order",
+                                http_status=binance_res.get("status_code", 400),
+                                is_successful=False,
+                                error_code=err_code,
+                                error_message=err_msg,
+                                diagnostic_advice=err_advice,
+                                latency_ms=order_latency_ms,
+                                raw_request_payload=req_payload,
+                                raw_response_payload=binance_res
+                            )
+                        except Exception as edb_err:
+                            logger.error(f"Failed to record rejected attempt in ExecutionOutcomeDatabase: {edb_err}")
+
                         try:
                             await AuditService.create_audit_log(db, AuditLogCreate(
                                 level="ERROR",
@@ -449,8 +488,60 @@ class OrderManager:
                             total_quote += qty * px
                         if total_qty > 0.0:
                             price = round(total_quote / total_qty, 6)
+
+                    # Record successful live fill in Execution Outcome Database
+                    try:
+                        from app.trading.execution_database import ExecutionOutcomeDatabase
+                        ExecutionOutcomeDatabase.get_instance().record_attempt(
+                            symbol=opportunity["symbol"],
+                            side=opportunity["side"],
+                            order_type=order_routing,
+                            trading_mode=trading_mode,
+                            strategy_used=opportunity.get("strategy_used", "General"),
+                            confidence_score=float(opportunity.get("confidence_score", 0.8)),
+                            market_regime=opportunity.get("market_regime", "TRENDING"),
+                            requested_quantity=position_size,
+                            requested_price=opportunity["entry_price"],
+                            stop_loss=stop_loss,
+                            take_profit=opportunity.get("take_profit", 0.0),
+                            exchange_endpoint="/api/v3/order",
+                            http_status=200,
+                            is_successful=True,
+                            exchange_order_id=binance_order_id,
+                            executed_qty=position_size,
+                            executed_price=price,
+                            latency_ms=order_latency_ms,
+                            raw_request_payload=req_payload,
+                            raw_response_payload=binance_res
+                        )
+                    except Exception as edb_err:
+                        logger.error(f"Failed to record fill attempt in ExecutionOutcomeDatabase: {edb_err}")
+
                 else:
                     logger.info(f"[STAGE: EXECUTION] Executing paper {opportunity['side']} order for {opportunity['symbol']} (Routing: {order_routing}). Entry Price: {price}, Quantity: {position_size}.")
+                    try:
+                        from app.trading.execution_database import ExecutionOutcomeDatabase
+                        ExecutionOutcomeDatabase.get_instance().record_attempt(
+                            symbol=opportunity["symbol"],
+                            side=opportunity["side"],
+                            order_type=order_routing,
+                            trading_mode=trading_mode,
+                            strategy_used=opportunity.get("strategy_used", "General"),
+                            confidence_score=float(opportunity.get("confidence_score", 0.8)),
+                            market_regime=opportunity.get("market_regime", "TRENDING"),
+                            requested_quantity=position_size,
+                            requested_price=opportunity["entry_price"],
+                            stop_loss=stop_loss,
+                            take_profit=opportunity.get("take_profit", 0.0),
+                            exchange_endpoint="PAPER_ENGINE",
+                            http_status=200,
+                            is_successful=True,
+                            executed_qty=position_size,
+                            executed_price=price,
+                            latency_ms=5.0
+                        )
+                    except Exception as edb_err:
+                        logger.error(f"Failed to record paper attempt in ExecutionOutcomeDatabase: {edb_err}")
 
                 # Track Execution Quality & Slippage in Execution Analytics Engine & PortfolioGuard
                 try:

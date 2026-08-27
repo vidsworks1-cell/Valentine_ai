@@ -2231,11 +2231,30 @@ async def get_guard_performance_matrix():
     from app.trading.adaptive_guard_thresholds import AdaptiveGuardThresholds
     return AdaptiveGuardThresholds.get_instance().get_guard_impact_matrix()
 
+@router.post("/analytics/guards/optimize")
+async def optimize_guard_thresholds():
+    """Triggers autonomous guard threshold calibration using accumulated empirical trade and counterfactual statistics."""
+    from app.trading.adaptive_guard_thresholds import AdaptiveGuardThresholds
+    return AdaptiveGuardThresholds.get_instance().optimize_guard_thresholds_from_statistics()
+
 @router.get("/analytics/theses/active")
 async def get_active_theses():
     """Returns all active persistent trade theses and chop noise suppression statistics."""
     from app.trading.thesis_persistence import ThesisPersistenceEngine
     return ThesisPersistenceEngine.get_instance().get_summary()
+
+@router.get("/analytics/execution/attempts")
+async def get_execution_outcome_database():
+    """Returns full execution outcome database telemetry, failure taxonomies, and exchange response distributions."""
+    from app.trading.execution_database import ExecutionOutcomeDatabase
+    return ExecutionOutcomeDatabase.get_instance().get_execution_analytics_summary()
+
+@router.post("/analytics/attribution/diagnose")
+async def diagnose_trade_outcome(trade_payload: Dict[str, Any]):
+    """Provides causal attribution verdict for a trade or order attempt (e.g. strategy vs execution vs guard vs Binance)."""
+    from app.trading.portfolio_attribution import PortfolioAttributionEngine
+    return PortfolioAttributionEngine.get_instance().diagnose_trade_outcome_cause(trade_payload)
+
 
 
 

@@ -105,6 +105,85 @@ class AdaptiveGuardThresholds:
         self._regime_adjustments[regime_upper][guard_param] = new_value
         logger.info(f"🧠 [ADAPTIVE THRESHOLDS] Updated learned parameter '{guard_param}' for regime {regime_upper} -> {new_value}")
 
+    def optimize_guard_thresholds_from_statistics(self) -> Dict[str, Any]:
+        """
+        Automatic Guard Optimization:
+        Periodically optimizes guard thresholds based on accumulated counterfactual statistics.
+        Calculates precision, empirical false rejection rates, and updates live parameters.
+        """
+        matrix_res = self.get_guard_impact_matrix()
+        matrix = matrix_res.get("guard_impact_matrix", {})
+        optimizations_applied: List[Dict[str, Any]] = []
+
+        mapping = {
+            "CONFIDENCE_FILTER": "confidence_threshold",
+            "MTF_GUARD": "mtf_alignment_pct",
+            "VOLUME_GUARD": "volume_confluence_score",
+            "MACRO_RISK": "macro_risk_limit"
+        }
+
+        for guard_key, param_name in mapping.items():
+            g_data = matrix.get(guard_key)
+            if not g_data:
+                continue
+
+            total_eval = g_data.get("saved_capital_count", 0) + g_data.get("cost_profit_count", 0)
+            # Safe Optimization: Enforce statistically meaningful minimum sample size (>= 15 evaluations)
+            if total_eval < 15:
+                optimizations_applied.append({
+                    "guard": guard_key,
+                    "parameter": param_name,
+                    "action": "INSUFFICIENT_SAMPLE_SIZE",
+                    "current_evaluations": total_eval,
+                    "required_evaluations": 15,
+                    "current_threshold": self._baseline_thresholds.get(param_name, 70.0),
+                    "reason": f"Sample size ({total_eval}/15) insufficient for statistical significance. Parameter locked to prevent overfitting."
+                })
+                continue
+
+            precision = g_data.get("empirical_precision_pct", 50.0)
+            old_base = self._baseline_thresholds.get(param_name, 70.0)
+
+            # Safe Optimization Bounds: Enforce max step movement per cycle (at most 2.0% or 0.02)
+            if precision <= 40.0:
+                # Overly restrictive guard: Relax baseline threshold with bounded step limit
+                if param_name == "confidence_threshold":
+                    max_step = 0.02
+                    new_val = round(max(0.65, old_base - max_step), 2)
+                else:
+                    max_step = 2.0
+                    new_val = round(max(55.0, old_base - max_step), 1)
+
+                self._baseline_thresholds[param_name] = new_val
+                optimizations_applied.append({
+                    "guard": guard_key,
+                    "parameter": param_name,
+                    "action": "RELAXED_BOUNDED",
+                    "old_threshold": old_base,
+                    "new_threshold": new_val,
+                    "sample_size": total_eval,
+                    "precision_pct": precision,
+                    "reason": f"Sample size ({total_eval}) confirmed high false rejection ({100 - precision:.1f}%). Safe bounded step applied (-{max_step})."
+                })
+                logger.info(f"🧠 [AUTONOMOUS GUARD OPTIMIZER] Safe bounded relaxation applied to {param_name} ({old_base} -> {new_val}) across {total_eval} empirical samples.")
+            elif precision >= 75.0 and g_data.get("cost_profit_pnl_pct", 0.0) == 0.0:
+                # Highly accurate capital preserver: maintain or slightly reinforce
+                optimizations_applied.append({
+                    "guard": guard_key,
+                    "parameter": param_name,
+                    "action": "MAINTAINED_OPTIMAL",
+                    "current_threshold": old_base,
+                    "precision_pct": precision,
+                    "reason": f"Guard operating at peak capital protection efficiency ({precision}% precision, $0.00 missed profit)."
+                })
+
+        return {
+            "optimizations_evaluated": len(matrix),
+            "optimizations_applied": optimizations_applied,
+            "updated_baseline_thresholds": self._baseline_thresholds,
+            "timestamp": time.time()
+        }
+
     def get_guard_impact_matrix(self) -> Dict[str, Any]:
         """
         Calculates empirical counterfactual impact and net economic value delivered for all Lumina guards.

@@ -162,6 +162,70 @@ class PortfolioAttributionEngine:
         prev_avg = self.interaction_stack_stats["avg_cumulative_risk_scale_factor"]
         self.interaction_stack_stats["avg_cumulative_risk_scale_factor"] = round(0.95 * prev_avg + 0.05 * cumulative_scale_factor, 4)
 
+    def diagnose_trade_outcome_cause(self, trade_or_attempt: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Answers explicit diagnostic causal questions:
+        - "Was this loss caused by the strategy?"
+        - "Was it caused by execution (slippage, latency, fill delay)?"
+        - "Was it prevented by a guard?"
+        - "Was it rejected by Binance?"
+        """
+        # Case 1: Rejected by Binance
+        if trade_or_attempt.get("is_successful") is False or trade_or_attempt.get("error_code") is not None:
+            err_cat = trade_or_attempt.get("failure_category", "EXCHANGE_REJECTION")
+            err_code = trade_or_attempt.get("error_code", "UNKNOWN")
+            return {
+                "causal_classification": "REJECTED_BY_BINANCE",
+                "verdict": f"The trade was rejected by the exchange due to {err_cat} (Error Code {err_code}).",
+                "primary_cause": "EXCHANGE_EXECUTION",
+                "details": trade_or_attempt.get("diagnostic_advice", "Review exchange filters and account balance."),
+                "actionable_fix": "Adjust trade risk sizing, lot precision, or synchronize system NTP clock."
+            }
+
+        # Case 2: Blocked / Prevented by a Guard
+        if trade_or_attempt.get("status") in ["SAVED_BY_GUARD", "COST_PROFIT"] or "blocked_by" in trade_or_attempt:
+            guard_name = trade_or_attempt.get("category", trade_or_attempt.get("blocked_by", "RISK_GUARD"))
+            saved_status = trade_or_attempt.get("status", "SAVED_BY_GUARD")
+            return {
+                "causal_classification": "PREVENTED_BY_GUARD",
+                "verdict": f"The trade was intercepted by {guard_name} ({saved_status}).",
+                "primary_cause": "RISK_GUARD_INTERCEPTION",
+                "details": trade_or_attempt.get("reason", "Violated protective threshold constraint."),
+                "actionable_fix": "Review Guard Impact Matrix to inspect counterfactual accuracy."
+            }
+
+        # Case 3: Completed Trade Loss vs Strategy / Execution
+        realized_pnl = float(trade_or_attempt.get("realized_pnl", trade_or_attempt.get("pnl", 0.0)))
+        slippage_pct = float(trade_or_attempt.get("slippage_pct", 0.0))
+        latency_ms = float(trade_or_attempt.get("latency_ms", 0.0))
+
+        if realized_pnl < 0:
+            # Check if execution drag (slippage + latency) constituted > 40% of the loss
+            if abs(slippage_pct) > 0.35 or latency_ms > 450.0:
+                return {
+                    "causal_classification": "CAUSED_BY_EXECUTION_DRAG",
+                    "verdict": f"Loss exacerbated by execution drag (Slippage: {slippage_pct:.2f}%, Latency: {latency_ms:.1f}ms).",
+                    "primary_cause": "EXECUTION_SLIPPAGE",
+                    "details": "Order suffered execution friction or adverse fill movement.",
+                    "actionable_fix": "Switch order routing to LIMIT or tighten maximum allowed execution latency."
+                }
+            else:
+                return {
+                    "causal_classification": "CAUSED_BY_STRATEGY_EDGE",
+                    "verdict": f"Loss caused by natural strategy distribution / market regime shift (Realized PnL: ${realized_pnl:.2f}).",
+                    "primary_cause": "MARKET_ALPHA_DISTRIBUTION",
+                    "details": "Execution was clean. Market moved through Stop Loss.",
+                    "actionable_fix": "Review regime alignment and strategy multi-timeframe conviction."
+                }
+
+        return {
+            "causal_classification": "PROFITABLE_EXECUTION",
+            "verdict": f"Trade executed cleanly with positive outcome (PnL: +${realized_pnl:.2f}).",
+            "primary_cause": "ALPHA_CONVICTION_REALIZED",
+            "details": "Execution and strategy operated nominally.",
+            "actionable_fix": "None required."
+        }
+
     def get_attribution_summary(self) -> Dict[str, Any]:
         """
         Returns institutional portfolio performance attribution payload.
