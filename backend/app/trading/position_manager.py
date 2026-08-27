@@ -29,6 +29,41 @@ class PositionManager:
 
     async def start(self):
         self.running = True
+        # Restore open positions from database upon startup
+        try:
+            from app.models.trading import Trade
+            from sqlalchemy.future import select
+            async with AsyncSessionLocal() as db:
+                query = select(Trade).where(Trade.exit_time.is_(None), Trade.exit_price.is_(None))
+                result = await db.execute(query)
+                open_trades = result.scalars().all()
+                for trade in open_trades:
+                    if trade.id not in self._positions:
+                        await self.track_position(trade.id, {
+                            "id": trade.id,
+                            "symbol": trade.symbol,
+                            "side": trade.side,
+                            "entry_price": trade.entry_price,
+                            "position_size": trade.position_size,
+                            "stop_loss": trade.stop_loss,
+                            "take_profit": trade.take_profit,
+                            "trailing_stop": trade.stop_loss,
+                            "highest_price": trade.entry_price,
+                            "lowest_price": trade.entry_price,
+                            "market_regime": trade.market_regime,
+                            "atr": trade.atr,
+                            "confidence": trade.confidence_score,
+                            "strategy": trade.strategy_used,
+                            "risk_pct": trade.risk_pct / 100.0 if trade.risk_pct else 0.01,
+                            "trading_mode": trade.trading_mode or "PAPER",
+                            "scale_ins": 0,
+                            "entry_time": trade.entry_time
+                        })
+                if open_trades:
+                    logger.info(f"🔄 [POSITION RESTORATION] Restored {len(open_trades)} active positions from database into PositionManager.")
+        except Exception as e:
+            logger.error(f"Failed to restore open positions from DB on startup: {e}")
+
         self._task = asyncio.create_task(self._monitor_loop())
         logger.info("Layer 4 Trailing Stop & Position Manager started.")
 
@@ -141,271 +176,277 @@ class PositionManager:
             try:
                 active_trade_ids = list(self._positions.keys())
                 for trade_id in active_trade_ids:
-                    pos = self._positions.get(trade_id)
-                    if not pos:
-                        continue
-                    
-                    symbol = pos["symbol"]
-                    side = pos["side"]
-                    entry = pos["entry_price"]
-                    size = pos["position_size"]
-                    tp = pos.get("take_profit", 0.0)
-                    sl = pos.get("stop_loss", 0.0)
-                    if "trailing_stop" not in pos or pos["trailing_stop"] is None:
-                        pos["trailing_stop"] = float(sl)
-                    if "highest_price" not in pos or pos["highest_price"] is None or float(pos.get("highest_price", 0.0)) <= 0.0:
-                        pos["highest_price"] = entry
-                    if "lowest_price" not in pos or pos["lowest_price"] is None or float(pos.get("lowest_price", 0.0)) <= 0.0:
-                        pos["lowest_price"] = entry
-                    
-                    current_price = cache.get_price(symbol)
-                    if current_price <= 0.0:
-                        logger.debug(f"Skipping position monitoring for Trade {trade_id} ({symbol}): invalid or missing price ({current_price})")
-                        continue
-                    
-                    # 1. Regime-Adaptive Dynamic Trailing & Breakeven Protection Engine
-                    regime = pos.get("market_regime", "TRENDING").upper()
-                    atr = pos.get("atr", entry * 0.01) if pos.get("atr", 0.0) > 0.0 else entry * 0.01
-
-                    # Correlated Risk Management: Macro Shock Guard on BTC selloff
-                    btc_price = cache.get_price("BTCUSDT")
-                    if not hasattr(self, "_btc_price_history"):
-                        self._btc_price_history = []
-                    self._btc_price_history.append(btc_price)
-                    if len(self._btc_price_history) > 10:
-                        self._btc_price_history.pop(0)
-
-                    btc_shock_detected = False
-                    if len(self._btc_price_history) >= 3:
-                        btc_peak = max(self._btc_price_history)
-                        btc_drop_pct = (btc_peak - btc_price) / btc_peak * 100.0 if btc_peak > 0 else 0.0
-                        if btc_drop_pct >= 1.2:
-                            btc_shock_detected = True
-
-                    # If BTC shock detected and position is an altcoin BUY, lock breakeven immediately
-                    if btc_shock_detected and symbol != "BTCUSDT" and side == "BUY":
-                        be_level = round(entry * 1.0005, 2)
-                        if pos["trailing_stop"] < be_level:
-                            pos["trailing_stop"] = be_level
-                            logger.warning(f"🚨 [CORRELATED MACRO SHOCK GUARD] Rapid BTC selloff ({btc_drop_pct:.2f}% drop)! Tightened trailing stop on {symbol} to breakeven ({be_level}) to prevent systemic drawdown cascade.")
-                    
-                    # Update peak tracking
-                    if side == "BUY":
-                        if current_price > pos.get("highest_price", entry):
-                            pos["highest_price"] = current_price
-                        favorable_move = current_price - entry
-                        peak_move = pos["highest_price"] - entry
-                    else:
-                        if pos.get("lowest_price", entry) == 0.0 or current_price < pos.get("lowest_price", entry):
-                            pos["lowest_price"] = current_price
-                        favorable_move = entry - current_price
-                        peak_move = entry - pos["lowest_price"]
-
-                    move_in_atr = favorable_move / atr if atr > 0 else 0.0
-                    peak_in_atr = peak_move / atr if atr > 0 else 0.0
-
-                    # Assign regime-specific triggers & trailing multipliers
-                    if regime == "RANGING":
-                        be_trigger_atr = 0.5
-                        trail_activation_atr = 0.7
-                        trail_mult = 0.8
-                    elif regime == "VOLATILE":
-                        be_trigger_atr = 0.8
-                        trail_activation_atr = 1.0
-                        # Tighten trailing distance if parabolic expansion beyond 2.0x ATR
-                        trail_mult = 1.0 if peak_in_atr >= 2.0 else 1.2
-                    else:  # TRENDING or default
-                        be_trigger_atr = 0.8
-                        trail_activation_atr = 1.0
-                        trail_mult = 1.0
-
-                    pos["regime_trailing_details"] = {
-                        "regime": regime,
-                        "be_trigger_atr": be_trigger_atr,
-                        "trail_activation_atr": trail_activation_atr,
-                        "trail_dist_atr": trail_mult,
-                        "current_move_atr": round(move_in_atr, 2),
-                        "peak_move_atr": round(peak_in_atr, 2)
-                    }
-
-                    # A. Breakeven Protection Guard (Locks in Entry + 0.1% Fee Buffer)
-                    if (move_in_atr >= be_trigger_atr or peak_in_atr >= be_trigger_atr):
-                        be_level = round(entry * 1.001 if side == "BUY" else entry * 0.999, 2)
+                    try:
+                        pos = self._positions.get(trade_id)
+                        if not pos:
+                            continue
                         
-                        if side == "BUY" and pos["trailing_stop"] < be_level:
-                            pos["trailing_stop"] = be_level
-                            if not pos.get("breakeven_activated", False):
-                                pos["breakeven_activated"] = True
-                                pos["breakeven_price"] = be_level
-                                logger.info(
-                                    f"🛡️ [REGIME BREAKEVEN PROTECTION] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                    f"Breakeven locked at {be_level} (Entry: {entry}). Current Move: {move_in_atr:.2f} ATR."
-                                )
-                        elif side == "SELL" and (pos["trailing_stop"] > be_level or pos["trailing_stop"] == 0.0):
-                            pos["trailing_stop"] = be_level
-                            if not pos.get("breakeven_activated", False):
-                                pos["breakeven_activated"] = True
-                                pos["breakeven_price"] = be_level
-                                logger.info(
-                                    f"🛡️ [REGIME BREAKEVEN PROTECTION] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                    f"Breakeven locked at {be_level} (Entry: {entry}). Current Move: {move_in_atr:.2f} ATR."
-                                )
+                        symbol = pos.get("symbol", "")
+                        side = pos.get("side", "BUY")
+                        entry = float(pos.get("entry_price", 0.0))
+                        size = float(pos.get("position_size", 0.0))
+                        tp = float(pos.get("take_profit", 0.0))
+                        sl = float(pos.get("stop_loss", 0.0))
+                        if "trailing_stop" not in pos or pos["trailing_stop"] is None:
+                            pos["trailing_stop"] = float(sl)
+                        if "highest_price" not in pos or pos["highest_price"] is None or float(pos.get("highest_price", 0.0)) <= 0.0:
+                            pos["highest_price"] = entry
+                        if "lowest_price" not in pos or pos["lowest_price"] is None or float(pos.get("lowest_price", 0.0)) <= 0.0:
+                            pos["lowest_price"] = entry
+                        if "opened_at" not in pos or not pos["opened_at"]:
+                            pos["opened_at"] = time.time()
+                        
+                        current_price = cache.get_price(symbol)
+                        if current_price <= 0.0:
+                            logger.debug(f"Skipping position monitoring for Trade {trade_id} ({symbol}): invalid or missing price ({current_price})")
+                            continue
+                        
+                        # 1. Regime-Adaptive Dynamic Trailing & Breakeven Protection Engine
+                        regime = pos.get("market_regime", "TRENDING").upper()
+                        atr = float(pos.get("atr", entry * 0.01)) if float(pos.get("atr", 0.0)) > 0.0 else entry * 0.01
 
-                    # B. Regime-Adaptive Dynamic Trailing Stop Adjustment
-                    if peak_in_atr >= trail_activation_atr:
-                        trail_dist = round(trail_mult * atr, 2)
+                        # Correlated Risk Management: Macro Shock Guard on BTC selloff
+                        btc_price = cache.get_price("BTCUSDT")
+                        if not hasattr(self, "_btc_price_history"):
+                            self._btc_price_history = []
+                        self._btc_price_history.append(btc_price)
+                        if len(self._btc_price_history) > 10:
+                            self._btc_price_history.pop(0)
+
+                        btc_shock_detected = False
+                        if len(self._btc_price_history) >= 3:
+                            btc_peak = max(self._btc_price_history)
+                            btc_drop_pct = (btc_peak - btc_price) / btc_peak * 100.0 if btc_peak > 0 else 0.0
+                            if btc_drop_pct >= 1.2:
+                                btc_shock_detected = True
+
+                        # If BTC shock detected and position is an altcoin BUY, lock breakeven immediately
+                        if btc_shock_detected and symbol != "BTCUSDT" and side == "BUY":
+                            be_level = round(entry * 1.0005, 2)
+                            if pos.get("trailing_stop", 0.0) < be_level:
+                                pos["trailing_stop"] = be_level
+                                logger.warning(f"🚨 [CORRELATED MACRO SHOCK GUARD] Rapid BTC selloff ({btc_drop_pct:.2f}% drop)! Tightened trailing stop on {symbol} to breakeven ({be_level}) to prevent systemic drawdown cascade.")
+                        
+                        # Update peak tracking
                         if side == "BUY":
-                            target_sl = round(pos["highest_price"] - trail_dist, 2)
-                            if target_sl > pos["trailing_stop"] and target_sl < current_price:
-                                old_sl = pos["trailing_stop"]
-                                pos["trailing_stop"] = target_sl
-                                pos["trailing_active"] = True
-                                logger.info(
-                                    f"📈 [REGIME DYNAMIC TRAILING] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                    f"SL raised from {old_sl} to {target_sl} (Highest: {pos['highest_price']}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
-                                )
-                        elif side == "SELL":
-                            target_sl = round(pos["lowest_price"] + trail_dist, 2)
-                            if (target_sl < pos["trailing_stop"] or pos["trailing_stop"] == 0.0) and target_sl > current_price:
-                                old_sl = pos["trailing_stop"]
-                                pos["trailing_stop"] = target_sl
-                                pos["trailing_active"] = True
-                                logger.info(
-                                    f"📉 [REGIME DYNAMIC TRAILING] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                    f"SL lowered from {old_sl} to {target_sl} (Lowest: {pos['lowest_price']}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
-                                )
-                    
-                    # 2. Check Multi-Stage Partial Take Profits
-                    stages = pos.get("tp_stages", [])
-                    stage_triggered = False
-                    
-                    for stage in stages:
-                        if not stage["hit"]:
-                            level = stage["level"]
-                            is_hit = False
-                            if side == "BUY" and current_price >= level:
-                                is_hit = True
-                            elif side == "SELL" and current_price <= level:
-                                is_hit = True
-                                
-                            if is_hit:
-                                stage["hit"] = True
-                                close_pct = stage["percentage"]
-                                
-                                # If it's the final stage (or last stage of defined levels), trigger a full exit
-                                if stage == stages[-1]:
-                                    await self._close_position(trade_id, current_price, "FINAL_TAKE_PROFIT_STAGE")
-                                    stage_triggered = True
-                                    break
-                                else:
-                                    close_size = round(size * close_pct, 4)
-                                    if close_size > 0 and pos["position_size"] > close_size:
-                                        await self._partial_close_position(trade_id, current_price, close_size, stage["label"])
-                                        # Reduce active position size
-                                        pos["position_size"] = round(pos["position_size"] - close_size, 4)
-                                        
-                                        # Lock in profits: raise stop loss to entry (break-even)
-                                        if side == "BUY":
-                                            pos["trailing_stop"] = max(pos["trailing_stop"], entry)
-                                        else:
-                                            pos["trailing_stop"] = min(pos["trailing_stop"], entry)
-                    
-                    if stage_triggered:
-                        continue
-                        
-                    # 3. Check General Trailing Stop Loss Exit Criteria
-                    if side == "BUY":
-                        if current_price <= pos["trailing_stop"] and pos["trailing_stop"] > 0:
-                            await self._close_position(trade_id, current_price, "STOP_LOSS")
-                            continue
-                    elif side == "SELL":
-                        if current_price >= pos["trailing_stop"] and pos["trailing_stop"] > 0:
-                            await self._close_position(trade_id, current_price, "STOP_LOSS")
-                            continue
-
-                    # 4. Intelligent Early Exit Engine (Thesis Invalidation Check with Grace Period & Entry/Exit Symmetry)
-                    from app.trading.mtf_confirmation import MTFConfirmationGuard
-                    holding_time_sec = time.time() - pos.get("opened_at", time.time())
-                    grace_period_sec = pos.get("grace_period_sec", 90.0)
-
-                    invalidity_strength, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_weighted_mtf_invalidation(symbol, side, current_price)
-
-                    # Trend Persistence Engine: maintain trend history
-                    trend_history = pos.setdefault("trend_history", [])
-                    trend_history.append(invalidity_strength)
-                    if len(trend_history) > 10:
-                        trend_history.pop(0)
-
-                    thesis_strength = pos.get("thesis_strength", 0.83)
-
-                    # Entry / Exit Symmetry: Require current invalidity strength to meet or exceed entry thesis strength
-                    strength_succeeded = invalidity_strength >= thesis_strength
-
-                    if strength_succeeded:
-                        if pos.get("invalidation_first_detected_at", 0.0) == 0.0:
-                            pos["invalidation_first_detected_at"] = time.time()
-                        pos["invalidation_consecutive_cycles"] = pos.get("invalidation_consecutive_cycles", 0) + 1
-                    else:
-                        # Reset persistence counter if market conditions recover
-                        pos["invalidation_consecutive_cycles"] = 0
-                        pos["invalidation_first_detected_at"] = 0.0
-
-                    first_detected = pos.get("invalidation_first_detected_at", 0.0)
-                    persistence_time_sec = time.time() - first_detected if first_detected > 0.0 else 0.0
-                    consecutive_cycles = pos.get("invalidation_consecutive_cycles", 0)
-
-                    # Check invalidation trigger conditions:
-                    # 1. Reversal must persist for >= 3 consecutive cycles OR >= 60 seconds
-                    # 2. Invalidity strength must satisfy entry/exit symmetry (invalidity_strength >= thesis_strength)
-                    persist_confirmed = (consecutive_cycles >= 3 or persistence_time_sec >= 60.0)
-
-                    if strength_succeeded and persist_confirmed:
-                        if holding_time_sec < grace_period_sec:
-                            logger.info(
-                                f"🛡️ [GRACE PERIOD PROTECTED] Trade {trade_id} {symbol} ({side}): "
-                                f"Thesis invalidation signal suppressed during Grace Period ({holding_time_sec:.1f}s / {grace_period_sec:.0f}s). "
-                                f"Invalidity Strength: {invalidity_strength:.2f} >= Thesis Strength: {thesis_strength:.2f}."
-                            )
+                            if current_price > float(pos.get("highest_price", entry)):
+                                pos["highest_price"] = current_price
+                            favorable_move = current_price - entry
+                            peak_move = float(pos.get("highest_price", entry)) - entry
                         else:
-                            # Enhanced Diagnostics Logging
+                            if float(pos.get("lowest_price", entry)) == 0.0 or current_price < float(pos.get("lowest_price", entry)):
+                                pos["lowest_price"] = current_price
+                            favorable_move = entry - current_price
+                            peak_move = entry - float(pos.get("lowest_price", entry))
+
+                        move_in_atr = favorable_move / atr if atr > 0 else 0.0
+                        peak_in_atr = peak_move / atr if atr > 0 else 0.0
+
+                        # Assign regime-specific triggers & trailing multipliers
+                        if regime == "RANGING":
+                            be_trigger_atr = 0.5
+                            trail_activation_atr = 0.7
+                            trail_mult = 0.8
+                        elif regime == "VOLATILE":
+                            be_trigger_atr = 0.8
+                            trail_activation_atr = 1.0
+                            # Tighten trailing distance if parabolic expansion beyond 2.0x ATR
+                            trail_mult = 1.0 if peak_in_atr >= 2.0 else 1.2
+                        else:  # TRENDING or default
+                            be_trigger_atr = 0.8
+                            trail_activation_atr = 1.0
+                            trail_mult = 1.0
+
+                        pos["regime_trailing_details"] = {
+                            "regime": regime,
+                            "be_trigger_atr": be_trigger_atr,
+                            "trail_activation_atr": trail_activation_atr,
+                            "trail_dist_atr": trail_mult,
+                            "current_move_atr": round(move_in_atr, 2),
+                            "peak_move_atr": round(peak_in_atr, 2)
+                        }
+
+                        # A. Breakeven Protection Guard (Locks in Entry + 0.1% Fee Buffer)
+                        if (move_in_atr >= be_trigger_atr or peak_in_atr >= be_trigger_atr):
+                            be_level = round(entry * 1.001 if side == "BUY" else entry * 0.999, 2)
+                            
+                            if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < be_level:
+                                pos["trailing_stop"] = be_level
+                                if not pos.get("breakeven_activated", False):
+                                    pos["breakeven_activated"] = True
+                                    pos["breakeven_price"] = be_level
+                                    logger.info(
+                                        f"🛡️ [REGIME BREAKEVEN PROTECTION] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                        f"Breakeven locked at {be_level} (Entry: {entry}). Current Move: {move_in_atr:.2f} ATR."
+                                    )
+                            elif side == "SELL" and (float(pos.get("trailing_stop", 0.0)) > be_level or float(pos.get("trailing_stop", 0.0)) == 0.0):
+                                pos["trailing_stop"] = be_level
+                                if not pos.get("breakeven_activated", False):
+                                    pos["breakeven_activated"] = True
+                                    pos["breakeven_price"] = be_level
+                                    logger.info(
+                                        f"🛡️ [REGIME BREAKEVEN PROTECTION] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                        f"Breakeven locked at {be_level} (Entry: {entry}). Current Move: {move_in_atr:.2f} ATR."
+                                    )
+
+                        # B. Regime-Adaptive Dynamic Trailing Stop Adjustment
+                        if peak_in_atr >= trail_activation_atr:
+                            trail_dist = round(trail_mult * atr, 2)
+                            if side == "BUY":
+                                target_sl = round(float(pos.get("highest_price", entry)) - trail_dist, 2)
+                                if target_sl > float(pos.get("trailing_stop", 0.0)) and target_sl < current_price:
+                                    old_sl = pos.get("trailing_stop", 0.0)
+                                    pos["trailing_stop"] = target_sl
+                                    pos["trailing_active"] = True
+                                    logger.info(
+                                        f"📈 [REGIME DYNAMIC TRAILING] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                        f"SL raised from {old_sl} to {target_sl} (Highest: {pos.get('highest_price', entry)}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
+                                    )
+                            elif side == "SELL":
+                                target_sl = round(float(pos.get("lowest_price", entry)) + trail_dist, 2)
+                                if (target_sl < float(pos.get("trailing_stop", 0.0)) or float(pos.get("trailing_stop", 0.0)) == 0.0) and target_sl > current_price:
+                                    old_sl = pos.get("trailing_stop", 0.0)
+                                    pos["trailing_stop"] = target_sl
+                                    pos["trailing_active"] = True
+                                    logger.info(
+                                        f"📉 [REGIME DYNAMIC TRAILING] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                        f"SL lowered from {old_sl} to {target_sl} (Lowest: {pos.get('lowest_price', entry)}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
+                                    )
+                        
+                        # 2. Check Multi-Stage Partial Take Profits
+                        stages = pos.get("tp_stages", [])
+                        stage_triggered = False
+                        
+                        for stage in stages:
+                            if not stage["hit"]:
+                                level = stage["level"]
+                                is_hit = False
+                                if side == "BUY" and current_price >= level:
+                                    is_hit = True
+                                elif side == "SELL" and current_price <= level:
+                                    is_hit = True
+                                    
+                                if is_hit:
+                                    stage["hit"] = True
+                                    close_pct = stage["percentage"]
+                                    
+                                    # If it's the final stage (or last stage of defined levels), trigger a full exit
+                                    if stage == stages[-1]:
+                                        await self._close_position(trade_id, current_price, "FINAL_TAKE_PROFIT_STAGE")
+                                        stage_triggered = True
+                                        break
+                                    else:
+                                        close_size = round(size * close_pct, 4)
+                                        if close_size > 0 and float(pos.get("position_size", 0.0)) > close_size:
+                                            await self._partial_close_position(trade_id, current_price, close_size, stage["label"])
+                                            # Reduce active position size
+                                            pos["position_size"] = round(float(pos.get("position_size", 0.0)) - close_size, 4)
+                                            
+                                            # Lock in profits: raise stop loss to entry (break-even)
+                                            if side == "BUY":
+                                                pos["trailing_stop"] = max(float(pos.get("trailing_stop", 0.0)), entry)
+                                            else:
+                                                pos["trailing_stop"] = min(float(pos.get("trailing_stop", 0.0)), entry)
+                        
+                        if stage_triggered:
+                            continue
+                            
+                        # 3. Check General Trailing Stop Loss Exit Criteria
+                        trailing_sl_val = float(pos.get("trailing_stop", 0.0))
+                        if side == "BUY":
+                            if current_price <= trailing_sl_val and trailing_sl_val > 0:
+                                await self._close_position(trade_id, current_price, "STOP_LOSS")
+                                continue
+                        elif side == "SELL":
+                            if current_price >= trailing_sl_val and trailing_sl_val > 0:
+                                await self._close_position(trade_id, current_price, "STOP_LOSS")
+                                continue
+
+                        # 4. Intelligent Early Exit Engine (Thesis Invalidation Check with Grace Period & Entry/Exit Symmetry)
+                        from app.trading.mtf_confirmation import MTFConfirmationGuard
+                        holding_time_sec = time.time() - pos.get("opened_at", time.time())
+                        grace_period_sec = pos.get("grace_period_sec", 90.0)
+
+                        invalidity_strength, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_weighted_mtf_invalidation(symbol, side, current_price)
+
+                        # Trend Persistence Engine: maintain trend history
+                        trend_history = pos.setdefault("trend_history", [])
+                        trend_history.append(invalidity_strength)
+                        if len(trend_history) > 10:
+                            trend_history.pop(0)
+
+                        thesis_strength = pos.get("thesis_strength", 0.83)
+
+                        # Entry / Exit Symmetry: Require current invalidity strength to meet or exceed entry thesis strength
+                        strength_succeeded = invalidity_strength >= thesis_strength
+
+                        if strength_succeeded:
+                            if pos.get("invalidation_first_detected_at", 0.0) == 0.0:
+                                pos["invalidation_first_detected_at"] = time.time()
+                            pos["invalidation_consecutive_cycles"] = pos.get("invalidation_consecutive_cycles", 0) + 1
+                        else:
+                            # Reset persistence counter if market conditions recover
+                            pos["invalidation_consecutive_cycles"] = 0
+                            pos["invalidation_first_detected_at"] = 0.0
+
+                        first_detected = pos.get("invalidation_first_detected_at", 0.0)
+                        persistence_time_sec = time.time() - first_detected if first_detected > 0.0 else 0.0
+                        consecutive_cycles = pos.get("invalidation_consecutive_cycles", 0)
+
+                        # Check invalidation trigger conditions:
+                        # 1. Reversal must persist for >= 3 consecutive cycles OR >= 60 seconds
+                        # 2. Invalidity strength must satisfy entry/exit symmetry (invalidity_strength >= thesis_strength)
+                        persist_confirmed = (consecutive_cycles >= 3 or persistence_time_sec >= 60.0)
+
+                        if strength_succeeded and persist_confirmed:
+                            if holding_time_sec < grace_period_sec:
+                                logger.info(
+                                    f"🛡️ [GRACE PERIOD PROTECTED] Trade {trade_id} {symbol} ({side}): "
+                                    f"Thesis invalidation signal suppressed during Grace Period ({holding_time_sec:.1f}s / {grace_period_sec:.0f}s). "
+                                    f"Invalidity Strength: {invalidity_strength:.2f} >= Thesis Strength: {thesis_strength:.2f}."
+                                )
+                            else:
+                                # Enhanced Diagnostics Logging
+                                logger.warning(
+                                    f"🚪 [INTELLIGENT EARLY EXIT - THESIS INVALIDATED]\n"
+                                    f"  - Trade ID: {trade_id} ({symbol} {side})\n"
+                                    f"  - Entry Confidence (Thesis Strength): {thesis_strength:.2f}\n"
+                                    f"  - Entry Strategy: {pos.get('entry_strategy', 'Volatility Expansion Breakout')}\n"
+                                    f"  - Current Confidence: {pos.get('confidence', thesis_strength):.2f}\n"
+                                    f"  - Current Strategy / Opposing Bias: {mtf_details.get('opposing_side', 'N/A')}\n"
+                                    f"  - Trend Score (Invalidity Strength): {invalidity_strength:.2f} / {thesis_strength:.2f}\n"
+                                    f"  - MTF Breakdown: {mtf_details.get('formatted_breakdown', 'N/A')}\n"
+                                    f"  - Reason Score: {invalidity_strength * 100:.1f}%\n"
+                                    f"  - Persistence Time: {persistence_time_sec:.1f}s ({consecutive_cycles} cycles)\n"
+                                    f"  - Holding Duration: {holding_time_sec:.1f}s (Grace Period Passed: {grace_period_sec:.0f}s)\n"
+                                    f"  - Exit Confidence: {invalidity_strength:.2f}\n"
+                                    f"  - Final Decision: CLOSED via THESIS_INVALIDATION"
+                                )
+                                await self._close_position(trade_id, current_price, "THESIS_INVALIDATION")
+                                continue
+
+                        # 5. Time-Based Stale Trade Exit Engine (Capital Recycling)
+                        opened_at = pos.get("opened_at", time.time())
+                        time_open_sec = time.time() - opened_at
+                        stale_limit_sec = pos.get("stale_threshold_sec", int(self.default_stale_hours * 3600))
+                        stale_pct_limit = pos.get("stale_price_range_pct", self.default_stale_pct)
+                        price_change_pct = abs((current_price - entry) / entry) * 100.0 if entry > 0 else 0.0
+
+                        if time_open_sec >= stale_limit_sec and price_change_pct <= stale_pct_limit:
+                            open_hrs = round(time_open_sec / 3600.0, 1)
                             logger.warning(
-                                f"🚪 [INTELLIGENT EARLY EXIT - THESIS INVALIDATED]\n"
-                                f"  - Trade ID: {trade_id} ({symbol} {side})\n"
-                                f"  - Entry Confidence (Thesis Strength): {thesis_strength:.2f}\n"
-                                f"  - Entry Strategy: {pos.get('entry_strategy', 'Volatility Expansion Breakout')}\n"
-                                f"  - Current Confidence: {pos.get('confidence', thesis_strength):.2f}\n"
-                                f"  - Current Strategy / Opposing Bias: {mtf_details.get('opposing_side', 'N/A')}\n"
-                                f"  - Trend Score (Invalidity Strength): {invalidity_strength:.2f} / {thesis_strength:.2f}\n"
-                                f"  - MTF Breakdown: {mtf_details.get('formatted_breakdown', 'N/A')}\n"
-                                f"  - Reason Score: {invalidity_strength * 100:.1f}%\n"
-                                f"  - Persistence Time: {persistence_time_sec:.1f}s ({consecutive_cycles} cycles)\n"
-                                f"  - Holding Duration: {holding_time_sec:.1f}s (Grace Period Passed: {grace_period_sec:.0f}s)\n"
-                                f"  - Exit Confidence: {invalidity_strength:.2f}\n"
-                                f"  - Final Decision: CLOSED via THESIS_INVALIDATION"
+                                f"⏳ [STALE TRADE EXIT] Trade {trade_id} {symbol} ({side}): "
+                                f"Stagnant for {open_hrs}h with price change of {price_change_pct:.2f}% (<= {stale_pct_limit}%). "
+                                f"Exiting position to recycle capital and eliminate opportunity cost."
                             )
-                            await self._close_position(trade_id, current_price, "THESIS_INVALIDATION")
+                            await self._close_position(trade_id, current_price, "STALE_TRADE_EXIT")
                             continue
 
-                    # 5. Time-Based Stale Trade Exit Engine (Capital Recycling)
-                    opened_at = pos.get("opened_at", time.time())
-                    time_open_sec = time.time() - opened_at
-                    stale_limit_sec = pos.get("stale_threshold_sec", int(self.default_stale_hours * 3600))
-                    stale_pct_limit = pos.get("stale_price_range_pct", self.default_stale_pct)
-                    price_change_pct = abs((current_price - entry) / entry) * 100.0 if entry > 0 else 0.0
-
-                    if time_open_sec >= stale_limit_sec and price_change_pct <= stale_pct_limit:
-                        open_hrs = round(time_open_sec / 3600.0, 1)
-                        logger.warning(
-                            f"⏳ [STALE TRADE EXIT] Trade {trade_id} {symbol} ({side}): "
-                            f"Stagnant for {open_hrs}h with price change of {price_change_pct:.2f}% (<= {stale_pct_limit}%). "
-                            f"Exiting position to recycle capital and eliminate opportunity cost."
-                        )
-                        await self._close_position(trade_id, current_price, "STALE_TRADE_EXIT")
-                        continue
-
-                    # 6. Pyramiding Scale-In Evaluation for Winning Trends
-                    from app.trading.pyramiding import PyramidingEngine
-                    await PyramidingEngine.get_instance().evaluate_scale_in(pos, current_price)
+                        # 6. Pyramiding Scale-In Evaluation for Winning Trends
+                        from app.trading.pyramiding import PyramidingEngine
+                        await PyramidingEngine.get_instance().evaluate_scale_in(pos, current_price)
+                    except Exception as pe:
+                        logger.error(f"Error monitoring position {trade_id}: {pe}", exc_info=True)
                 
                 await asyncio.sleep(1.0) # Check every second
             except asyncio.CancelledError:
@@ -702,6 +743,13 @@ class PositionManager:
                         "holding_minutes": holding_minutes,
                         "r_multiple": r_multiple
                     })
+                    # Conclude persistent market thesis
+                    try:
+                        from app.trading.thesis_persistence import ThesisPersistenceEngine
+                        ThesisPersistenceEngine.get_instance().close_or_invalidate_thesis(symbol, outcome_type)
+                    except Exception as tpe_err:
+                        logger.error(f"Failed to conclude thesis in ThesisPersistenceEngine: {tpe_err}")
+
                     asyncio.create_task(SelfAdaptationEngine.get_instance().analyze_performance())
                     asyncio.create_task(TradeJournalEngine.get_instance().journal_closed_trade(trade_id))
                     ChampionChallengerEngine.get_instance().record_trade_outcome(

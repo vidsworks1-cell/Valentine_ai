@@ -1,4 +1,5 @@
 import asyncio
+import time
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
@@ -161,17 +162,22 @@ class ExchangeReconciliationEngine:
 
                 # Auto-resolve: Adopt position into internal manager
                 new_trade_id = int(datetime.now(timezone.utc).timestamp() * 1000)
+                entry_px = float(exc_pos.get("entry_price", 100.0))
                 pos_details = {
                     "trade_id": new_trade_id,
                     "symbol": sym,
                     "side": exc_pos.get("side", "BUY"),
-                    "position_size": exc_pos.get("position_size", 1.0),
-                    "entry_price": exc_pos.get("entry_price", 100.0),
-                    "stop_loss": exc_pos.get("stop_loss", 0.0),
-                    "take_profit": exc_pos.get("take_profit", 0.0),
+                    "position_size": float(exc_pos.get("position_size", 1.0)),
+                    "entry_price": entry_px,
+                    "stop_loss": float(exc_pos.get("stop_loss", 0.0)),
+                    "take_profit": float(exc_pos.get("take_profit", 0.0)),
+                    "trailing_stop": float(exc_pos.get("stop_loss", 0.0)),
+                    "highest_price": entry_px,
+                    "lowest_price": entry_px,
                     "strategy": "Exchange_Reconciliation_Adopted",
                     "confidence": 0.85,
-                    "trading_mode": active_mode
+                    "trading_mode": active_mode,
+                    "opened_at": time.time()
                 }
                 await pm.track_position(new_trade_id, pos_details)
                 resolutions.append({

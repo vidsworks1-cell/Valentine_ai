@@ -503,6 +503,21 @@ class AiReasoningEngine:
                             continue
                         ctx.add_trace("ConfidenceFilter", "PASS")
 
+                        # Check Thesis Persistence Layer (suppress contradictory noise on active positions)
+                        from app.trading.thesis_persistence import ThesisPersistenceEngine
+                        thesis_allowed, thesis_reason, active_thesis = ThesisPersistenceEngine.get_instance().evaluate_new_signal(
+                            symbol=symbol,
+                            proposed_side=proposed_side,
+                            proposed_strategy=ctx.active_strategy,
+                            proposed_confidence=adapted_confidence,
+                            current_price=price
+                        )
+                        if not thesis_allowed:
+                            ctx.add_trace("ThesisPersistence", "FAIL")
+                            ctx.record_rejection("ThesisPersistence", thesis_reason, category="THESIS_PERSISTENCE_GUARD")
+                            continue
+                        ctx.add_trace("ThesisPersistence", "PASS")
+
                         adaptation_log_str = "; ".join(adaptation_reasons) if adaptation_reasons else "Performance nominal."
                         
                         # Lock Context - Decision Context is now immutable

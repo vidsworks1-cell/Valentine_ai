@@ -104,3 +104,76 @@ class AdaptiveGuardThresholds:
             self._regime_adjustments[regime_upper] = {}
         self._regime_adjustments[regime_upper][guard_param] = new_value
         logger.info(f"🧠 [ADAPTIVE THRESHOLDS] Updated learned parameter '{guard_param}' for regime {regime_upper} -> {new_value}")
+
+    def get_guard_impact_matrix(self) -> Dict[str, Any]:
+        """
+        Calculates empirical counterfactual impact and net economic value delivered for all Lumina guards.
+        Answers: 'How much money did each guard save vs cost over time, and what is its optimal learned threshold?'
+        """
+        guard_names = {
+            "CONFIDENCE_FILTER": "Confidence Filter",
+            "PORTFOLIO_GUARD": "Portfolio Guard (Beta/Exposure)",
+            "VOLUME_GUARD": "Volume Confluence Guard",
+            "MTF_GUARD": "MTF Confirmation Guard",
+            "MACRO_RISK": "Macro Risk Overlay",
+            "COOLDOWN": "Evaluation Cooldown Guard",
+            "THESIS_PERSISTENCE_GUARD": "Thesis Persistence Guard",
+            "BINANCE_REJECTION": "Binance Execution Guard"
+        }
+
+        from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+        learner = MissedOpportunityLearner.get_instance()
+        records = learner._records
+
+        matrix: Dict[str, Dict[str, Any]] = {}
+        for cat_key, display_name in guard_names.items():
+            cat_records = [r for r in records if r.get("category") == cat_key]
+            saved_recs = [r for r in cat_records if r.get("status") == "SAVED_BY_GUARD"]
+            cost_recs = [r for r in cat_records if r.get("status") == "COST_PROFIT"]
+            pending_recs = [r for r in cat_records if r.get("status") == "PENDING_EVALUATION"]
+
+            saved_pnl = sum(abs(r.get("counterfactual_pnl_pct", 0.0)) for r in saved_recs)
+            cost_pnl = sum(abs(r.get("counterfactual_pnl_pct", 0.0)) for r in cost_recs)
+            net_value = round(saved_pnl - cost_pnl, 2)
+            total_evaluated = len(saved_recs) + len(cost_recs)
+            precision_pct = round((len(saved_recs) / max(1, total_evaluated)) * 100.0, 1)
+
+            # Generate dynamic threshold recommendation based on empirical precision
+            current_base = self._baseline_thresholds.get(cat_key.lower(), 70.0)
+            if total_evaluated >= 3:
+                if precision_pct >= 65.0:
+                    recommendation = f"Threshold optimal. Saved ${saved_pnl:.2f}% loss with {precision_pct}% precision."
+                    rec_threshold = current_base
+                elif precision_pct <= 40.0:
+                    # High false rejection rate -> recommend relaxing threshold by 2-3%
+                    rec_threshold = round(max(50.0, current_base - 2.0), 1)
+                    recommendation = f"Empirical discovery: Threshold should be {rec_threshold}%, not {current_base}%. Relaxing captures missed alpha with minimal drawdown."
+                else:
+                    rec_threshold = current_base
+                    recommendation = f"Balanced performance. Current threshold {current_base}% remains stable."
+            else:
+                rec_threshold = current_base
+                recommendation = f"Sampling data: {len(cat_records)} setups logged. Current threshold: {current_base}%."
+
+            matrix[cat_key] = {
+                "guard_name": display_name,
+                "total_blocked_setups": len(cat_records),
+                "saved_capital_count": len(saved_recs),
+                "cost_profit_count": len(cost_recs),
+                "pending_count": len(pending_recs),
+                "saved_capital_pnl_pct": round(saved_pnl, 2),
+                "cost_profit_pnl_pct": round(cost_pnl, 2),
+                "net_economic_value_pct": net_value,
+                "empirical_precision_pct": precision_pct,
+                "current_threshold": current_base,
+                "recommended_threshold": rec_threshold,
+                "recommendation": recommendation
+            }
+
+        return {
+            "guard_impact_matrix": matrix,
+            "total_blocked_tracked": len(records),
+            "total_saved_pnl_pct": round(sum(m["saved_capital_pnl_pct"] for m in matrix.values()), 2),
+            "total_cost_pnl_pct": round(sum(m["cost_profit_pnl_pct"] for m in matrix.values()), 2),
+            "net_system_guard_pnl_pct": round(sum(m["net_economic_value_pct"] for m in matrix.values()), 2)
+        }

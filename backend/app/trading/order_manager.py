@@ -110,6 +110,20 @@ class OrderManager:
                 opportunity["position_size"] = round(old_size * corr_scaler, 4)
                 logger.info(f"🔗 [CROSS-ASSET CORRELATION SCALER] Position size for {symbol} scaled to {opportunity['position_size']} ({corr_scaler * 100:.0f}% due to {corr_info['risk_flag']} vs {corr_info['most_correlated_active_symbol']}).")
 
+            # 0e. Thesis Persistence Layer: Filter contradictory local chop signals
+            from app.trading.thesis_persistence import ThesisPersistenceEngine
+            thesis_engine = ThesisPersistenceEngine.get_instance()
+            thesis_allowed, thesis_reason, active_thesis = thesis_engine.evaluate_new_signal(
+                symbol=symbol,
+                proposed_side=side,
+                proposed_strategy=opportunity.get("strategy_used", ""),
+                proposed_confidence=float(opportunity.get("confidence_score", 0.75)),
+                current_price=float(opportunity.get("entry_price", 0.0))
+            )
+            if not thesis_allowed:
+                logger.info(f"🚫 [THESIS PERSISTENCE LAYER] Suppressed noise signal: {thesis_reason}")
+                return
+
         from app.services.trading_service import TradingService
         from app.services.paper_trading_service import PaperTradingService
         from app.services.audit_service import AuditService
@@ -349,16 +363,17 @@ class OrderManager:
                 factor = 10 ** prec
                 position_size = round(position_size, prec)
 
-                # In LIVE/TESTNET Binance Spot BUY: enforce min notional >= 5.20 USDT
+                # In LIVE/TESTNET Binance Spot BUY: enforce min notional >= 5.05 USDT
                 if trading_mode in ["TESTNET", "LIVE"] and opportunity["side"].upper() == "BUY":
                     notional_val = position_size * price
-                    if notional_val < 5.20:
-                        if balance >= 5.50:
-                            target_qty = 5.50 / price
-                            position_size = math.ceil(target_qty * factor) / float(factor)
+                    if notional_val < 5.05:
+                        min_target_qty = math.ceil((5.05 / price) * factor) / float(factor)
+                        min_required_cost = min_target_qty * price
+                        if balance >= min_required_cost:
+                            position_size = min_target_qty
                             logger.info(f"⚡ [BINANCE SPOT NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} USDT) to satisfy Binance Spot MIN_NOTIONAL ($5.00).")
                         else:
-                            logger.warning(f"⚠️ [BINANCE SPOT NOTIONAL INSUFFICIENT] Wallet balance ${balance:.2f} cannot satisfy Binance Spot MIN_NOTIONAL ($5.00) for {opportunity['symbol']}.")
+                            logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) is insufficient for minimum Binance Spot trade of {min_target_qty} {opportunity['symbol']} (${min_required_cost:.2f} USDT). Preserving cash buffer.")
                             return
 
                 if position_size <= 0.0:
@@ -381,14 +396,42 @@ class OrderManager:
                     )
                     
                     if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
-                        logger.error(f"❌ BINANCE ORDER PLACEMENT FAILED: {binance_res}")
+                        err_code = binance_res.get("code", binance_res.get("status_code", -1))
+                        err_msg = binance_res.get("msg", binance_res.get("error", "Unknown error"))
+                        err_title = binance_res.get("human_title", "Binance Order Rejection")
+                        err_advice = binance_res.get("diagnostic_advice", "Check API parameters and balance.")
+                        raw_payload = binance_res.get("raw_response", binance_res)
+
+                        logger.error(
+                            f"❌ [BINANCE EXECUTION REJECTED]\n"
+                            f"  - Symbol: {opportunity['symbol']} | Side: {opportunity['side']} | Routing: {order_routing}\n"
+                            f"  - Quantity: {position_size} | Price: {price} | Mode: {trading_mode}\n"
+                            f"  - Error Category: {err_title} (Code {err_code})\n"
+                            f"  - Exchange Message: \"{err_msg}\"\n"
+                            f"  - Actionable Diagnosis: {err_advice}\n"
+                            f"  - Full Response Payload: {raw_payload}"
+                        )
                         try:
                             await AuditService.create_audit_log(db, AuditLogCreate(
                                 level="ERROR",
                                 category="TRADING",
-                                message=f"Binance order placement failed for {opportunity['symbol']}",
-                                details=f"Error response: {binance_res}"
+                                message=f"Binance order rejected: {err_title} ({opportunity['symbol']} {opportunity['side']})",
+                                details=f"Code {err_code}: {err_msg}. Advice: {err_advice}. Raw payload: {raw_payload}"
                             ))
+                            # Log to MissedOpportunityLearner for guard & execution impact tracking
+                            from app.ai.missed_opportunity_learner import MissedOpportunityLearner
+                            MissedOpportunityLearner.get_instance().record_missed_opportunity(
+                                symbol=opportunity["symbol"],
+                                side=opportunity["side"],
+                                entry_price=price,
+                                stop_loss=stop_loss,
+                                take_profit=opportunity.get("take_profit", 0.0),
+                                strategy=opportunity.get("strategy_used", "General"),
+                                category="BINANCE_REJECTION",
+                                reason=f"Binance {err_title} (Code {err_code}): {err_msg}",
+                                confidence_score=opportunity.get("confidence_score", 0.8),
+                                confidence_threshold=0.75
+                            )
                         except Exception as ae:
                             logger.error(f"Failed to log binance placement failure audit event: {ae}")
                         return
@@ -530,6 +573,21 @@ class OrderManager:
                     "probation_trigger": opportunity.get("probation_trigger"),
                     "probation_metadata": opportunity.get("probation_metadata")
                 })
+
+                # Register active market thesis in ThesisPersistenceEngine to prevent chop flip-flopping
+                try:
+                    from app.trading.thesis_persistence import ThesisPersistenceEngine
+                    ThesisPersistenceEngine.get_instance().register_thesis(
+                        trade_id=trade.id,
+                        symbol=trade.symbol,
+                        side=trade.side,
+                        strategy=trade.strategy_used,
+                        entry_price=trade.entry_price,
+                        entry_confidence=float(opportunity.get("confidence_score", 0.83)),
+                        market_regime=trade.market_regime
+                    )
+                except Exception as tpe_err:
+                    logger.error(f"Failed to register thesis in ThesisPersistenceEngine: {tpe_err}")
 
             except Exception as e:
                 logger.error(f"Failed to execute trade proposal in database: {e}")

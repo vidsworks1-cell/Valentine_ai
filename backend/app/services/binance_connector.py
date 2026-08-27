@@ -106,6 +106,51 @@ class BinanceConnector:
             hashlib.sha256
         ).hexdigest()
 
+    @staticmethod
+    def describe_binance_error(code: int, msg: str) -> Tuple[str, str]:
+        """Maps Binance numeric error codes to human-readable explanations and actionable diagnostics."""
+        explanations = {
+            -2010: (
+                "Insufficient Account Balance",
+                "Account does not have enough free balance (USDT for BUY, or base asset for SELL) to execute this order. Reduce trade risk size or deposit funds."
+            ),
+            -1013: (
+                "Filter Failure (MIN_NOTIONAL / LOT_SIZE)",
+                "Order value is below the Binance minimum notional requirement (typically $5.00 - $10.00 USDT) or quantity violates step-size constraints."
+            ),
+            -1111: (
+                "Precision Overflow",
+                "Order quantity or price decimal precision exceeds the maximum allowed step precision for this trading pair."
+            ),
+            -1021: (
+                "Timestamp Synchronization Drift",
+                "Local system clock is out of sync with Binance server time by >1000ms. Synchronize system NTP clock or increase recvWindow."
+            ),
+            -2011: (
+                "Unknown Order / Order Does Not Exist",
+                "The order ID requested for cancellation or query was not found in the exchange order book."
+            ),
+            -1003: (
+                "Rate Limit / IP Banned",
+                "Too many requests sent within 1 minute window. Binance rate limit activated."
+            ),
+            -1100: (
+                "Illegal Parameter Characters",
+                "One or more query parameters contains unsupported or illegal characters."
+            ),
+            -2014: (
+                "API-key format invalid",
+                "Supplied API Key header is malformed, truncated, or invalid."
+            ),
+            -2015: (
+                "Invalid API-key, IP, or Permissions",
+                "API Key is invalid, restricted to a different IP address, or missing Spot Trading permissions in Binance account settings."
+            )
+        }
+        if code in explanations:
+            return explanations[code]
+        return ("Binance Exchange Error", msg)
+
     async def _request(self, method: str, path: str, mode: str, params: Dict[str, Any] = None, signed: bool = False) -> Any:
         if params is None:
             params = {}
@@ -259,29 +304,38 @@ class BinanceConnector:
                 if response.status_code != 200:
                     binance_code = data.get("code", response.status_code) if isinstance(data, dict) else response.status_code
                     binance_msg = data.get("msg", response.text) if isinstance(data, dict) else response.text
+                    err_title, err_advice = self.describe_binance_error(binance_code, str(binance_msg))
                     logger.error(
-                        f"[BinanceConnector] Binance API Error | Environment: {exec_env} | Mode: {mode_upper} | "
-                        f"BaseURL: {base_url} | Path: {path} | HTTP Status: {response.status_code} | "
-                        f"Binance Code: {binance_code} | Binance Msg: {binance_msg} | Full Response: {data}"
+                        f"❌ [BINANCE REJECTION - HTTP {response.status_code}] {err_title} (Code {binance_code}): {binance_msg}\n"
+                        f"  - Action: {method} {path} | Environment: {exec_env} | Mode: {mode_upper}\n"
+                        f"  - Diagnostic Advice: {err_advice}\n"
+                        f"  - Full Raw Response: {data}"
                     )
                     return {
                         "error": "BINANCE_API_ERROR",
                         "status_code": response.status_code,
                         "code": binance_code,
                         "msg": binance_msg,
+                        "human_title": err_title,
+                        "diagnostic_advice": err_advice,
                         "raw_response": data if isinstance(data, dict) else {"raw": response.text}
                     }
 
                 if isinstance(data, dict) and "code" in data and isinstance(data["code"], int) and data["code"] < 0:
+                    err_title, err_advice = self.describe_binance_error(data["code"], str(data.get("msg", "")))
                     logger.error(
-                        f"[BinanceConnector] Error object in 200 OK | Environment: {exec_env} | Mode: {mode_upper} | "
-                        f"BaseURL: {base_url} | Path: {path} | Code: {data['code']} | Msg: {data.get('msg')}"
+                        f"❌ [BINANCE REJECTION in 200 OK] {err_title} (Code {data['code']}): {data.get('msg')}\n"
+                        f"  - Action: {method} {path} | Environment: {exec_env} | Mode: {mode_upper}\n"
+                        f"  - Diagnostic Advice: {err_advice}\n"
+                        f"  - Full Raw Response: {data}"
                     )
                     return {
                         "error": "BINANCE_API_ERROR",
                         "status_code": 200,
                         "code": data["code"],
                         "msg": data.get("msg", "Unknown Binance error"),
+                        "human_title": err_title,
+                        "diagnostic_advice": err_advice,
                         "raw_response": data
                     }
 

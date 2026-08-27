@@ -2225,12 +2225,17 @@ async def calculate_global_utility(expected_profit: float = 120.0, risk_cost: fl
     engine = SystemHarmonyEngine.get_instance()
     return engine.compute_global_utility(expected_profit, risk_cost=risk_cost, latency_ms=latency_ms)
 
-@router.post("/autonomous-executive/controlled-experiment")
-async def run_controlled_experiment(base_strategy: str = "Breakout Momentum", param_to_mutate: str = "stop_loss_atr_multiplier", mutated_value: float = 2.5, control_value: float = 2.0):
-    """Autonomous Executive 10: Clones strategy, mutates single parameter, runs paper experiment, tests statistical significance, and auto-promotes with institutional memory."""
-    from app.ai.experiment_framework import ExperimentFramework
-    engine = ExperimentFramework.get_instance()
-    return engine.run_controlled_experiment(base_strategy, param_to_mutate, mutated_value, control_value)
+@router.get("/analytics/guards/performance")
+async def get_guard_performance_matrix():
+    """Returns empirical counterfactual performance impact matrix and dynamic threshold recommendations for all guards."""
+    from app.trading.adaptive_guard_thresholds import AdaptiveGuardThresholds
+    return AdaptiveGuardThresholds.get_instance().get_guard_impact_matrix()
+
+@router.get("/analytics/theses/active")
+async def get_active_theses():
+    """Returns all active persistent trade theses and chop noise suppression statistics."""
+    from app.trading.thesis_persistence import ThesisPersistenceEngine
+    return ThesisPersistenceEngine.get_instance().get_summary()
 
 
 
