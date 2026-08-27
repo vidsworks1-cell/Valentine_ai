@@ -70,6 +70,10 @@ class AzaBackgroundService : Service() {
         return START_STICKY
     }
 
+    private val lastKnownExecutionStates = mutableMapOf<String, String>()
+    private var lastEmergencyState: Boolean? = null
+    private var lastCircuitBreakerState: Boolean? = null
+
     private fun startBackgroundScheduler() {
         serviceScope.launch {
             try {
@@ -91,17 +95,101 @@ class AzaBackgroundService : Service() {
                 scheduler?.startPollingScheduler { log ->
                     Log.d(TAG, "DAEMON: $log")
                 }
+
+                // Launch backend continuous trade lifecycle & event surveillance loop
+                startBackendSurveillanceLoop(repository)
                 
                 SystemNotificationHelper.showNotification(
-                    "Aza Autopilot Enabled",
-                    "Aza Background Service has successfully connected and started active market surveillance."
+                    "Lumina Autopilot Active",
+                    "Lumina Background Service is actively monitoring markets, tasks, and follow-ups while the app is closed."
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start background scheduler", e)
                 SystemNotificationHelper.showNotification(
-                    "Aza Autopilot Error",
-                    "Aza Background Service failed to start: ${e.localizedMessage}"
+                    "Lumina Autopilot Error",
+                    "Lumina Background Service failed to start: ${e.localizedMessage}"
                 )
+            }
+        }
+    }
+
+    private fun startBackendSurveillanceLoop(repository: AppRepository) {
+        serviceScope.launch {
+            while (isRunning && isActive) {
+                try {
+                    // 1. Poll backend execution state lifecycle
+                    val executionStatesResponse = try {
+                        repository.getExecutionStates()
+                    } catch (e: Exception) {
+                        null
+                    }
+
+                    if (executionStatesResponse != null) {
+                        executionStatesResponse.currentStates.forEach { (symbol, record) ->
+                            val previousState = lastKnownExecutionStates[symbol.uppercase()]
+                            val currentState = record.state
+
+                            if (previousState != null && previousState != currentState) {
+                                // State transition detected!
+                                val stateEnum = com.example.aza.strategy.ExecutionState.fromString(currentState)
+                                val displayLabel = stateEnum?.uiDisplayLabel ?: currentState
+                                val title = "Trade Update: $symbol ($displayLabel)"
+                                val message = buildString {
+                                    append("${record.side} $symbol: $displayLabel.")
+                                    if (record.price != null) append(" Price: $${record.price}.")
+                                    if (record.userMessage.isNotBlank()) append(" ${record.userMessage}")
+                                }
+
+                                SystemNotificationHelper.showNotification(
+                                    title = title,
+                                    message = message
+                                )
+
+                                repository.insertChatMessage(
+                                    com.example.data.database.ChatMessage(
+                                        sender = "AZA OPERATOR",
+                                        text = "📡 **BACKGROUND TRADE UPDATE [${symbol.uppercase()}]:** State transitioned from `$previousState` to **$displayLabel**.\n${record.userMessage}"
+                                    )
+                                )
+                            }
+                            lastKnownExecutionStates[symbol.uppercase()] = currentState
+                        }
+                    }
+
+                    // 2. Poll Institutional Risk & Trading Halt status
+                    try {
+                        val riskStatus = repository.getInstitutionalRiskStatus()
+                        val isHalted = riskStatus.tradingHalted
+                        if (lastEmergencyState != null && lastEmergencyState != isHalted) {
+                            if (isHalted) {
+                                SystemNotificationHelper.showNotification(
+                                    "🚨 RISK HALT ENGAGED",
+                                    "Trading halted on Contabo backend: ${riskStatus.haltReason ?: "Risk limit threshold reached"}."
+                                )
+                            }
+                        }
+                        lastEmergencyState = isHalted
+
+                        val health = repository.getProductionMonitoringHealth()
+                        val isHealthy = health.status.equals("HEALTHY", ignoreCase = true)
+                        if (lastCircuitBreakerState != null && lastCircuitBreakerState != isHealthy) {
+                            if (!isHealthy) {
+                                SystemNotificationHelper.showNotification(
+                                    "⚠️ VPS HEALTH ALERT",
+                                    "Contabo production monitoring reported status: ${health.status}."
+                                )
+                            }
+                        }
+                        lastCircuitBreakerState = isHealthy
+                    } catch (e: Exception) {
+                        // ignore transient backend network errors
+                    }
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "Backend surveillance loop cycle error", e)
+                }
+
+                delay(20000) // check every 20 seconds
             }
         }
     }

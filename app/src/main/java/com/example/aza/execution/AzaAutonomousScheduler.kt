@@ -452,13 +452,16 @@ class AzaAutonomousScheduler(
                         else -> "LEARN_OUTCOMES"
                     }
                     "Notification Capability" -> when {
+                        lowerDesc.contains("follow") || lowerTitle.contains("follow") || lowerDesc.contains("check back") -> "FOLLOW_UP"
+                        lowerDesc.contains("market") || lowerTitle.contains("market") || lowerDesc.contains("price") -> "MARKET_UPDATE"
+                        lowerDesc.contains("trade") || lowerTitle.contains("trade") -> "TRADE_ALERT"
                         lowerDesc.contains("complete") || lowerTitle.contains("complete") -> "MISSION_COMPLETED"
                         lowerDesc.contains("decision") || lowerTitle.contains("decision") -> "EXEC_DECISION"
                         lowerDesc.contains("safety") || lowerDesc.contains("critical") || lowerTitle.contains("safety") -> "SAFETY_WARNING"
                         lowerDesc.contains("approve") || lowerDesc.contains("request") || lowerTitle.contains("approve") -> "APPROVAL_REQUEST"
                         lowerDesc.contains("fail") || lowerTitle.contains("fail") -> "MISSION_FAILURE"
                         lowerDesc.contains("resource") || lowerTitle.contains("resource") -> "RESOURCE_WARNING"
-                        else -> "EXEC_DECISION"
+                        else -> "FOLLOW_UP"
                     }
                     "Laptop Agent Capability" -> when {
                         lowerDesc.contains("ping") || lowerTitle.contains("ping") -> "PING_HOST"
@@ -584,6 +587,21 @@ class AzaAutonomousScheduler(
 
             if (objective.missionId != null) {
                 repository.updateMissionProgressAndStatus(objective.missionId)
+            }
+        }
+
+        // 5. Broadcast notification to user tray and chat for completed follow-ups and high priority background tasks
+        if (task.requiredSkill.contains("Notification", ignoreCase = true) || task.title.contains("follow", ignoreCase = true) || task.priority.equals("HIGH", ignoreCase = true)) {
+            val title = if (task.title.contains("follow", ignoreCase = true)) "Lumina Follow-Up Completed" else "Task Finalized: ${task.title}"
+            val message = if (result.success) {
+                result.executionLog.ifBlank { result.performanceImpact.ifBlank { "Task '${task.title}' was completed successfully." } }
+            } else {
+                "Task '${task.title}' failed: ${result.errorMessage ?: "Unexpected error"}"
+            }
+            try {
+                SystemNotificationHelper.showNotification(title, message)
+            } catch (e: Exception) {
+                onLog("⚠️ Notification Helper Warning: ${e.localizedMessage}")
             }
         }
 

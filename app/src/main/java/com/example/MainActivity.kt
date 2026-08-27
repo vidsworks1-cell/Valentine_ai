@@ -55,7 +55,13 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             val requestPermissionLauncher = registerForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-            ) { _ -> }
+            ) { _ -> 
+                try {
+                    com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
             
             if (androidx.core.content.ContextCompat.checkSelfPermission(
                     this,
@@ -63,6 +69,18 @@ class MainActivity : ComponentActivity() {
                 ) != android.content.pm.PackageManager.PERMISSION_GRANTED
             ) {
                 requestPermissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
+            } else {
+                try {
+                    com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } else {
+            try {
+                com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
 

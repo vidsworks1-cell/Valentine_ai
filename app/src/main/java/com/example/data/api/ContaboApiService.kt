@@ -122,14 +122,16 @@ data class BinanceBalance(
 )
 
 data class BinanceOpenOrder(
-    val symbol: String,
-    val orderId: Long,
-    val price: String,
-    val origQty: String,
-    val status: String,
-    val side: String,
-    val type: String,
-    val time: Long
+    val symbol: String = "",
+    val orderId: Long = 0L,
+    val price: String = "0.0",
+    val origQty: String = "0.0",
+    @Json(name = "executedQty") val executedQty: String = "0.0",
+    val status: String = "NEW",
+    val side: String = "BUY",
+    val type: String = "LIMIT",
+    val time: Long = 0L,
+    @Json(name = "updateTime") val updateTime: Long? = null
 )
 
 data class ContaboActivePosition(

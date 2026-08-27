@@ -342,6 +342,10 @@ fun TradingScreen(
         }
 
         item {
+            BinanceRealityPanel(viewModel = viewModel)
+        }
+
+        item {
             BinanceConnectorHealthPanel(viewModel)
         }
 

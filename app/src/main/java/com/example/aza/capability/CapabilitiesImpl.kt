@@ -912,8 +912,19 @@ class FreelanceCapability : Capability {
 
 class NotificationCapability : Capability {
     override val name = "Notification Capability"
-    override val description = "System notifications, security thresholds, approval request triggers, and executive decision telemetry."
-    override val supportedActions = listOf("MISSION_COMPLETED", "EXEC_DECISION", "SAFETY_WARNING", "APPROVAL_REQUEST", "MISSION_FAILURE", "CAPABILITY_FAILURE", "RESOURCE_WARNING")
+    override val description = "System notifications, security thresholds, approval request triggers, follow-ups, and executive decision telemetry."
+    override val supportedActions = listOf(
+        "MISSION_COMPLETED",
+        "EXEC_DECISION",
+        "SAFETY_WARNING",
+        "APPROVAL_REQUEST",
+        "MISSION_FAILURE",
+        "CAPABILITY_FAILURE",
+        "RESOURCE_WARNING",
+        "FOLLOW_UP",
+        "MARKET_UPDATE",
+        "TRADE_ALERT"
+    )
     override val requiredPermissions = listOf(PermissionLevel.READ, PermissionLevel.WRITE, PermissionLevel.EXECUTE)
 
     override suspend fun executeAction(
@@ -925,8 +936,22 @@ class NotificationCapability : Capability {
     ): CapabilityResult {
         onThoughtLog("🔔 NOTIFICATION CAPABILITY: Processing action '$action'")
         val message = parameters["message"]?.toString() ?: "System state updated."
+        val title = parameters["title"]?.toString() ?: when (action.uppercase()) {
+            "FOLLOW_UP" -> "Lumina Follow-Up"
+            "MISSION_COMPLETED" -> "Mission Completed"
+            "EXEC_DECISION" -> "Executive Decision"
+            "SAFETY_WARNING" -> "Safety Warning"
+            "APPROVAL_REQUEST" -> "Approval Required"
+            "MISSION_FAILURE" -> "Mission Alert"
+            "CAPABILITY_FAILURE" -> "Critical System Alert"
+            "RESOURCE_WARNING" -> "Resource Alert"
+            "TRADE_ALERT" -> "Trade Execution Alert"
+            "MARKET_UPDATE" -> "Market Surveillance Update"
+            else -> "Lumina AI Notification"
+        }
 
         val formattedText = when (action.uppercase()) {
+            "FOLLOW_UP" -> "🔔 **LUMINA FOLLOW-UP:** $message"
             "MISSION_COMPLETED" -> "🏆 **MISSION COMPLETED:** $message"
             "EXEC_DECISION" -> "🤖 **EXECUTIVE PLANNED DECISION:** $message"
             "SAFETY_WARNING" -> "⚠️ **SAFETY SECURITY WARNING:** $message"
@@ -934,6 +959,8 @@ class NotificationCapability : Capability {
             "MISSION_FAILURE" -> "❌ **MISSION FAILURE PIPELINE ALERT:** $message"
             "CAPABILITY_FAILURE" -> "🛑 **CAPABILITY CRITICAL FAULT:** $message"
             "RESOURCE_WARNING" -> "⚡ **RESOURCE THROTTLING WARNING:** $message"
+            "TRADE_ALERT" -> "📈 **TRADE ALERT:** $message"
+            "MARKET_UPDATE" -> "📊 **MARKET UPDATE:** $message"
             else -> "🔔 **NOTIFICATION:** $message"
         }
 
@@ -943,6 +970,16 @@ class NotificationCapability : Capability {
                 text = formattedText
             )
         )
+
+        // Post system tray notification so the user is alerted even when the app is in background or closed
+        try {
+            com.example.aza.execution.SystemNotificationHelper.showNotification(
+                title = title,
+                message = message
+            )
+        } catch (e: Exception) {
+            onThoughtLog("⚠️ Notification manager warning: ${e.localizedMessage}")
+        }
 
         return CapabilityResult(
             success = true,

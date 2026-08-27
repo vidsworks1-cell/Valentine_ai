@@ -254,6 +254,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     private val _binanceOpenOrders = MutableStateFlow<List<com.example.data.api.BinanceOpenOrder>>(emptyList())
     val binanceOpenOrders = _binanceOpenOrders.asStateFlow()
 
+    private val _lastBinanceRealitySyncTime = MutableStateFlow(System.currentTimeMillis())
+    val lastBinanceRealitySyncTime = _lastBinanceRealitySyncTime.asStateFlow()
+
+    private val _isBinanceRealityRefreshing = MutableStateFlow(false)
+    val isBinanceRealityRefreshing = _isBinanceRealityRefreshing.asStateFlow()
+
     // --- Backend Execution State Lifecycle (Single Source of Truth) ---
     private val _executionStates = MutableStateFlow<Map<String, com.example.data.api.ExecutionStateRecord>>(emptyMap())
     val executionStates = _executionStates.asStateFlow()
@@ -577,6 +583,53 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 _binanceOpenOrders.value = orders
             } catch (e: Exception) {
                 // Ignore
+            }
+            _lastBinanceRealitySyncTime.value = System.currentTimeMillis()
+        }
+    }
+
+    fun refreshBinanceRealityData() {
+        viewModelScope.launch {
+            _isBinanceRealityRefreshing.value = true
+            try {
+                coroutineScope {
+                    launch {
+                        try {
+                            val status = repository.getBinanceStatus()
+                            _binanceApiStatus.value = status
+                            lastBinanceConnected = status.isConnected
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    }
+                    launch {
+                        try {
+                            val orders = repository.getBinanceOrders()
+                            _binanceOpenOrders.value = orders
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    }
+                    launch {
+                        try {
+                            val balances = repository.getBinanceBalances()
+                            _binanceBalances.value = balances
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    }
+                    launch {
+                        try {
+                            val positions = repository.getContaboActivePositions()
+                            _contaboActivePositions.value = positions
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    }
+                }
+                _lastBinanceRealitySyncTime.value = System.currentTimeMillis()
+            } finally {
+                _isBinanceRealityRefreshing.value = false
             }
         }
     }
@@ -4430,6 +4483,55 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             // Save response in main Chat Database for UI consumption
             repository.insertChatMessage(ChatMessage(sender = "AZA", text = reply))
             _isAzaResponding.value = false
+
+            // Check if user requested follow-up/monitoring or if response promises a follow-up
+            val lowerReply = reply.lowercase(java.util.Locale.US)
+            val isFollowUpRequested = lowerText.contains("follow up") || lowerText.contains("follow-up") ||
+                    lowerText.contains("monitor") || lowerText.contains("keep me updated") ||
+                    lowerText.contains("notify me") || lowerText.contains("let me know") ||
+                    lowerText.contains("check back") || lowerReply.contains("follow up") ||
+                    lowerReply.contains("follow-up") || lowerReply.contains("keep you updated") ||
+                    lowerReply.contains("let you know") || lowerReply.contains("will monitor")
+
+            if (isFollowUpRequested) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val activeObjective = repository.getActiveObjectiveDirect() ?: run {
+                            val newObj = AzaObjective(
+                                objective = "Autonomous Surveillance & Follow-Up",
+                                title = "Autonomous Surveillance & Follow-Up",
+                                targetPlatform = "ALL",
+                                status = "ACTIVE",
+                                priority = "HIGH"
+                            )
+                            val objId = repository.insertObjective(newObj).toInt()
+                            repository.getObjectiveByIdDirect(objId)
+                        }
+
+                        if (activeObjective != null) {
+                            val followUpTask = TaskEntity(
+                                objectiveId = activeObjective.id,
+                                title = "Follow-up: ${text.take(35)}",
+                                description = "Evaluate conditions, review latest market/system state, and notify user on: $text",
+                                assignedAgent = "Lumina Executive",
+                                requiredSkill = "Notification Capability",
+                                priority = "HIGH",
+                                status = "QUEUED"
+                            )
+                            repository.insertQueueTask(followUpTask)
+                            addThought("⏰ FOLLOW-UP ENGINE: Registered autonomous follow-up task in background queue.")
+                        }
+
+                        // Ensure background service is running to guarantee execution and notifications when app is closed
+                        val ctx = testContext ?: com.example.aza.security.SecureCredentialStore.getContext()
+                        if (ctx != null) {
+                            com.example.aza.execution.AzaBackgroundService.startService(ctx)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
         }
     }
 
