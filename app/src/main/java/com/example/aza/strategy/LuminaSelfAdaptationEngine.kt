@@ -271,7 +271,8 @@ object LuminaSelfAdaptationEngine {
         pnlR: Double,
         symbol: String = "",
         marketRegime: String = "TRENDING",
-        holdTimeMinutes: Double = 30.0
+        holdTimeMinutes: Double = 30.0,
+        isOperatorInitiated: Boolean = false
     ) {
         val symbolKey = buildStrategySymbolKey(strategyName, symbol)
         val keysToUpdate = if (symbol.isNotBlank()) listOf(symbolKey, strategyName) else listOf(strategyName)
@@ -286,22 +287,24 @@ object LuminaSelfAdaptationEngine {
             bucket.totalPnlR += pnlR
             if (pnlR > 0) bucket.grossProfitsR += pnlR else bucket.grossLossesR += kotlin.math.abs(pnlR)
             
-            // Update Strategy Elo rating based on trade performance
-            updateStrategyElo(key, isWin, pnlR)
+            // Only update Strategy Elo and Online SGD Model if the trade was an autonomous decision (not operator override)
+            if (!isOperatorInitiated) {
+                updateStrategyElo(key, isWin, pnlR)
 
-            // Trigger Online SGD Machine Learning Model Weight Update
-            val eloVal = getStrategyElo(key)
-            val totalT = table.sumOf { it.totalTrades }
-            val winsT = table.sumOf { it.winningTrades }
-            val wrPct = if (totalT > 0) (winsT.toDouble() / totalT) * 100.0 else 50.0
-            OnlineConfidenceMLEngine.updateOnlineSGD(
-                rawConfidence = predictedConfidence,
-                metaConviction = 75.0,
-                volatilityRatio = 1.0,
-                eloRating = eloVal,
-                winRatePct = wrPct,
-                actualOutcomeWon = isWin
-            )
+                // Trigger Online SGD Machine Learning Model Weight Update
+                val eloVal = getStrategyElo(key)
+                val totalT = table.sumOf { it.totalTrades }
+                val winsT = table.sumOf { it.winningTrades }
+                val wrPct = if (totalT > 0) (winsT.toDouble() / totalT) * 100.0 else 50.0
+                OnlineConfidenceMLEngine.updateOnlineSGD(
+                    rawConfidence = predictedConfidence,
+                    metaConviction = 75.0,
+                    volatilityRatio = 1.0,
+                    eloRating = eloVal,
+                    winRatePct = wrPct,
+                    actualOutcomeWon = isWin
+                )
+            }
         }
 
         // Record in Regime × Symbol × Strategy Learning Matrix

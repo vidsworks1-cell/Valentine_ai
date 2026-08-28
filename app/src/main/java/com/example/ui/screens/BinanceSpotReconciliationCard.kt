@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -173,10 +174,11 @@ fun BinanceSpotReconciliationCard(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Badge(
-                                        containerColor = if (mismatch.discrepancyType == "ORPHAN_DATABASE_POSITION")
-                                            Color(0xFFE53935)
-                                        else
-                                            Color(0xFFFB8C00)
+                                        containerColor = when (mismatch.discrepancyType) {
+                                            "ORPHAN_DATABASE_POSITION" -> Color(0xFFE53935)
+                                            "EXTERNAL_ORDER" -> Color(0xFF0288D1)
+                                            else -> Color(0xFFFB8C00)
+                                        }
                                     ) {
                                         Text(
                                             mismatch.discrepancyType.replace("_", " "),
@@ -190,6 +192,14 @@ fun BinanceSpotReconciliationCard(
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
+                                    if (mismatch.orderId != null && mismatch.orderId > 0) {
+                                        Text(
+                                            "#${mismatch.orderId}",
+                                            fontSize = 10.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
 
                                 if (mismatch.isStale) {
@@ -214,26 +224,65 @@ fun BinanceSpotReconciliationCard(
                             )
 
                             Spacer(modifier = Modifier.height(4.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    "Tracked in DB: ${String.format(Locale.US, "%.4f", mismatch.trackedSize)}",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    "Spot Free: ${String.format(Locale.US, "%.4f", mismatch.spotFree)}",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                if (mismatch.entryPrice > 0.0) {
+                            if (mismatch.discrepancyType == "EXTERNAL_ORDER") {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            "Side / Status: ${mismatch.side} • ${mismatch.orderStatus ?: "NEW"}",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (mismatch.side == "BUY") Color(0xFF2E7D32) else Color(0xFFC62828)
+                                        )
+                                        if (mismatch.entryPrice > 0.0) {
+                                            Text(
+                                                "Price: $${String.format(Locale.US, "%,.2f", mismatch.entryPrice)}",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            "Locked Collateral: ${String.format(Locale.US, "%.4f", mismatch.lockedCollateral)}",
+                                            fontSize = 9.5.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            "Created: ${mismatch.entryTime}",
+                                            fontSize = 9.5.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
                                     Text(
-                                        "Entry: $${String.format(Locale.US, "%,.2f", mismatch.entryPrice)}",
+                                        "Tracked in DB: ${String.format(Locale.US, "%.4f", mismatch.trackedSize)}",
                                         fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        fontWeight = FontWeight.SemiBold
                                     )
+                                    Text(
+                                        "Spot Free: ${String.format(Locale.US, "%.4f", mismatch.spotFree)}",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (mismatch.entryPrice > 0.0) {
+                                        Text(
+                                            "Entry: $${String.format(Locale.US, "%,.2f", mismatch.entryPrice)}",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }

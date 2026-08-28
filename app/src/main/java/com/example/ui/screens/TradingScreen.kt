@@ -2450,6 +2450,48 @@ fun PositionManagerSection(
         // 2.5 Binance Spot Balances vs Open Trades Live Reconciliation
         item {
             BinanceSpotReconciliationCard(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // 2.6 Micro Account Risk Mode & Capital Allocation Engine
+        item {
+            MicroAccountCapitalCard(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // 2.7 Micro-Compounding & Trade Study Engine
+        item {
+            MicroCompoundingStudyCard(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // 2.8 Lumina Deep Ensemble ML & Adaptive Regime Risk Engine
+        item {
+            LuminaAdvancedMlRiskCard(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // 2.9 Lumina Multi-Symbol Universe Scanner & Moonshot Selector
+        item {
+            LuminaMultiSymbolSelectorCard(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // 2.10 Lumina Pre-Buy Sellability & Binance Fast Profit Harvester
+        item {
+            LuminaPreBuySellabilityProfitHarvesterCard(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // 2.11 Lumina 10-Step Complete Trade Lifecycle Engine
+        item {
+            Lumina10StepLifecycleCard(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // 2.12 Lumina 3-Way Tripartite Synchronization (App <-> Server <-> Binance)
+        item {
+            LuminaTripartiteSyncCard(viewModel = viewModel)
             Spacer(modifier = Modifier.height(16.dp))
         }
 
@@ -2485,6 +2527,14 @@ fun PositionManagerSection(
                 val size = position.amountOwned * position.entryPrice
                 val allocation = if (totalPortfolioValue > 0.0) (position.amountOwned * position.currentPrice) / totalPortfolioValue * 100.0 else 0.0
                 val durationMin = (System.currentTimeMillis() - position.openedAt) / (1000.0 * 60.0)
+                val operatorOverrides by viewModel.operatorControlledPositions.collectAsState()
+                val isOperatorControlled = operatorOverrides.containsKey(position.symbol)
+                val overrideNote = operatorOverrides[position.symbol]
+                val isDust = size < 5.00
+
+                var showReduceDialog by remember { mutableStateOf(false) }
+                var showMoveStopDialog by remember { mutableStateOf(false) }
+                var customStopInput by remember { mutableStateOf(if (position.stopLossPrice > 0.0) String.format(Locale.US, "%.2f", position.stopLossPrice) else String.format(Locale.US, "%.2f", position.entryPrice * 0.98)) }
 
                 Card(
                     shape = RoundedCornerShape(16.dp),
@@ -2493,6 +2543,7 @@ fun PositionManagerSection(
                     modifier = Modifier.fillMaxWidth().clickable { selectedTimelineItem = position }
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        // Title & Status Badges
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2502,14 +2553,18 @@ fun PositionManagerSection(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(position.symbol, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    SuggestionChip(
-                                        onClick = {},
-                                        label = { Text("Trace Timeline", style = MaterialTheme.typography.labelSmall) },
-                                        modifier = Modifier.height(24.dp)
-                                    )
+                                    if (isOperatorControlled) {
+                                        Badge(containerColor = Color(0xFFFFF3E0), contentColor = Color(0xFFE65100)) {
+                                            Text("👤 OPERATOR MANAGED", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                        }
+                                    } else {
+                                        Badge(containerColor = Color(0xFFE8F5E9), contentColor = Color(0xFF2E7D32)) {
+                                            Text("🤖 AI CONTROLLED", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                        }
+                                    }
                                 }
                                 Text(
-                                    "Holding time: ${String.format(Locale.US, "%.1f", durationMin)} min | Size: $${String.format(Locale.US, "%,.2f", size)} (${String.format(Locale.US, "%.1f", allocation)}%)",
+                                    "Holding: ${String.format(Locale.US, "%.1f", durationMin)}m | Size: $${String.format(Locale.US, "%,.2f", size)} (${String.format(Locale.US, "%.1f", allocation)}%)",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -2530,8 +2585,38 @@ fun PositionManagerSection(
                             }
                         }
 
-                        Divider(modifier = Modifier.padding(vertical = 12.dp))
+                        // Filter & Dust Status Chips
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isDust) {
+                                SuggestionChip(
+                                    onClick = {},
+                                    label = { Text("🪙 Dust (< $5.00 MIN_NOTIONAL)", fontSize = 10.sp, color = Color(0xFFE65100)) },
+                                    modifier = Modifier.height(24.dp)
+                                )
+                            } else {
+                                SuggestionChip(
+                                    onClick = {},
+                                    label = { Text("✓ Filter Verified (>= $5.00)", fontSize = 10.sp, color = Color(0xFF2E7D32)) },
+                                    modifier = Modifier.height(24.dp)
+                                )
+                            }
+                            if (overrideNote != null) {
+                                SuggestionChip(
+                                    onClick = {},
+                                    label = { Text("Log: $overrideNote", fontSize = 10.sp) },
+                                    modifier = Modifier.height(24.dp)
+                                )
+                            }
+                        }
 
+                        Divider(modifier = Modifier.padding(vertical = 10.dp))
+
+                        // Price Grid
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -2556,17 +2641,165 @@ fun PositionManagerSection(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Button(
-                            onClick = { viewModel.forceClosePosition(position.symbol) },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                            modifier = Modifier.fillMaxWidth().height(36.dp),
-                            contentPadding = PaddingValues(0.dp)
+                        // Operator Manual Override Action Bar
+                        Text(
+                            "MANUAL OPERATOR OVERRIDE",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Force Liquidation (Manual)", style = MaterialTheme.typography.labelMedium)
+                            Button(
+                                onClick = { viewModel.executeOperatorManualClose(position.symbol) },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                modifier = Modifier.weight(1f).height(34.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Close Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = { showMoveStopDialog = true },
+                                modifier = Modifier.weight(1f).height(34.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Move Stop", fontSize = 11.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = { showReduceDialog = true },
+                                modifier = Modifier.weight(1f).height(34.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Default.CallSplit, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Reduce", fontSize = 11.sp)
+                            }
+                        }
+
+                        if (isOperatorControlled) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            FilledTonalButton(
+                                onClick = { viewModel.executeOperatorKeepAiControl(position.symbol) },
+                                modifier = Modifier.fillMaxWidth().height(32.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Keep AI Control (Restore Autonomous Management)", fontSize = 10.5.sp)
+                            }
                         }
                     }
+                }
+
+                // Move Stop Dialog
+                if (showMoveStopDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showMoveStopDialog = false },
+                        title = { Text("Move Stop Loss (${position.symbol})", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column {
+                                Text("Current Market: $${String.format(Locale.US, "%.2f", position.currentPrice)} | Entry: $${String.format(Locale.US, "%.2f", position.entryPrice)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    FilledTonalButton(
+                                        onClick = {
+                                            viewModel.executeOperatorMoveStop(position.symbol, position.entryPrice)
+                                            showMoveStopDialog = false
+                                        },
+                                        modifier = Modifier.weight(1f).height(36.dp),
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("Breakeven", fontSize = 11.sp)
+                                    }
+                                    FilledTonalButton(
+                                        onClick = {
+                                            val trail = position.currentPrice * 0.985
+                                            viewModel.executeOperatorMoveStop(position.symbol, trail)
+                                            showMoveStopDialog = false
+                                        },
+                                        modifier = Modifier.weight(1f).height(36.dp),
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("-1.5% Trail", fontSize = 11.sp)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                OutlinedTextField(
+                                    value = customStopInput,
+                                    onValueChange = { customStopInput = it },
+                                    label = { Text("Custom Stop Price ($)") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    val stopVal = customStopInput.toDoubleOrNull()
+                                    if (stopVal != null && stopVal > 0.0) {
+                                        viewModel.executeOperatorMoveStop(position.symbol, stopVal)
+                                        showMoveStopDialog = false
+                                    }
+                                }
+                            ) {
+                                Text("Apply Stop")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showMoveStopDialog = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
+
+                // Reduce Position Dialog
+                if (showReduceDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showReduceDialog = false },
+                        title = { Text("Reduce Position Size (${position.symbol})", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column {
+                                Text("Select the percentage of the position to exit immediately on Binance:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    listOf(25.0, 50.0, 75.0).forEach { pct ->
+                                        Button(
+                                            onClick = {
+                                                viewModel.executeOperatorReducePosition(position.symbol, pct)
+                                                showReduceDialog = false
+                                            },
+                                            modifier = Modifier.weight(1f).height(38.dp),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Text("${pct.toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showReduceDialog = false }) {
+                                Text("Dismiss")
+                            }
+                        }
+                    )
                 }
             }
         }

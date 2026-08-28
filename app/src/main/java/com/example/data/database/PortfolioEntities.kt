@@ -55,7 +55,9 @@ data class PositionReviewEntity(
     val stopLossPrice: Double = 0.0,
     val takeProfitPrice: Double = 0.0,
     val confidenceScore: Double = 1.0,
-    val entryReason: String = "Algorithmic confirmation of breakout trend."
+    val entryReason: String = "Algorithmic confirmation of breakout trend.",
+    val isOperatorInitiated: Boolean = false,
+    val operatorAction: String? = null
 )
 
 @Entity(tableName = "position_alerts")

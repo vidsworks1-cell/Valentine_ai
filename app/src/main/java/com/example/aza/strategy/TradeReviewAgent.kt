@@ -38,7 +38,9 @@ object TradeReviewAgent {
         marketRegime: String = "Volatile Breakout Trend",
         realizedPnlUsd: Double,
         realizedPnlR: Double,
-        entryReason: String = "Breakout confirmation"
+        entryReason: String = "Breakout confirmation",
+        isOperatorInitiated: Boolean = false,
+        operatorAction: String? = null
     ): TradeReviewEntity {
         val isWin = realizedPnlR > 0.0
         val isLong = side.equals("BUY", ignoreCase = true)
@@ -208,7 +210,9 @@ object TradeReviewAgent {
             auditReasonsList = auditReasons,
             decisionQualityLearning = decisionQualityLearning,
             currentPnlLearning = currentPnlLearning,
-            processVsOutcomeType = processOutcomeType
+            processVsOutcomeType = processOutcomeType,
+            isOperatorInitiated = isOperatorInitiated,
+            operatorAction = operatorAction
         )
     }
 
@@ -298,7 +302,9 @@ object TradeReviewAgent {
             marketRegime = review.marketRegime,
             realizedPnlUsd = review.realizedPnL,
             realizedPnlR = pnlR,
-            entryReason = review.entryReason
+            entryReason = review.entryReason,
+            isOperatorInitiated = review.isOperatorInitiated,
+            operatorAction = review.operatorAction
         )
     }
 

@@ -46,7 +46,9 @@ data class TradeReviewEntity(
     val auditReasonsList: String = "✓ Correct market regime\n✓ Correct strategy selection\n✓ Good confidence calibration\n✗ Stop placed too wide\n✗ Entry was 0.6 ATR late",
     val decisionQualityLearning: String = "Decision was excellent. Keep taking trades like this.",
     val currentPnlLearning: String = "Strategy lost.",
-    val processVsOutcomeType: String = "GOOD_DECISION_LOSING_TRADE" // "GOOD_DECISION_LOSING_TRADE", "BAD_DECISION_WINNING_TRADE", "GOOD_DECISION_WINNING_TRADE", "BAD_DECISION_LOSING_TRADE"
+    val processVsOutcomeType: String = "GOOD_DECISION_LOSING_TRADE", // "GOOD_DECISION_LOSING_TRADE", "BAD_DECISION_WINNING_TRADE", "GOOD_DECISION_WINNING_TRADE", "BAD_DECISION_LOSING_TRADE"
+    val isOperatorInitiated: Boolean = false,
+    val operatorAction: String? = null
 )
 
 @Dao

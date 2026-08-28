@@ -54,7 +54,7 @@ enum class PendingTradeStatus {
  * CANCELLED → "Trade cancelled"
  */
 enum class ExecutionState(val rawValue: String, val uiDisplayLabel: String) {
-    SIGNAL_DETECTED("SIGNAL_DETECTED", "Opportunity detected"),
+    SIGNAL_DETECTED("SIGNAL_DETECTED", "Signal detected"),
     OPPORTUNITY_APPROVED("OPPORTUNITY_APPROVED", "AI approved, awaiting risk"),
     RISK_APPROVED("RISK_APPROVED", "Risk approved"),
     ORDER_PENDING("ORDER_PENDING", "Order pending"),
@@ -62,6 +62,16 @@ enum class ExecutionState(val rawValue: String, val uiDisplayLabel: String) {
     PARTIALLY_FILLED("PARTIALLY_FILLED", "Order partially filled"),
     FILLED("FILLED", "Trade filled"),
     POSITION_REGISTERED("POSITION_REGISTERED", "Active position"),
+    POSITION_MANAGED("POSITION_MANAGED", "Position actively managed"),
+    EXIT_SIGNAL_GENERATED("EXIT_SIGNAL_GENERATED", "Exit signal generated"),
+    EXIT_ORDER_SUBMITTED("EXIT_ORDER_SUBMITTED", "Sell order sent to Binance"),
+    EXIT_ORDER_ACCEPTED("EXIT_ORDER_ACCEPTED", "Sell order accepted by Binance"),
+    EXIT_FILLED("EXIT_FILLED", "Exit filled on exchange"),
+    POSITION_CLOSED("POSITION_CLOSED", "Position closed & archived"),
+    DUST_POSITION_FLAGGED("DUST_POSITION_FLAGGED", "Dust position (< Min Notional)"),
+    EXTERNAL_ORDER_DISCOVERED("EXTERNAL_ORDER_DISCOVERED", "External order discovered"),
+    EXTERNAL_ORDER("EXTERNAL_ORDER", "External exchange order"),
+    OPERATOR_OVERRIDE("OPERATOR_OVERRIDE", "Operator manual override"),
     REJECTED("REJECTED", "Trade rejected"),
     CANCELLED("CANCELLED", "Trade cancelled");
 
@@ -77,11 +87,12 @@ enum class ExecutionState(val rawValue: String, val uiDisplayLabel: String) {
         }
 
         /**
-         * HARD RULE: Returns true ONLY if backend confirms POSITION_REGISTERED.
+         * HARD RULE: Returns true ONLY if backend confirms POSITION_REGISTERED or POSITION_MANAGED.
          * The UI must NEVER claim or display a trade as "Executed" otherwise.
          */
         fun isConfirmedExecuted(state: String?): Boolean {
-            return state.equals("POSITION_REGISTERED", ignoreCase = true)
+            return state.equals("POSITION_REGISTERED", ignoreCase = true) ||
+                   state.equals("POSITION_MANAGED", ignoreCase = true)
         }
     }
 }

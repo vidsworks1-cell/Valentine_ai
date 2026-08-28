@@ -190,7 +190,8 @@ class AzaLearningEngine(private val repository: AppRepository) {
         strategyName: String,
         market: String,
         profit: Double,
-        latencyMs: Long
+        latencyMs: Long,
+        isOperatorInitiated: Boolean = false
     ) {
         val isWin = profit > 0.0
         val record = AzaLearningRecord(
@@ -234,7 +235,8 @@ class AzaLearningEngine(private val repository: AppRepository) {
                 pnlR = pnlR,
                 symbol = market,
                 marketRegime = "TRENDING",
-                holdTimeMinutes = holdTimeMin
+                holdTimeMinutes = holdTimeMin,
+                isOperatorInitiated = isOperatorInitiated
             )
             com.example.aza.strategy.LuminaSelfAdaptationEngine.recordRegimeOutcome(
                 strategyName = strategyName,

@@ -1,8 +1,11 @@
 package com.example.aza.strategy
 
 import com.example.data.api.BinanceBalance
+import com.example.data.api.BinanceOpenOrder
+import com.example.data.api.ContaboActivePosition
 import com.example.data.api.ContaboTrade
 import com.example.data.api.ExecutionReconciliationResponse
+import com.example.data.api.ExternalOrderRecord
 import com.example.data.api.StaleTradeMismatch
 import com.example.data.database.BinancePositionEntity
 import java.text.SimpleDateFormat
@@ -22,6 +25,7 @@ data class PositionSyncResult(
     val prunedGhostPositions: List<BinancePositionEntity>,
     val verifiedRealPositions: List<BinancePositionEntity>,
     val realBinanceHoldings: List<RealBinanceHolding>,
+    val externalOrders: List<ExternalOrderRecord> = emptyList(),
     val syncLogs: List<String>
 )
 
@@ -150,11 +154,13 @@ object ExecutionReconciliationEngine {
     }
 
     /**
-     * Executes real-time reconciliation comparing:
-     * 1. Binance Spot Balances (Free + Locked)
-     * 2. Active Positions & Trades where `exit_time IS NULL` or `status == "OPEN"`
+     * Executes real-time exchange reconciliation comparing:
+     * 1. Binance /api/v3/openOrders (live pending limit/market orders)
+     * 2. Binance /api/v3/account (spot balances free + locked)
+     * 3. Lumina PositionManager / OrderManager (active positions and DB orders)
      *
      * Detects:
+     * - EXTERNAL_ORDER: Open order found on Binance not created by Lumina session
      * - ORPHAN_DATABASE_POSITION: Open in DB, but 0.00 balance on Binance Spot
      * - UNTRACKED_SPOT_HOLDING: Positive balance on Binance Spot, but missing in DB
      * - SIZE_MISMATCH: Significant divergence between DB tracked quantity and exchange balance
@@ -164,10 +170,13 @@ object ExecutionReconciliationEngine {
         spotBalances: List<BinanceBalance>,
         activeDbPositions: List<BinancePositionEntity>,
         contaboTrades: List<ContaboTrade> = emptyList(),
+        binanceOpenOrders: List<BinanceOpenOrder> = emptyList(),
+        contaboPositions: List<ContaboActivePosition> = emptyList(),
         timeDriftMs: Double = -12.0,
         rateLimitAvailable: Int = 1200
     ): ExecutionReconciliationResponse {
         val mismatches = mutableListOf<StaleTradeMismatch>()
+        val externalOrders = mutableListOf<ExternalOrderRecord>()
         val activePositions = activeDbPositions.filter { it.status == "OPEN" && it.closedAt == null }
         val now = System.currentTimeMillis()
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
@@ -175,7 +184,65 @@ object ExecutionReconciliationEngine {
         // Build Spot Balance Map (Asset -> Total Free + Locked)
         val balanceMap = spotBalances.associateBy { it.asset.uppercase() }
 
-        // 1. Audit Active Room Database Positions (exit_time IS NULL / status == "OPEN")
+        // Known tracking sets from Lumina PositionManager & internal database
+        val knownTrackedSymbols = (activePositions.map { it.symbol.uppercase() } +
+                contaboTrades.filter { it.exitTime == null }.map { it.symbol.uppercase() } +
+                contaboPositions.map { it.symbol.uppercase() }).toSet()
+
+        // 1. Audit Binance Open Orders vs PositionManager
+        for (order in binanceOpenOrders) {
+            val orderPrice = order.price.toDoubleOrNull() ?: 0.0
+            val origQty = order.origQty.toDoubleOrNull() ?: 0.0
+            val execQty = order.executedQty.toDoubleOrNull() ?: 0.0
+            val remainingQty = (origQty - execQty).coerceAtLeast(0.0)
+            val isBuy = order.side.equals("BUY", ignoreCase = true)
+            val lockedCollateral = if (isBuy) orderPrice * remainingQty else remainingQty
+
+            // If not actively tracked as an open Lumina trade or position
+            val isKnownLuminaOrder = activePositions.any { it.symbol.equals(order.symbol, ignoreCase = true) } ||
+                    contaboPositions.any { it.symbol.equals(order.symbol, ignoreCase = true) }
+
+            val extRecord = ExternalOrderRecord(
+                symbol = order.symbol,
+                orderId = order.orderId,
+                price = orderPrice,
+                quantity = origQty,
+                executedQty = execQty,
+                status = order.status.ifBlank { "NEW" },
+                side = order.side.uppercase(),
+                type = order.type.uppercase(),
+                lockedCollateral = lockedCollateral,
+                creationTime = order.time,
+                formattedCreationTime = if (order.time > 0) dateFormat.format(Date(order.time)) else "N/A",
+                source = "BINANCE_OPEN_ORDERS",
+                state = "EXTERNAL_ORDER_DISCOVERED"
+            )
+            externalOrders.add(extRecord)
+
+            mismatches.add(
+                StaleTradeMismatch(
+                    symbol = order.symbol,
+                    tradeId = null,
+                    orderId = order.orderId,
+                    side = order.side.uppercase(),
+                    trackedSize = 0.0,
+                    spotFree = 0.0,
+                    spotLocked = lockedCollateral,
+                    lockedCollateral = lockedCollateral,
+                    discrepancyType = "EXTERNAL_ORDER",
+                    description = "Binance open order #${order.orderId} (${order.side} $origQty @ $$orderPrice, Status: ${order.status}) found on exchange. Not created by Lumina OrderManager.",
+                    entryPrice = orderPrice,
+                    currentPrice = orderPrice,
+                    unrealizedPnl = 0.0,
+                    entryTime = if (order.time > 0) dateFormat.format(Date(order.time)) else dateFormat.format(Date()),
+                    creationTime = order.time,
+                    orderStatus = order.status,
+                    isStale = false
+                )
+            )
+        }
+
+        // 2. Audit Active Room Database Positions (exit_time IS NULL / status == "OPEN")
         for (pos in activePositions) {
             val baseAsset = extractBaseAsset(pos.symbol)
             val spotBal = balanceMap[baseAsset]
@@ -247,7 +314,7 @@ object ExecutionReconciliationEngine {
             }
         }
 
-        // 2. Audit Contabo VPS Trades where exit_time is NULL
+        // 3. Audit Contabo VPS Trades where exit_time is NULL
         val openContaboTrades = contaboTrades.filter { it.exitTime == null && it.outcome == null }
         for (trade in openContaboTrades) {
             val baseAsset = extractBaseAsset(trade.symbol)
@@ -277,8 +344,11 @@ object ExecutionReconciliationEngine {
             }
         }
 
-        // 3. Audit Untracked Spot Holdings (Binance Spot balance > 0, but no open trade with exit_time IS NULL)
-        val trackedBaseAssets = (activePositions.map { extractBaseAsset(it.symbol) } + openContaboTrades.map { extractBaseAsset(it.symbol) }).toSet()
+        // 4. Audit Untracked Spot Holdings (Binance Spot balance > 0, but no open trade with exit_time IS NULL)
+        val trackedBaseAssets = (activePositions.map { extractBaseAsset(it.symbol) } +
+                openContaboTrades.map { extractBaseAsset(it.symbol) } +
+                contaboPositions.map { extractBaseAsset(it.symbol) } +
+                binanceOpenOrders.map { extractBaseAsset(it.symbol) }).toSet()
         val quoteCurrencies = setOf("USDT", "USDC", "BUSD", "FDUSD", "USD", "EUR")
 
         var untrackedSpotCount = 0
@@ -312,6 +382,7 @@ object ExecutionReconciliationEngine {
 
         val summary = when {
             discrepanciesFound == 0 -> "All ${activePositions.size} open positions and Binance Spot balances are 100% reconciled and synchronized."
+            externalOrders.isNotEmpty() -> "Discovered ${externalOrders.size} external open orders on Binance exchange (EXTERNAL_ORDER_DISCOVERED) not created by current Lumina session."
             staleTradesCount > 0 -> "Found $staleTradesCount stale/orphan trades with exit_time IS NULL against zero Binance Spot balance. Safe reconciliation recommended."
             else -> "Detected $discrepanciesFound balance discrepancies between local database and Binance Spot wallet."
         }
@@ -325,10 +396,35 @@ object ExecutionReconciliationEngine {
             activeLocalPositionsCount = activePositions.size,
             discrepanciesFound = discrepanciesFound,
             mismatches = mismatches,
+            externalOrders = externalOrders,
+            externalOrdersCount = externalOrders.size,
             staleTradesCount = staleTradesCount,
             untrackedSpotCount = untrackedSpotCount,
             spotBalancesChecked = spotBalances.size,
             reconciliationSummary = summary
+        )
+    }
+
+    /**
+     * Reconciles complete exchange state
+     */
+    fun reconcileExchangeState(
+        spotBalances: List<BinanceBalance>,
+        binanceOpenOrders: List<BinanceOpenOrder>,
+        contaboPositions: List<ContaboActivePosition>,
+        activeDbPositions: List<BinancePositionEntity>,
+        contaboTrades: List<ContaboTrade> = emptyList(),
+        timeDriftMs: Double = -12.0,
+        rateLimitAvailable: Int = 1200
+    ): ExecutionReconciliationResponse {
+        return reconcileSpotBalancesWithOpenTrades(
+            spotBalances = spotBalances,
+            activeDbPositions = activeDbPositions,
+            contaboTrades = contaboTrades,
+            binanceOpenOrders = binanceOpenOrders,
+            contaboPositions = contaboPositions,
+            timeDriftMs = timeDriftMs,
+            rateLimitAvailable = rateLimitAvailable
         )
     }
 
@@ -342,6 +438,7 @@ object ExecutionReconciliationEngine {
             appendLine("• **Timestamp**: ${response.reconciledAt ?: "Live"}")
             appendLine("• **Sync Status**: ${response.status} (${response.connectionStatus})")
             appendLine("• **Active Monitored Trades (exit_time IS NULL)**: ${response.activeLocalPositionsCount}")
+            appendLine("• **External Exchange Orders**: ${response.externalOrdersCount}")
             appendLine("• **Spot Balances Audited**: ${response.spotBalancesChecked} assets")
             appendLine("• **Discrepancies Found**: ${response.discrepanciesFound}")
             appendLine("• **Stale / Orphan Trades**: ${response.staleTradesCount}")
@@ -350,17 +447,30 @@ object ExecutionReconciliationEngine {
             appendLine("• **Executive Summary**: ${response.reconciliationSummary}")
             appendLine()
 
+            if (response.externalOrders.isNotEmpty()) {
+                appendLine("### ⚠️ EXTERNAL BINANCE OPEN ORDERS (EXTERNAL_ORDER_DISCOVERED):")
+                response.externalOrders.forEachIndexed { idx, order ->
+                    appendLine("${idx + 1}. **${order.symbol}** (#${order.orderId}) - ${order.side} ${order.quantity} @ $${order.price} [${order.status}]")
+                    appendLine("   - Locked Collateral: ${order.lockedCollateral} | Created: ${order.formattedCreationTime}")
+                    appendLine("   - State: ${order.state} | Source: ${order.source}")
+                    appendLine()
+                }
+            }
+
             if (response.mismatches.isNotEmpty()) {
                 appendLine("### 📋 DISCREPANCY & STALE POSITION BREAKDOWN:")
                 response.mismatches.forEachIndexed { idx, m ->
                     appendLine("${idx + 1}. **${m.symbol}** [${m.discrepancyType}]")
                     appendLine("   - Description: ${m.description}")
                     appendLine("   - Tracked Size: ${m.trackedSize} | Binance Free: ${m.spotFree} | Locked: ${m.spotLocked}")
+                    if (m.lockedCollateral > 0.0) {
+                        appendLine("   - Locked Collateral: ${m.lockedCollateral}")
+                    }
                     if (m.entryPrice > 0.0) {
                         appendLine("   - Entry Price: $${String.format(Locale.US, "%,.2f", m.entryPrice)} | Est. PnL: $${String.format(Locale.US, "%+.2f", m.unrealizedPnl)}")
                     }
                     appendLine("   - Opened At: ${m.entryTime}")
-                    appendLine("   - Action Recommended: ${if (m.isStale) "Safe Close & Archive to Position Reviews" else "Synchronize & Re-weight"}")
+                    appendLine("   - Action Recommended: ${if (m.isStale) "Safe Close & Archive to Position Reviews" else if (m.discrepancyType == "EXTERNAL_ORDER") "Import to PositionManager or Cancel on Exchange" else "Synchronize & Re-weight"}")
                     appendLine()
                 }
             } else {

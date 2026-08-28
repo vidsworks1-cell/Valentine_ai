@@ -473,6 +473,17 @@ object AdaptiveExitIntelligenceEngine {
                     rationale = "[${profile.displayName}] Pre-News Macro Protection (${regime.displayName}): De-risking 50% position prior to high-tier economic release."
                 )
             }
+            // Micro-Compounding Fast Green Protection (+0.22R to +0.79R): Protect 1-cent+ profits and eliminate drawdowns
+            unrealizedR in 0.22..0.79 && currentStopLoss < entryPrice -> {
+                val microBreakevenStop = entryPrice + (riskUnit * 0.05) // Entry + Fee Buffer + 1¢ guarantee
+                ExitAssessmentResult(
+                    action = ExitAction.MOVE_STOP,
+                    confidencePct = 92.5,
+                    metrics = metrics,
+                    suggestedNewStop = microBreakevenStop,
+                    rationale = "[${profile.displayName}] Micro-Compounding Fast Green Lock: Profit positive (+${String.format(Locale.US, "%.2f", unrealizedR)}R). Stop raised to breakeven ($${String.format(Locale.US, "%.2f", microBreakevenStop)}) to guarantee zero downside risk."
+                )
+            }
             // Full Exit: Strong exhaustion or stop/TP breach or urgency threshold
             unrealizedR < -0.95 || exitUrgencyScore >= adjustedUrgencyThreshold -> {
                 ExitAssessmentResult(

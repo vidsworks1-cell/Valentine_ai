@@ -186,6 +186,14 @@ class AppRepository(private val db: AppDatabase) {
         contaboService.reconcileExchangePositions()
     }
 
+    suspend fun reconcileExchangeState(): com.example.data.api.ExecutionReconciliationResponse = withContext(Dispatchers.IO) {
+        try {
+            contaboService.reconcileExchangeState()
+        } catch (e: Exception) {
+            contaboService.reconcileExchangePositions()
+        }
+    }
+
     suspend fun getInstitutionalRiskStatus(): com.example.data.api.InstitutionalRiskStatusResponse = withContext(Dispatchers.IO) {
         contaboService.getInstitutionalRiskStatus()
     }

@@ -255,19 +255,39 @@ data class MonteCarloResponse(
     val recommendation: MonteCarloRecommendation = MonteCarloRecommendation()
 )
 
+data class ExternalOrderRecord(
+    val symbol: String = "",
+    @Json(name = "order_id") val orderId: Long = 0L,
+    val price: Double = 0.0,
+    val quantity: Double = 0.0,
+    @Json(name = "executed_qty") val executedQty: Double = 0.0,
+    val status: String = "NEW",
+    val side: String = "BUY",
+    val type: String = "LIMIT",
+    @Json(name = "locked_collateral") val lockedCollateral: Double = 0.0,
+    @Json(name = "creation_time") val creationTime: Long = 0L,
+    @Json(name = "formatted_creation_time") val formattedCreationTime: String = "",
+    @Json(name = "source") val source: String = "BINANCE_OPEN_ORDERS",
+    @Json(name = "state") val state: String = "EXTERNAL_ORDER_DISCOVERED"
+)
+
 data class StaleTradeMismatch(
     val symbol: String,
     @Json(name = "trade_id") val tradeId: Int? = null,
+    @Json(name = "order_id") val orderId: Long? = null,
     val side: String = "BUY",
     @Json(name = "tracked_size") val trackedSize: Double = 0.0,
     @Json(name = "spot_free") val spotFree: Double = 0.0,
     @Json(name = "spot_locked") val spotLocked: Double = 0.0,
+    @Json(name = "locked_collateral") val lockedCollateral: Double = 0.0,
     @Json(name = "discrepancy_type") val discrepancyType: String = "ORPHAN_DATABASE_POSITION",
     val description: String = "",
     @Json(name = "entry_price") val entryPrice: Double = 0.0,
     @Json(name = "current_price") val currentPrice: Double = 0.0,
     @Json(name = "unrealized_pnl") val unrealizedPnl: Double = 0.0,
     @Json(name = "entry_time") val entryTime: String = "",
+    @Json(name = "creation_time") val creationTime: Long? = null,
+    @Json(name = "order_status") val orderStatus: String? = null,
     @Json(name = "is_stale") val isStale: Boolean = true
 )
 
@@ -281,6 +301,8 @@ data class ExecutionReconciliationResponse(
     @Json(name = "discrepancies_found") val discrepanciesFound: Int = 0,
     @Json(name = "recent_executions") val recentExecutions: List<Map<String, Any>> = emptyList(),
     @Json(name = "mismatches") val mismatches: List<StaleTradeMismatch> = emptyList(),
+    @Json(name = "external_orders") val externalOrders: List<ExternalOrderRecord> = emptyList(),
+    @Json(name = "external_orders_count") val externalOrdersCount: Int = 0,
     @Json(name = "stale_trades_count") val staleTradesCount: Int = 0,
     @Json(name = "untracked_spot_count") val untrackedSpotCount: Int = 0,
     @Json(name = "spot_balances_checked") val spotBalancesChecked: Int = 0,
@@ -524,6 +546,9 @@ interface ContaboApiService {
 
     @GET("trading/execution/reconcile")
     suspend fun reconcileExchangePositions(): ExecutionReconciliationResponse
+
+    @GET("trading/reconciliation/exchange")
+    suspend fun reconcileExchangeState(): ExecutionReconciliationResponse
 
     @GET("trading/institutional-risk/status")
     suspend fun getInstitutionalRiskStatus(): InstitutionalRiskStatusResponse
