@@ -2492,6 +2492,12 @@ fun PositionManagerSection(
         // 2.12 Lumina 3-Way Tripartite Synchronization (App <-> Server <-> Binance)
         item {
             LuminaTripartiteSyncCard(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // 2.13 Lumina Small Account High-Frequency Scalper & Dynamic Risk Engine
+        item {
+            LuminaSmallAccountScalperCard(viewModel = viewModel)
             Spacer(modifier = Modifier.height(16.dp))
         }
 
