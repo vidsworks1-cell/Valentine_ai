@@ -375,7 +375,7 @@ fun LuminaSmallAccountScalperCard(
                                                 Text("• ${cycle.holdingDurationSeconds}s", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                             Text(
-                                                text = "In: $$${cycle.entryPrice} → Out: $$${cycle.exitPrice}",
+                                                text = "In: \$${cycle.entryPrice} → Out: \$${cycle.exitPrice}",
                                                 fontSize = 8.5.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -383,7 +383,7 @@ fun LuminaSmallAccountScalperCard(
 
                                         Column(horizontalAlignment = Alignment.End) {
                                             Text(
-                                                text = "+$${String.format(Locale.US, "%.3f", cycle.netPnlUsdt)} USDT",
+                                                text = "+\$${String.format(Locale.US, "%.3f", cycle.netPnlUsdt)} USDT",
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF00E676)

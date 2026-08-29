@@ -32,7 +32,8 @@ fun LuminaTripartiteSyncCard(
     var isExpanded by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        if (report == null) {
+        if (report == null && !isSyncing) {
+            kotlinx.coroutines.delay(600)
             viewModel.runTripartiteSync()
         }
     }
