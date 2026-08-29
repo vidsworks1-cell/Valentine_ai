@@ -25,17 +25,25 @@ class AzaBackgroundService : Service() {
             private set
 
         fun startService(context: Context) {
-            val intent = Intent(context, AzaBackgroundService::class.java)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                val intent = Intent(context, AzaBackgroundService::class.java)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to start AzaBackgroundService", e)
             }
         }
 
         fun stopService(context: Context) {
-            val intent = Intent(context, AzaBackgroundService::class.java)
-            context.stopService(intent)
+            try {
+                val intent = Intent(context, AzaBackgroundService::class.java)
+                context.stopService(intent)
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to stop AzaBackgroundService", e)
+            }
         }
     }
 
@@ -49,8 +57,8 @@ class AzaBackgroundService : Service() {
         Log.d(TAG, "onStartCommand: Starting background daemon")
         
         // Initialize Notification Helper and secure credential store
-        SystemNotificationHelper.init(applicationContext)
         try {
+            SystemNotificationHelper.init(applicationContext)
             com.example.aza.security.SecureCredentialStore.init(applicationContext)
             val savedMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
             com.example.aza.connector.BinanceConnector.setOrderPlacementEnabled(savedMode == "Autonomous Trading")
@@ -59,8 +67,29 @@ class AzaBackgroundService : Service() {
         }
         
         // Promote to Foreground Service to prevent background execution limits
-        val notification = SystemNotificationHelper.getForegroundNotification("Aza continuous executive scheduler active in background.")
-        startForeground(9922, notification)
+        try {
+            val notification = SystemNotificationHelper.getForegroundNotification(
+                "Lumina continuous executive scheduler active in background.",
+                applicationContext
+            )
+            if (android.os.Build.VERSION.SDK_INT >= 34) {
+                startForeground(
+                    9922,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                startForeground(
+                    9922,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE
+                )
+            } else {
+                startForeground(9922, notification)
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to startForeground on background service", e)
+        }
 
         if (!isRunning) {
             isRunning = true

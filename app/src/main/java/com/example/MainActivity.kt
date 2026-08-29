@@ -31,6 +31,18 @@ import com.example.viewmodel.AppViewModelFactory
 
 class MainActivity : ComponentActivity() {
 
+    private val notificationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            try {
+                com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     private val viewModel: AppViewModel by lazy {
         val database = AppDatabase.getDatabase(applicationContext, lifecycleScope)
         val repository = AppRepository(database)
@@ -40,48 +52,34 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        com.example.aza.security.SecureCredentialStore.init(applicationContext)
-        com.example.aza.execution.SystemNotificationHelper.init(applicationContext)
-
-        // Sync initial trading mode with the connector's safety lock
         try {
+            com.example.aza.security.SecureCredentialStore.init(applicationContext)
+            com.example.aza.execution.SystemNotificationHelper.init(applicationContext)
+
+            // Sync initial trading mode with the connector's safety lock
             val savedMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
             com.example.aza.connector.BinanceConnector.setOrderPlacementEnabled(savedMode == "Autonomous Trading")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
 
         // Request POST_NOTIFICATIONS permission dynamically on API 33+ (Android 13+)
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            val requestPermissionLauncher = registerForActivityResult(
-                androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-            ) { _ -> 
-                try {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                        this,
+                        "android.permission.POST_NOTIFICATIONS"
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    notificationPermissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
+                } else {
                     com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
-                } catch (e: Exception) {
-                    e.printStackTrace()
                 }
-            }
-            
-            if (androidx.core.content.ContextCompat.checkSelfPermission(
-                    this,
-                    "android.permission.POST_NOTIFICATIONS"
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                requestPermissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
             } else {
-                try {
-                    com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        } else {
-            try {
                 com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
+        } catch (e: Throwable) {
+            e.printStackTrace()
         }
 
         enableEdgeToEdge()

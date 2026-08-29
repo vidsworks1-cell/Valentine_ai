@@ -64,8 +64,9 @@ object SystemNotificationHelper {
         notificationManager.notify(notificationId, builder.build())
     }
 
-    fun getForegroundNotification(statusMessage: String): android.app.Notification {
-        val context = appContext ?: throw IllegalStateException("SystemNotificationHelper is not initialized")
+    fun getForegroundNotification(statusMessage: String, fallbackContext: Context? = null): android.app.Notification {
+        val context = appContext ?: fallbackContext ?: throw IllegalStateException("Context required for notification")
+        createNotificationChannel()
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -78,7 +79,7 @@ object SystemNotificationHelper {
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Aza Autopilot Active")
+            .setContentTitle("Lumina Autopilot Active")
             .setContentText(statusMessage)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
