@@ -33,14 +33,8 @@ class MainActivity : ComponentActivity() {
 
     private val notificationPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            try {
-                com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
-            } catch (e: Throwable) {
-                e.printStackTrace()
-            }
-        }
+    ) { _ ->
+        // Permission result handled gracefully
     }
 
     private val viewModel: AppViewModel by lazy {
@@ -63,7 +57,7 @@ class MainActivity : ComponentActivity() {
             e.printStackTrace()
         }
 
-        // Request POST_NOTIFICATIONS permission dynamically on API 33+ (Android 13+)
+        // Request POST_NOTIFICATIONS permission dynamically on API 33+ (Android 13+) if needed
         try {
             if (android.os.Build.VERSION.SDK_INT >= 33) {
                 if (androidx.core.content.ContextCompat.checkSelfPermission(
@@ -72,11 +66,7 @@ class MainActivity : ComponentActivity() {
                     ) != android.content.pm.PackageManager.PERMISSION_GRANTED
                 ) {
                     notificationPermissionLauncher.launch("android.permission.POST_NOTIFICATIONS")
-                } else {
-                    com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
                 }
-            } else {
-                com.example.aza.execution.AzaBackgroundService.startService(applicationContext)
             }
         } catch (e: Throwable) {
             e.printStackTrace()

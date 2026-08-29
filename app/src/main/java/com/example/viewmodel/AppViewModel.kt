@@ -4022,82 +4022,126 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     val registeredAgents = planningEngine.registry.getAllAgents()
 
     init {
-        // Trigger health check for the Contabo FastAPI VPS backend on startup
-        checkContaboHealthStatus()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Trigger health check for the Contabo FastAPI VPS backend on startup
+                checkContaboHealthStatus()
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
 
-        // Wire up dynamic estimation parameters to safety gates
-        scheduler.dynamicExponentialEstimator = dynamicExponentialEstimator
+        try {
+            // Wire up dynamic estimation parameters to safety gates
+            scheduler.dynamicExponentialEstimator = dynamicExponentialEstimator
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
 
         // Load historical chat context so conversation proceeds seamlessly
-        viewModelScope.launch {
-            conversationEngine.loadHistory()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                conversationEngine.loadHistory()
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
         }
 
         // Initialize Weekly Autonomous Reviews Seed if empty
-        viewModelScope.launch {
-            val existingReviews = repository.getAllWeeklyReviewsDirect()
-            if (existingReviews.isEmpty()) {
-                val seed = com.example.aza.strategy.LuminaWeeklyAutonomousReviewEngine.generateInitialHistoricalSeed()
-                seed.forEach { review ->
-                    repository.insertWeeklyReview(review)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val existingReviews = repository.getAllWeeklyReviewsDirect()
+                if (existingReviews.isEmpty()) {
+                    val seed = com.example.aza.strategy.LuminaWeeklyAutonomousReviewEngine.generateInitialHistoricalSeed()
+                    seed.forEach { review ->
+                        repository.insertWeeklyReview(review)
+                    }
+                    runWeeklyAutonomousReview()
                 }
-                runWeeklyAutonomousReview()
+            } catch (e: Throwable) {
+                e.printStackTrace()
             }
         }
 
         // Initialize Counterfactual Learning Shadow Simulations
-        viewModelScope.launch {
-            com.example.aza.strategy.LuminaCounterfactualLearningEngine.batchSimulateRecentTrades(repository)
-        }
-
-        // Start Autonomous Market Intelligence Engine
-        marketIntelligenceEngine.startIntelligenceLoop()
-
-        // Start Decentralized Autonomous Scheduler
-        scheduler.startPollingScheduler { thought ->
-            addSchedulerThought(thought)
-            if (thought.contains("COMPLETED") || thought.contains("FAILED") || thought.contains("PAUSED") || thought.contains("RESUMED") || thought.contains("DISPATCHER")) {
-                addThought("\u23f0 SCHEDULER: $thought")
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                com.example.aza.strategy.LuminaCounterfactualLearningEngine.batchSimulateRecentTrades(repository)
+            } catch (e: Throwable) {
+                e.printStackTrace()
             }
         }
 
-        viewModelScope.launch {
-            activeObjective.collectLatest { objective ->
-                if (objective != null) {
-                    repository.getTasksForObjective(objective.id).collect { tasks ->
-                        _activeObjectiveTasks.value = tasks
-                    }
-                } else {
-                    _activeObjectiveTasks.value = emptyList()
+        try {
+            // Start Autonomous Market Intelligence Engine
+            marketIntelligenceEngine.startIntelligenceLoop()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+
+        try {
+            // Start Decentralized Autonomous Scheduler
+            scheduler.startPollingScheduler { thought ->
+                addSchedulerThought(thought)
+                if (thought.contains("COMPLETED") || thought.contains("FAILED") || thought.contains("PAUSED") || thought.contains("RESUMED") || thought.contains("DISPATCHER")) {
+                    addThought("⏰ SCHEDULER: $thought")
                 }
             }
+        } catch (e: Throwable) {
+            e.printStackTrace()
         }
-        viewModelScope.launch {
-            planningEngine.eventBus.events.collect { event ->
-                when (event) {
-                    is com.example.aza.context.AzaEvent.TradeClosed -> {
-                        addThought("\ud83d\udcca EVENT [TradeClosed]: Exchanged ${event.amount} ${event.symbol}. Profit: +$${event.profitUsd} USD. Direct reserve balance: $${event.totalBalanceUsd}")
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                activeObjective.collectLatest { objective ->
+                    if (objective != null) {
+                        repository.getTasksForObjective(objective.id).collect { tasks ->
+                            _activeObjectiveTasks.value = tasks
+                        }
+                    } else {
+                        _activeObjectiveTasks.value = emptyList()
                     }
-                    is com.example.aza.context.AzaEvent.ContentCreated -> {
-                        addThought("\ud83c\udfac EVENT [ContentCreated]: TikTok script outline registered: '${event.title}' under queue status [${event.status}].")
-                    }
-                    is com.example.aza.context.AzaEvent.ProposalSubmitted -> {
-                        addThought("\ud83d\udcbc EVENT [ProposalSubmitted]: Tailored engineering bid uploaded to ${event.clientName} under client request: '${event.gigTitle}'.")
-                    }
-                    is com.example.aza.context.AzaEvent.AuditCompleted -> {
-                        addThought("\ud83d\udee1\ufe0f EVENT [AuditCompleted]: Financial system compliance verified. Audited Balance: $${event.auditedAmount}. Summary: ${event.statusLog}")
-                    }
-                    else -> {}
                 }
+            } catch (e: Throwable) {
+                e.printStackTrace()
             }
         }
-        startHealthMonitoring()
-        startBinanceSyncLoop()
-        startPortfolioManagerLoop()
-        runEngineValidationSuite()
-        startContinuousEvolutionDaemon()
-        scanAndAssessMultiSymbolUniverse()
-        runDeepMlMarketAnalysis("BTCUSDT")
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                planningEngine.eventBus.events.collect { event ->
+                    when (event) {
+                        is com.example.aza.context.AzaEvent.TradeClosed -> {
+                            addThought("📊 EVENT [TradeClosed]: Exchanged ${event.amount} ${event.symbol}. Profit: +$${event.profitUsd} USD. Direct reserve balance: $${event.totalBalanceUsd}")
+                        }
+                        is com.example.aza.context.AzaEvent.ContentCreated -> {
+                            addThought("🎬 EVENT [ContentCreated]: TikTok script outline registered: '${event.title}' under queue status [${event.status}].")
+                        }
+                        is com.example.aza.context.AzaEvent.ProposalSubmitted -> {
+                            addThought("💼 EVENT [ProposalSubmitted]: Tailored engineering bid uploaded to ${event.clientName} under client request: '${event.gigTitle}'.")
+                        }
+                        is com.example.aza.context.AzaEvent.AuditCompleted -> {
+                            addThought("🛡️ EVENT [AuditCompleted]: Financial system compliance verified. Audited Balance: $${event.auditedAmount}. Summary: ${event.statusLog}")
+                        }
+                        else -> {}
+                    }
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
+
+        try {
+            startHealthMonitoring()
+            startBinanceSyncLoop()
+            startPortfolioManagerLoop()
+            runEngineValidationSuite()
+            startContinuousEvolutionDaemon()
+            scanAndAssessMultiSymbolUniverse()
+            runDeepMlMarketAnalysis("BTCUSDT")
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
     }
 
     fun startBinanceSyncLoop() {

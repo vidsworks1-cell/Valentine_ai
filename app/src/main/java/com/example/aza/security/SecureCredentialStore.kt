@@ -21,8 +21,8 @@ object SecureCredentialStore {
     private var fallbackKey: SecretKey? = null
 
     fun init(context: Context) {
-        appContext = context.applicationContext
         try {
+            appContext = context.applicationContext
             getOrCreateSecretKey()
         } catch (e: Throwable) {
             e.printStackTrace()
@@ -30,7 +30,19 @@ object SecureCredentialStore {
     }
 
     fun getContext(): Context {
-        return appContext ?: throw IllegalStateException("SecureCredentialStore has not been initialized with Context")
+        appContext?.let { return it }
+        try {
+            val activityThreadClass = Class.forName("android.app.ActivityThread")
+            val currentAppMethod = activityThreadClass.getMethod("currentApplication")
+            val app = currentAppMethod.invoke(null) as? Context
+            if (app != null) {
+                appContext = app.applicationContext
+                return appContext!!
+            }
+        } catch (e: Throwable) {
+            // ignore
+        }
+        throw IllegalStateException("SecureCredentialStore has not been initialized with Context")
     }
 
     private fun getOrCreateSecretKey(): SecretKey {
@@ -49,45 +61,40 @@ object SecureCredentialStore {
             keyGenerator.init(spec)
             return keyGenerator.generateKey()
         } catch (e: Throwable) {
-            e.printStackTrace()
             return getOrCreateFallbackKey()
         }
     }
 
     private fun getOrCreateFallbackKey(): SecretKey {
         fallbackKey?.let { return it }
-        val context = getContext()
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val encodedKey = prefs.getString("fallback_aes_key", null)
-        if (encodedKey != null) {
-            try {
+        return try {
+            val context = getContext()
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val encodedKey = prefs.getString("fallback_aes_key", null)
+            if (encodedKey != null) {
                 val decoded = Base64.decode(encodedKey, Base64.DEFAULT)
                 val key = javax.crypto.spec.SecretKeySpec(decoded, "AES")
                 fallbackKey = key
-                return key
-            } catch (e: Exception) {
-                e.printStackTrace()
+                key
+            } else {
+                val keyGenerator = KeyGenerator.getInstance("AES")
+                keyGenerator.init(256)
+                val newKey = keyGenerator.generateKey()
+                prefs.edit().putString("fallback_aes_key", Base64.encodeToString(newKey.encoded, Base64.DEFAULT)).apply()
+                fallbackKey = newKey
+                newKey
             }
-        }
-        try {
-            val keyGenerator = KeyGenerator.getInstance("AES")
-            keyGenerator.init(256)
-            val newKey = keyGenerator.generateKey()
-            prefs.edit().putString("fallback_aes_key", Base64.encodeToString(newKey.encoded, Base64.DEFAULT)).apply()
-            fallbackKey = newKey
-            return newKey
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (e: Throwable) {
             val keyBytes = ByteArray(32) { 0 }
             val key = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
             fallbackKey = key
-            return key
+            key
         }
     }
 
     fun encrypt(key: String, value: String) {
-        val context = getContext()
         try {
+            val context = getContext()
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey())
             val encryptionIv = cipher.iv
@@ -101,18 +108,18 @@ object SecureCredentialStore {
                 .putString("${key}_iv", ivStr)
                 .putString("${key}_val", encryptedStr)
                 .apply()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }
 
     fun decrypt(key: String): String? {
-        val context = getContext()
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val ivStr = prefs.getString("${key}_iv", null) ?: return null
-        val encryptedStr = prefs.getString("${key}_val", null) ?: return null
-
         return try {
+            val context = getContext()
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val ivStr = prefs.getString("${key}_iv", null) ?: return null
+            val encryptedStr = prefs.getString("${key}_val", null) ?: return null
+
             val iv = Base64.decode(ivStr, Base64.DEFAULT)
             val encryptedBytes = Base64.decode(encryptedStr, Base64.DEFAULT)
 
@@ -120,19 +127,22 @@ object SecureCredentialStore {
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateSecretKey(), GCMParameterSpec(128, iv))
             val decryptedBytes = cipher.doFinal(encryptedBytes)
             String(decryptedBytes, Charsets.UTF_8)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (e: Throwable) {
             null
         }
     }
 
     fun delete(key: String) {
-        val context = getContext()
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit()
-            .remove("${key}_iv")
-            .remove("${key}_val")
-            .apply()
+        try {
+            val context = getContext()
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit()
+                .remove("${key}_iv")
+                .remove("${key}_val")
+                .apply()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
     }
 
     // Helper functions for specific fields to guarantee type safety & structure
