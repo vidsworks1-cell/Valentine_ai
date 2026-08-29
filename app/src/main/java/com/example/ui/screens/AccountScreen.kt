@@ -2258,7 +2258,7 @@ fun AccountScreen(
                         Text(
                             text = testResultLog ?: "",
                             fontSize = 11.sp,
-                            color = if (testResultLog!!.contains("Success", ignoreCase = true)) Color(0xFF388E3C) else Color(0xFFD32F2F),
+                            color = if (testResultLog?.contains("Success", ignoreCase = true) == true) Color(0xFF388E3C) else Color(0xFFD32F2F),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.surfaceVariant)

@@ -725,7 +725,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             addThought("\ud83e\udde0 LUMINA DEEP ML: Extracting 32-dimensional market features & running Deep Ensemble prediction for $symbol...")
             val priceRes = try { com.example.aza.connector.BinanceConnector.fetchMarketPrice(symbol) } catch(e: Exception) { Result.failure(e) }
             val tickerPrice = if (priceRes.isSuccess && (priceRes.getOrNull() ?: 0.0) > 0.0) {
-                priceRes.getOrNull()!!
+                priceRes.getOrNull() ?: 64500.0
             } else when (symbol) {
                 "BTCUSDT" -> 64500.0
                 "ETHUSDT" -> 3450.0

@@ -1758,7 +1758,7 @@ fun AzaScreen(
                                             modifier = Modifier
                                                 .size(10.dp)
                                                 .clip(CircleShape)
-                                                .background(if (activeObjective!!.status == "COMPLETED") Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary)
+                                                .background(if (activeObjective?.status == "COMPLETED") Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
@@ -1787,7 +1787,7 @@ fun AzaScreen(
                                 Spacer(modifier = Modifier.height(10.dp))
                                 
                                 Text(
-                                    text = activeObjective!!.title,
+                                    text = activeObjective?.title ?: "",
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -1796,13 +1796,13 @@ fun AzaScreen(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Text(
-                                        text = "Status: ${activeObjective!!.status}",
+                                        text = "Status: ${activeObjective?.status}",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (activeObjective!!.status == "COMPLETED") Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary
+                                        color = if (activeObjective?.status == "COMPLETED") Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary
                                     )
                                     Text(
-                                        text = "Priority: ${activeObjective!!.priority}",
+                                        text = "Priority: ${activeObjective?.priority}",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1833,7 +1833,7 @@ fun AzaScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Text(
-                                            text = activeObjective!!.completionReason ?: "Planning tasks running sequentially on coordinator queue...",
+                                            text = activeObjective?.completionReason ?: "Planning tasks running sequentially on coordinator queue...",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -1849,7 +1849,7 @@ fun AzaScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "Focus Target: ${activeObjective!!.targetPlatform}",
+                                        text = "Focus Target: ${activeObjective?.targetPlatform}",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -9014,2005 +9014,62 @@ fun TradeApprovalCard(
             }
         }
     }
-}
-
-@Composable
-fun TaskApprovalCard(
-    task: com.example.data.database.AzaAgentTask,
-    viewModel: AppViewModel
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Header / Badge Row
-            val category = when {
-                task.title.lowercase().contains("publish") || task.title.lowercase().contains("video") -> "PUBLISHING"
-                task.title.lowercase().contains("gig") || task.title.lowercase().contains("proposal") || task.title.lowercase().contains("freelance") -> "FREELANCE WORKER"
-                else -> "EXECUTIVE OVERRIDE"
-            }
-            
-            val badgeColor = when (category) {
-                "PUBLISHING" -> Color(0xFFE53935)
-                "FREELANCE WORKER" -> Color(0xFF00ACC1)
-                else -> Color(0xFF8E24AA)
-            }
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .background(badgeColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = category,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = badgeColor
-                    )
-                }
-                Text(
-                    text = "Task ID: ${task.id}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(
-                text = task.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = task.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Structured Grid
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ApprovalDetailRow("Reason", "Action intercepted by capability safety policy boundary policy requirements.")
-                ApprovalDetailRow("Expected Outcome", "Complete task execution and unlock dependent stages in parent mission.")
-                ApprovalDetailRow("Risk Assessment", "Low system resource overhead. Verified to be within standard sandbox safety rules.")
-                ApprovalDetailRow("Confidence", "94.2% verified by Multi-Agent planning engines.")
-                ApprovalDetailRow("Supporting Evidence", "Task requires ${task.requiredSkill} skill set with complete local alignment.")
-                ApprovalDetailRow("Alternative Actions", "1. Cancel execution task, 2. De-couple from mission pipeline, 3. Re-route to general worker.")
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Buttons Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { viewModel.rejectAgentTask(task) },
-                    modifier = Modifier.weight(1f).testTag("reject_task_btn_${task.id}"),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Reject", fontSize = 12.sp)
-                }
-                Button(
-                    onClick = { viewModel.approveAgentTask(task) },
-                    modifier = Modifier.weight(1f).testTag("approve_task_btn_${task.id}")
-                ) {
-                    Text("Approve Task", fontSize = 12.sp)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ApprovalDetailRow(label: String, valText: String) {
-    Column {
-        Text(
-            text = label.uppercase(),
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            letterSpacing = 0.5.sp
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = valText,
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-// --- Phase 19 Executive Analytics Dashboard & Self-Evaluation Composables ---
-
-@Composable
-fun ExecutiveAnalyticsDashboardHeader() {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Analytics,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.size(36.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(
-                    text = "Executive Performance Analytics",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-                Text(
-                    text = "Supervise long-running active pipelines, check planning accuracy, and evaluate resource consumption feedback.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ExecutiveAnalyticsGrid(
-    viewModel: AppViewModel,
-    missions: List<com.example.data.database.AzaMission>,
-    knowledge: List<com.example.data.database.KnowledgeEntry>,
-    content: List<com.example.data.database.ContentItem>,
-    freelance: List<com.example.data.database.FreelanceGig>
-) {
-    val uptime by viewModel.executiveBrain.systemUptime.collectAsStateWithLifecycle()
-    val accuracy by viewModel.executiveBrain.planningAccuracy.collectAsStateWithLifecycle()
-    val utilization by viewModel.executiveBrain.agentUtilization.collectAsStateWithLifecycle()
-    val efficiency by viewModel.executiveBrain.resourceEfficiency.collectAsStateWithLifecycle()
-
-    val totalMissions = missions.size
-    val completedMissions = missions.count { it.status == "Completed" || it.progress >= 1f }
-    val successRate = if (totalMissions > 0) (completedMissions * 100 / totalMissions) else 100
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AnalyticsStatCard("Planning Accuracy", String.format(Locale.US, "%.1f%%", accuracy), Icons.Default.TrendingUp, Modifier.weight(1f))
-            AnalyticsStatCard("Agent Utilization", String.format(Locale.US, "%.1f%%", utilization), Icons.Default.Group, Modifier.weight(1f))
-        }
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AnalyticsStatCard("Resource Efficiency", String.format(Locale.US, "%.1f%%", efficiency), Icons.Default.Bolt, Modifier.weight(1f))
-            AnalyticsStatCard("System Uptime", String.format(Locale.US, "%.2f%%", uptime), Icons.Default.CheckCircle, Modifier.weight(1f))
-        }
-        
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("CROSS-DOMAIN METRICS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    StatLabelValue("Active Missions", "$totalMissions")
-                    StatLabelValue("Completion Rate", "$successRate%")
-                    StatLabelValue("Knowledge Base", "${knowledge.size} Insights")
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    StatLabelValue("Content Pipelines", "${content.size} drafts")
-                    StatLabelValue("Freelance Contracts", "${freelance.size} gigs")
-                    StatLabelValue("Learning Rate", "+12.5% / cycle")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AnalyticsStatCard(title: String, valText: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                    .padding(8.dp)
-            ) {
-                Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(text = title, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(text = valText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
-fun StatLabelValue(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-fun ExecutiveSelfEvaluationCard(viewModel: AppViewModel) {
-    val recommendations by viewModel.executiveBrain.recommendations.collectAsStateWithLifecycle()
-    
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(imageVector = Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "SELF-EVALUATION & POLICY RECOMMENDATIONS",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "After evaluating active agent workflows, resources, and coordination matrices, the Executive Brain recommends the following modifications:",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                recommendations.forEach { recommendation ->
-                    Row(verticalAlignment = Alignment.Top) {
-                        Text("â€¢", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 8.dp))
-                        Text(recommendation, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ExecutiveTerminalLogsCard(viewModel: AppViewModel) {
-    val logs by viewModel.executiveBrain.executiveLogs.collectAsStateWithLifecycle()
-    
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "ğŸ’» EXECUTIVE MEMORY LOGS (AUDIT)",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF4CAF50)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .height(180.dp)
-                    .fillMaxWidth()
-                    .background(Color(0xFF121212), RoundedCornerShape(6.dp))
-                    .padding(8.dp)
-            ) {
-                LazyColumn(reverseLayout = false, modifier = Modifier.fillMaxSize()) {
-                    items(logs) { log ->
-                        Text(
-                            text = log,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
-                            color = if (log.contains("CRITICAL") || log.contains("WARNING") || log.contains("âš ï¸")) Color(0xFFFFB300) else Color(0xFFCCCCCC),
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AzaCognitiveReasoningPanel(viewModel: com.example.viewmodel.AppViewModel) {
-    val dialogueState by viewModel.dialogueState.collectAsStateWithLifecycle()
-    var isExpanded by remember { mutableStateOf(false) }
-
-    val lastIntent = dialogueState.lastDetectedIntent
-    val lastEmotion = dialogueState.lastDetectedEmotion
-    val lastReasoning = dialogueState.lastReasoningSteps
-
-    if (!isExpanded) {
-        // Super compact, elegant collapsed pill that takes up negligible vertical screen space
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 2.dp),
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            Surface(
-                onClick = { isExpanded = true },
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                modifier = Modifier.padding(vertical = 2.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "Cognitive Reasoning",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Text(
-                        text = "Cognitive Engine",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (lastIntent != null) {
-                        Text(
-                            text = "â€¢ ${lastIntent.primaryIntent.name}",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Default.ExpandMore,
-                        contentDescription = "Expand",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
-            }
-        }
-    } else {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            ),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { isExpanded = false },
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "Cognitive Reasoning",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Cognitive Reasoning & Intent Engine",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (lastIntent != null) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                Text(
-                                    text = lastIntent.primaryIntent.name,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
-                                )
-                            }
-                        }
-                        Icon(
-                            imageVector = Icons.Default.ExpandLess,
-                            contentDescription = "Toggle Collapse",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Intent & Emotion Analysis
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Detected Intent",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = lastIntent?.primaryIntent?.name ?: "UNKNOWN",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (lastIntent != null) {
-                            val confidence = lastIntent.confidenceScores[lastIntent.primaryIntent] ?: 0.0
-                            Text(
-                                text = "Confidence: ${(confidence * 100).toInt()}%",
-                                fontSize = 9.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Detected Tone",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = lastEmotion?.primaryEmotion?.name ?: "CALM",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        if (lastEmotion != null) {
-                            val score = lastEmotion.scores[lastEmotion.primaryEmotion] ?: 0.0
-                            Text(
-                                text = "Intensity: ${(score * 100).toInt()}%",
-                                fontSize = 9.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-                }
-
-                // Adaptive Preference Calibration Panel
-                AdaptivePreferenceCalibrationSubpanel(viewModel)
-
-                if (lastReasoning.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "Internal Planner Reasoning Path",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                                shape = MaterialTheme.shapes.small
-                            )
-                            .padding(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        lastReasoning.forEach { step ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = "â€¢",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = step,
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    lineHeight = 13.sp
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Send a message to initiate reasoning cycles.",
-                        fontSize = 10.sp,
-                        style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AdaptivePreferenceCalibrationSubpanel(viewModel: com.example.viewmodel.AppViewModel) {
-    val profile = viewModel.conversationEngine.memory.relationshipProfile
-    
-    var technicalLevel by remember(profile.technicalLevelScore) { mutableStateOf(profile.technicalLevelScore.toFloat()) }
-    var verbosity by remember(profile.verbosityPreference) { mutableStateOf(profile.verbosityPreference.toFloat()) }
-    var formality by remember(profile.formalityPreference) { mutableStateOf(profile.formalityPreference.toFloat()) }
-    var decisionControl by remember(profile.decisionControlPreference) { mutableStateOf(profile.decisionControlPreference.toFloat()) }
-    
-    var autoCalibrationEnabled by remember { mutableStateOf(true) }
-
-    Spacer(modifier = Modifier.height(14.dp))
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-    Spacer(modifier = Modifier.height(10.dp))
-    
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "Adaptive Preference Calibration (APC)",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Linguistically-derived real-time persona calibration",
-                    fontSize = 9.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-            
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = if (autoCalibrationEnabled) "AUTO-ON" else "MANUAL",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (autoCalibrationEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
-                Switch(
-                    checked = autoCalibrationEnabled,
-                    onCheckedChange = { autoCalibrationEnabled = it },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                    )
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        CalibrationRow(
-            label = "Technical Precision",
-            value = technicalLevel,
-            onValueChange = {
-                technicalLevel = it
-                profile.technicalLevelScore = it.toDouble()
-                if (!autoCalibrationEnabled) {
-                    viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
-                }
-            },
-            leftLabel = "Conceptual",
-            rightLabel = "Deep Technical",
-            color = MaterialTheme.colorScheme.primary
-        )
-        
-        CalibrationRow(
-            label = "Response Depth (Verbosity)",
-            value = verbosity,
-            onValueChange = {
-                verbosity = it
-                profile.verbosityPreference = it.toDouble()
-                if (!autoCalibrationEnabled) {
-                    viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
-                }
-            },
-            leftLabel = "Concise",
-            rightLabel = "Exhaustive",
-            color = MaterialTheme.colorScheme.secondary
-        )
-
-        CalibrationRow(
-            label = "Linguistic Formality",
-            value = formality,
-            onValueChange = {
-                formality = it
-                profile.formalityPreference = it.toDouble()
-                if (!autoCalibrationEnabled) {
-                    viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
-                }
-            },
-            leftLabel = "Casual",
-            rightLabel = "Business",
-            color = MaterialTheme.colorScheme.tertiary
-        )
-
-        CalibrationRow(
-            label = "Decision Authority",
-            value = decisionControl,
-            onValueChange = {
-                decisionControl = it
-                profile.decisionControlPreference = it.toDouble()
-                if (!autoCalibrationEnabled) {
-                    viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
-                }
-            },
-            leftLabel = "High Approval",
-            rightLabel = "Autopilot",
-            color = MaterialTheme.colorScheme.error
-        )
-        
-        Spacer(modifier = Modifier.height(10.dp))
-        
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("CALIBRATED COMM-STYLE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(profile.preferredCommunicationStyle, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text("CALIBRATED EXPLANATION", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(profile.preferredExplanations, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        // --- Tailored Investor Profile & Preferences Customizer ---
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                .padding(10.dp)
-        ) {
-            Text(
-                text = "ğŸ¯ User Investor Profile & Tailored Preferences",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = "Lumina intuitively tailors recommendations, risk bounds, and strategy picks to your active profile:",
-                fontSize = 9.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                modifier = Modifier.padding(vertical = 4.dp)
-            )
-
-            // 1. Investing Style Selection
-            Text(
-                text = "Active Investing Style:",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
-            )
-            
-            val styles = listOf(
-                "SWING_TRADING" to "ğŸ“ˆ Swing Trader",
-                "AGGRESSIVE" to "ğŸš€ Aggressive Growth",
-                "CONSERVATIVE" to "ğŸ›¡ï¸ Conservative",
-                "DAY_TRADING" to "âš¡ Day Trader",
-                "LONG_TERM_HODL" to "ğŸ›ï¸ Long-Term HODL",
-                "MODERATE" to "âš–ï¸ Balanced"
-            )
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                styles.take(3).forEach { (styleKey, label) ->
-                    val isSelected = profile.investingStyle.equals(styleKey, ignoreCase = true)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            profile.investingStyle = styleKey
-                            viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
-                        },
-                        label = { Text(label, fontSize = 8.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        modifier = Modifier.height(24.dp)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                styles.drop(3).forEach { (styleKey, label) ->
-                    val isSelected = profile.investingStyle.equals(styleKey, ignoreCase = true)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            profile.investingStyle = styleKey
-                            viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
-                        },
-                        label = { Text(label, fontSize = 8.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        modifier = Modifier.height(24.dp)
-                    )
-                }
-            }
-
-            // 2. Target Assets
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Target Focus Assets:",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            val availableAssets = listOf("BTC", "ETH", "SOL", "NVDA", "AAPL")
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                availableAssets.forEach { asset ->
-                    val isSelected = profile.preferredAssets.contains(asset)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            if (isSelected) profile.preferredAssets.remove(asset) else profile.preferredAssets.add(asset)
-                            viewModel.conversationEngine.memory.runAdaptivePreferenceCalibration("")
-                        },
-                        label = { Text(asset, fontSize = 8.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.secondary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onSecondary
-                        ),
-                        modifier = Modifier.height(24.dp)
-                    )
-                }
-            }
-
-            // 3. Live Guidance Summary Box
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp))
-                    .padding(8.dp)
-            ) {
-                Column {
-                    Text(
-                        text = "âœ¨ Lumina Tailored Guidance active:",
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Configured for ${profile.investingStyleDisplayName} (${profile.preferredTimeframe}) focusing on ${profile.preferredAssets.joinToString(", ")}. Lumina prioritizes ${profile.preferredStrategies.joinToString(", ")} with conversational intuitive feedback.",
-                        fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CalibrationRow(
-    label: String,
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    leftLabel: String,
-    rightLabel: String,
-    color: Color
-) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-            Text("${(value * 100).toInt()}%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = color)
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(leftLabel, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-            Slider(
-                value = value,
-                onValueChange = onValueChange,
-                valueRange = 0.1f..1.0f,
-                modifier = Modifier.weight(1f).height(18.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = color,
-                    activeTrackColor = color.copy(alpha = 0.7f),
-                    inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                )
-            )
-            Text(rightLabel, fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-        }
-    }
-}
-
-@Composable
-fun LuminaEvolutionTabContent(viewModel: AppViewModel) {
-    val evolutionPlan by viewModel.evolutionPlan.collectAsStateWithLifecycle()
-    var inputObjective by remember { mutableStateOf("") }
-    
-    var selectedSkillName by remember { mutableStateOf("") }
-    var selectedSkillScore by remember { mutableFloatStateOf(50f) }
-    var feedbackComment by remember { mutableStateOf("") }
-
-    LaunchedEffect(evolutionPlan.identitySkills) {
-        if (selectedSkillName.isEmpty() && evolutionPlan.identitySkills.isNotEmpty()) {
-            selectedSkillName = evolutionPlan.identitySkills.first().name
-        }
-    }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(bottom = 32.dp, top = 8.dp)
-    ) {
-        // --- 1. Header Banner ---
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)),
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Autorenew,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Lumina Autonomous Evolution Hub",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Self-directed goals, continuous refinement, and safety clearance audits",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- 1.5 Daemon Control Panel ---
-        item {
-            val isContinuousEvolution247 by viewModel.isContinuousEvolution247.collectAsStateWithLifecycle()
-            val autoApproveEvolution by viewModel.autoApproveEvolution.collectAsStateWithLifecycle()
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, if (isContinuousEvolution247) Color(0xFF4CAF50).copy(alpha = 0.3f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isContinuousEvolution247) Color(0xFF4CAF50) else Color.Gray)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "LUMINA DAEMON ACTIVE 24/7",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = if (isContinuousEvolution247) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                letterSpacing = 0.5.sp
-                            )
-                        }
-                        Switch(
-                            checked = isContinuousEvolution247,
-                            onCheckedChange = { viewModel.toggleContinuousEvolution247(it) },
-                            modifier = Modifier.testTag("continuous_247_switch")
-                        )
-                    }
-                    Text(
-                        text = "Perpetually monitors VPS endpoints, analyzes market anomalies, generates learning plans, and executes backtests autonomously.",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                    )
-
-                    HorizontalDivider(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text(
-                                text = "Auto-Approve Minor Upgrades",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Clear and authorize dynamic parameters without manual prompt interaction.",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = autoApproveEvolution,
-                            onCheckedChange = { viewModel.toggleAutoApproveEvolution(it) },
-                            enabled = isContinuousEvolution247,
-                            modifier = Modifier.testTag("auto_approve_switch")
-                        )
-                    }
-                }
-            }
-        }
-
-        // --- 2. Objective Configuration (Input) if Idle or completed ---
-        if (evolutionPlan.activePhase == "IDLE" || evolutionPlan.activePhase == "SUCCESS") {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Set New Evolutionary Goal",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = inputObjective,
-                            onValueChange = { inputObjective = it },
-                            placeholder = { Text("e.g. Become a master trader, Improve risk management", fontSize = 13.sp) },
-                            modifier = Modifier.fillMaxWidth().testTag("evolution_objective_input"),
-                            shape = RoundedCornerShape(8.dp),
-                            textStyle = TextStyle(fontSize = 13.sp)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = {
-                                if (inputObjective.isNotBlank()) {
-                                    viewModel.triggerAutonomousEvolutionCycle(inputObjective)
-                                    inputObjective = ""
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(40.dp).testTag("trigger_evolution_button"),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Launch Evolution Cycle", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- 3. Active Objective Status & Stepper ---
-        if (evolutionPlan.activePhase != "IDLE") {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "CURRENT EVOLUTION PROJECT",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.primary,
-                                letterSpacing = 1.sp
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        if (evolutionPlan.activePhase == "SUCCESS") Color(0xFFE8F5E9)
-                                        else MaterialTheme.colorScheme.secondaryContainer
-                                    )
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = if (evolutionPlan.activePhase == "SUCCESS") "LIFELONG LOOP ACTIVE" else evolutionPlan.activePhase,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (evolutionPlan.activePhase == "SUCCESS") Color(0xFF2E7D32)
-                                            else MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = evolutionPlan.currentObjective,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Lumina operates as a perpetual cognitive learner. Rather than executing a static predefined workflow, it dynamically structures, tests, and calibrates competencies in recursive cycles to continuously address remaining capability gaps.",
-                            fontSize = 10.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 14.sp
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        LinearProgressIndicator(
-                            progress = { evolutionPlan.progress },
-                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
-                            color = if (evolutionPlan.activePhase == "SUCCESS") Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (evolutionPlan.activePhase == "SUCCESS") "Loop complete â€” re-evaluating remaining gaps in 12s..." else "${(evolutionPlan.progress * 100).toInt()}% completed",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // --- 3.5 Dynamic Identity Builder Section ---
-            if (evolutionPlan.identitySkills.isNotEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Psychology, 
-                                        contentDescription = null, 
-                                        tint = MaterialTheme.colorScheme.primary, 
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "IDENTITY: ${evolutionPlan.identityTitle.uppercase()}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(MaterialTheme.colorScheme.primaryContainer)
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = evolutionPlan.overallLevel,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Lumina dynamically discovers and scores required competencies below, identifying critical areas for self-directed studies.",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(14.dp))
-                            
-                            evolutionPlan.identitySkills.forEach { skill ->
-                                val scoreColor = when {
-                                    skill.score < 40 -> Color(0xFFD32F2F) // red
-                                    skill.score < 60 -> Color(0xFFE65100) // orange
-                                    skill.score < 80 -> Color(0xFF1976D2) // blue
-                                    else -> Color(0xFF2E7D32) // green
-                                }
-                                
-                                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = skill.name,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
-                                            ) {
-                                                Text(
-                                                    text = skill.category,
-                                                    fontSize = 8.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = "${skill.score}%",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = scoreColor
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    LinearProgressIndicator(
-                                        progress = { skill.score / 100f },
-                                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
-                                        color = scoreColor,
-                                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 3.6 Internal Research Department Panel ---
-            if (evolutionPlan.researchQuestions.isNotEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Psychology, 
-                                    contentDescription = null, 
-                                    tint = MaterialTheme.colorScheme.secondary, 
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "INTERNAL RESEARCH DEPARTMENT",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Lumina's research loop actively inspects our identity structure to discover conceptual faults:",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            
-                            evolutionPlan.researchQuestions.forEach { question ->
-                                Text(
-                                    text = question,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Normal,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                                    modifier = Modifier.padding(vertical = 3.dp)
-                                )
-                            }
-                            
-                            if (evolutionPlan.selectedSkillToStudy.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(14.dp))
-                                HorizontalDivider(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Info, 
-                                        contentDescription = null, 
-                                        tint = Color(0xFFE65100), 
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Active Study Target:",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFE65100)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = evolutionPlan.selectedSkillToStudy,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 3.7 Autonomous Research & Self-Reflection Logs ---
-            if (evolutionPlan.studyGuideContent.isNotEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.List, 
-                                    contentDescription = null, 
-                                    tint = Color(0xFF1976D2), 
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "AUTONOMOUS RESEARCH BRIEF",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f))
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    text = evolutionPlan.studyGuideContent,
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.SansSerif,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
-                                )
-                            }
-                            
-                            if (evolutionPlan.practiceScore > 0) {
-                                Spacer(modifier = Modifier.height(14.dp))
-                                HorizontalDivider(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.CheckCircle, 
-                                            contentDescription = null, 
-                                            tint = Color(0xFF2E7D32), 
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = "Practice Test Score:",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF2E7D32)
-                                        )
-                                    }
-                                    Text(
-                                        text = "${evolutionPlan.practiceScore}%",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFF2E7D32)
-                                    )
-                                }
-                                Text(
-                                    text = evolutionPlan.practiceFeedback,
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (evolutionPlan.reflectionLog.isNotEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Star, 
-                                    contentDescription = null, 
-                                    tint = Color(0xFFE65100), 
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "SELF-REFLECTION ARCHIVE",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            evolutionPlan.reflectionLog.forEach { log ->
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f))
-                                        .padding(12.dp)
-                                ) {
-                                    Text(
-                                        text = log,
-                                        fontSize = 10.5.sp,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 3.8 Lifelong Learner Assessment Panel ---
-            if (evolutionPlan.lifelongAssessment.isNotEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Psychology, 
-                                    contentDescription = null, 
-                                    tint = MaterialTheme.colorScheme.primary, 
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "LUMINA LIFELONG LEARNING ASSESSMENT",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Lumina continuously prompts itself with these meta-cognitive queries to guide its recursive self-improvement roadmap:",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            evolutionPlan.lifelongAssessment.forEach { assessment ->
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 5.dp)
-                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f), shape = RoundedCornerShape(8.dp))
-                                        .padding(10.dp)
-                                ) {
-                                    Text(
-                                        text = "â“ ${assessment.question}",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = assessment.answer,
-                                        fontSize = 10.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 4. Stepper Stages ---
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Evolution Stepper",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        val stages = listOf(
-                            "DISCOVERING" to "1. Capability Discovery",
-                            "RESEARCHING" to "2. Knowledge Acquisition",
-                            "TESTING" to "3. Practice & Evaluation",
-                            "REFLECTING" to "4. Self-Reflection Logs",
-                            "EVALUATING" to "5. Terminal Clearance",
-                            "SUCCESS" to "6. Competency Committed"
-                        )
-                        
-                        stages.forEachIndexed { index, (phase, title) ->
-                            val isPast = stages.indexOfFirst { it.first == evolutionPlan.activePhase } >= index || evolutionPlan.activePhase == "SUCCESS"
-                            val isActive = evolutionPlan.activePhase == phase
-                            
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (isActive) MaterialTheme.colorScheme.primary
-                                            else if (isPast) Color(0xFF4CAF50)
-                                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isPast && !isActive) {
-                                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(10.dp))
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = title,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isActive) MaterialTheme.colorScheme.primary
-                                            else if (isPast) MaterialTheme.colorScheme.onSurface
-                                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 5. Capabilities and Skill Gaps Row ---
-            if (evolutionPlan.requiredCapabilities.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = "Required Capabilities",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                evolutionPlan.requiredCapabilities.forEach { cap ->
-                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                                        Icon(Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(12.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(text = cap, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = "Identified Gaps",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = Color(0xFFD32F2F)
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                if (evolutionPlan.skillGaps.isEmpty() && evolutionPlan.activePhase != "MAPPING_GAPS") {
-                                    val gaps = when {
-                                        evolutionPlan.currentObjective.lowercase().contains("trader") -> listOf("Volatility regime calibrations", "ATR safety coefficient mapping")
-                                        else -> listOf("Static logic rules bound", "Missing specialized knowledge parameters")
-                                    }
-                                    gaps.forEach { gap ->
-                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFD32F2F), modifier = Modifier.size(12.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(text = gap, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-                                        }
-                                    }
-                                } else {
-                                    Text("Analyzing gaps...", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 6. Milestones Checklist ---
-            if (evolutionPlan.milestones.isNotEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "Milestones & Sub-goals",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            evolutionPlan.milestones.forEach { m ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                        Icon(
-                                            imageVector = if (m.isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                            contentDescription = null,
-                                            tint = if (m.isCompleted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column {
-                                            Text(text = m.title, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
-                                            Text(text = m.description, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                    if (m.metric.isNotEmpty()) {
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(text = m.metric, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 6.9 Feedback Calibration Console Card ---
-            if (evolutionPlan.identitySkills.isNotEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Tune,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "COGNITIVE FEEDBACK & CALIBRATION CONSOLE",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Directly steer Lumina's reinforcement learning weights by adjusting specific competency scores and providing corrective guidance.",
-                                fontSize = 10.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = 14.sp
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Scrollable Skill Selection Chips
-                            Text(
-                                text = "Select Target Competency:",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                items(evolutionPlan.identitySkills) { skill ->
-                                    val isSelected = skill.name == selectedSkillName
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = { selectedSkillName = skill.name },
-                                        label = {
-                                            Text(
-                                                text = "${skill.name} (${skill.score}%)",
-                                                fontSize = 9.5.sp
-                                            )
-                                        },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                            selectedLabelColor = MaterialTheme.colorScheme.primary
-                                        )
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Proficiency Calibration Slider
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Target Skill Rating / Grade:",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "${selectedSkillScore.toInt()}%",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Slider(
-                                value = selectedSkillScore,
-                                onValueChange = { selectedSkillScore = it },
-                                valueRange = 0f..100f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = MaterialTheme.colorScheme.primary,
-                                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                                    inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                )
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // Commentary Input
-                            OutlinedTextField(
-                                value = feedbackComment,
-                                onValueChange = { feedbackComment = it },
-                                label = { Text("Directive Feedback / Correction Notes", fontSize = 11.sp) },
-                                placeholder = { Text("e.g. Focus on managing stop loss risks during volatile trending markets", fontSize = 10.5.sp) },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = TextStyle(fontSize = 11.sp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                )
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Button(
-                                onClick = {
-                                    if (selectedSkillName.isNotEmpty()) {
-                                        viewModel.applyUserFeedbackCalibration(
-                                            selectedSkillName,
-                                            selectedSkillScore.toInt(),
-                                            feedbackComment.ifBlank { "User manual recalibration." }
-                                        )
-                                        feedbackComment = ""
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                            ) {
-                                Icon(
-                                    Icons.Default.Tune,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "INJECT COGNITIVE RECALIBRATION",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 7. Performance Metrics Card ---
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Validated Performance Metrics",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                                Text("Prediction Accuracy", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("${evolutionPlan.predictionAccuracy}%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                                Text("Sharpe Ratio", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("${evolutionPlan.sharpeRatio}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                                Text("Decision Quality", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("${evolutionPlan.decisionQuality}%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                                Text("Consistency", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(evolutionPlan.consistency, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 8. Evolution Terminal Console ---
-            if (evolutionPlan.evolutionLog.isNotEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Code, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Transparent Evolution Log",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF4CAF50)
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(if (evolutionPlan.activePhase == "SUCCESS") Color(0xFF4CAF50) else Color(0xFFFFB300))
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            evolutionPlan.evolutionLog.forEach { log ->
-                                Text(
-                                    text = log,
-                                    fontSize = 9.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = Color(0xFFCCCCCC),
-                                    modifier = Modifier.padding(vertical = 2.dp)
-                                )
-                            }
-                            
-                            // Highlight acquired knowledge & changes
-                            if (evolutionPlan.knowledgeAcquired.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "ğŸ“š Knowledge Acquired: ${evolutionPlan.knowledgeAcquired.joinToString(", ")}",
-                                    fontSize = 9.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = Color(0xFF81C784)
-                                )
-                            }
-                            if (evolutionPlan.performanceChanges.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "ğŸ“ˆ Performance Changes: ${evolutionPlan.performanceChanges.joinToString("; ")}",
-                                    fontSize = 9.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = Color(0xFF64B5F6)
-                                )
-                            }
-                            if (evolutionPlan.remainingWork.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "â³ Remaining Work: ${evolutionPlan.remainingWork.joinToString(", ")}",
-                                    fontSize = 9.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = Color(0xFFFFB74D)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 9. Safety Clearance Audit Action Card ---
-            if (evolutionPlan.activePhase == "EVALUATING") {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f))
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Security,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Manual Safety Clearance Required",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Rule 10 Directive: Permanent strategy parameters or execution boundaries must not be modified without explicit host terminal clearance. Tap below to securely authorize.",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = { viewModel.approveSafetyClearance() },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth().height(40.dp).testTag("safety_clearance_button")
-                            ) {
-                                Text("Clear & Authorize System Evolution", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+}xœì}É’I–Ø½¾ÂVE!¥Ì¨\H‹šª‰$s
+¹€dM›LF‹Èh"P±0‰bÓ¬sš6›–éĞ#ÙhtÒM]ÆLS?0ó	zÏ=<V¹°òu[1xxøòüíşŞ_ü§¾½\Ù®~eÒ/æ¾E&ºû®·Z9ö{İìëÎ¬ûğàÛ—dj/5úA_®LªÍtOgÿ¹Ò]ªõ~Ö{jyøô6{â½AoNí5_èîøôÅùÈ~úF˜Ú¦í¸ä;öõë¾é¹Ú>ôÙ/İ©myºaQ‡}††§ºGC7'×tI5öüxÊşv}g®OéÖvØû•íÌ(>tÈş{ıv÷´Ùj»¨
+/éÎ¾]­»º¹ºÖ¡]í`¾ëÜ½ÖW¾Ù¾5£0^F9Æ/»{ûğŠXÓ¥=3æÉiğ§67LóTÿğ£1ó®»[ÚJŸÍkÑ}OÏ˜ê&4}°>ÄÚ±õ³Miue]Š>öØ“ñ‡¾şš¼¦:®Ç×äPŸ-(Œü&ÑvLaY¶³†~o®©•êC „æà‚ißPg
+x 6ÊívVş•i¸×-ò‡?”·~oÌ¨mw¾'‹ËÃáÉøõÉÙ«Nõ×.Œ…â+ÉóMÅæs‡RS·¦4åñh0öÎúòãùè‡Á(;Vjº”5üí 99y3 ço£ÑÉÑ ÙøSâSf3®p›â³íèŠıIï.B|ığõìÉîî‡ããÁ³ƒomeŸÈÌ%ùÜîn¯ßßË>'&µ|1ØÚëm©ÎP¯›éµü˜lg¹¶ãgÜ*³ç8ºµ€lyĞAì“6^Y8¤Ş¥V¶qâz¦±°ÄÓâo­ÿ¡Î› ¹N<.Û„CûCvf9³“¶CĞ®ôé»…ƒ”¥!AšíÍ·¶eäç);şù:­t÷‚QÅùy’Ÿ²)#LèO>o~….òf7A€ë­Mš¡òŞze/}u½ÖLıŠšã%lE~'s˜ÓÔX\ã;ÃÚ¡mÎòŸšç,ZoiÓì’|Ê|“¿ÁBt_’“£—äËŒş³OùĞJWäÊ­dZÊ7mkÌ9çX^vÏUO5;h”7]³-8ãV~ò¥–-"ÕÙ¹–®{î”Î™}ºe’G¾ÉìŸg'_>ßu§±ò[B¼š`GCÌh´¥x Ò
+ˆkşÔó:#¯#¹Òî\ÚïâPf‡ëîŞ®L(BRï†o"gêŒ¨îÚVg›tzS\xb ˜Ò•ƒ¹Z![éW†ixkâês
+ÿ¬lÓ˜®Aâô™è(>;ô'ßpØP\­“¥’w>¬èßsî{ xSÊê&õ(ÃB?Ğ©Ï†¥[3â[¦=}GftEÀ¸¾ .™¬t¿X®­ß?2à=×¥®‹ÃÆ×íâ®].aB®íÃJÖşäI sÄ½Ï&W”ÜŞ5¼F+1ƒ²fWö±PoRÕ¥èÛÖÄC½`ß>Õö¿BÅßÛp
+Ú‚±Ã²Í®F¨µ }Aõcµ²‰àÁÁûè]Œ>›ç
+"|ßPò‰¸øq©Ç¦ŒJß#Ø` z(B¨¤g†Yºg¼§„#‹ÙÓ@5‚A™±]ÇÁl“}Ñ©íÃ[ÉÜ±—bŸÉÊXQÖ`›hdDw@@Ô±	,u`l7¶óÎb§MÂ.¡mé}è{L+£wÜª0„ıŒ€#£p
+q-g|ğr®n[}8íïàM#ıĞå÷pCõ¸‹Û¶E>ÉÙ´lº7ÁÒÎ·4ºĞÉ¢Ûá¾Å¾Ş^yÖÛ˜ü Y„PÅæ3•l;1±˜ºã-W¶©ãØNEñÈ*ĞÙíØø9lƒ+‘3³BUõĞÙ)£-ï@Ğ«|*.§”_j,Kô‰ÿõé‹O_d;YZÃdè—È_ìm£¦‰£_„†ÆbcÃÏŠ*˜ÂúÓ€
+å9¹À±Y}“Êş¨&«—‹++ÇXêiíH2´G†4Õ¦g0ˆ°I´Äå4.%³ä®G° ¹«°·—Y†
+²XjèlÏ¸îìì‹kX~²÷-p^¬ÄÒÍ5ÈH.9Òİë+9ò2¦æ|g ãôuÆQ"”q±£,…†ı…İq£Rwóö=…=Øß¾xä6qO¥Æ¸ç*7Ë%÷½¦ñ!MUN¦2Ê§aAß Åe‹m\-Ø-ÜG™^ÀxÀQ¤wÀÓ–/S!@nòJ°v’Şµl/²Esá¨tgY´ª\rÃöR&–d›€rµ=:WÔ™ÛÎE³èŒÕUáUS„ê‚’ÙšÍ_m@¢¦Î{ÃEAØZì8>Ëõ)[7!›ºÛ†,;”ÛõéÔwôéz›i5”')ˆ¾ş’ããœÒšÈ´;4šdV/m{1—ˆÕùw–ô¢6Ì÷ ÇÙÂ'¨îK24\ï¯
+8§¼í÷üÉw–}cÒÙ‚–>úƒh9°<g<Ò‡û¼İ	è•Á“¡©½ôÙcÑò•±ø>t.¡ÑÜYRT#IŠ5<t`«4®Ë^²†¸«&ÊéîØƒİşT¹¡1§ÓõÔI&ìU`ga¿—{AcÅ¾¡Óø™sâ¢îud/£ÆŠİÓùÜ˜ Ù^´AØ¼¤ÿğW€AÈëâ1"¶úñLÖÔXà$‰
+¼Ë‡¿‹Ì³:jà7d0N—|RÔ<85Ø¹ëO§ğı)ÆwÄ˜“nrPß“İ-ÒÍáß“½İ]òur
+[Ü¿¿|“„«›^¤mM(((h´Õ4ØÌ[B*{Æ„±Î… ±/AÕà²¾Æx˜×¢É‚j—ãmÒùJÛ›õ4(ÃJÊ‡Z(Ñ\¢5«*m•‡lbˆ¬6Ø1Éé•cûe£ùt?vc$ZtĞÔæãÌôAğêíÅ˜›õ8-,Ç~°¬mf}dç}Ãâ ¼áI­3‘Ö#+všO?M¸õ*hŒÑ–¢R®à^Û›ÀmıÑùx¼st~Ú;9#§ƒÉè¤?†]ªâI+–/Õ5ï¬¼SÏ Î¨²¦Ì0ˆPÕS¬lÊÁÃ4ÄÅ|"+í2—Hº‚› ÷Ë‘˜‰dıÜ¥äk¬ŸŸûJ±›PD#‡ 8±^>†cÑŸÈ‰åâfÈF–5Ä)ìéîç¶§¨J.„úÂ×1tƒUœ9ú\º†²C–`ßÀg½ ÏPz]Õ>‡Tw£øòàt=û
+ä&³•î®š=1ÃD˜úškOÜ&,ÓKÔêÛ˜}Ğ¦¬?ªù†ÆHt¥½gV
+í$²Xl‡Hñ2Ä‰z<œp²ÀÎ	ŞxÖB4™ø³¡aJÂÓZ2LI£aT#aâQ0¥¼G58Fb
+ß'ä…’gˆİ’66ÄôíZ¹ÁLØ°ób2“Vò—[Å$<·Ø*&XìEÂ–½‹¶ì±9¦¥”	½ší¬P©azIÑ×¬ßÄ§r¯I,´ªè ½[™‰€>¶ìmÛïI£¥f³q+¬,ÚÈÔ¶Øv…‡ÈßÀˆví*nÊq(ğ
+X¯{Ê-1_$Ú*ØFÿÈ¡o·Œ,÷ÔV_?Uc1Š8©“^¸ëé5¬åb½qªüBÎWJiqÎs
+vöÁğxgğ¦7¼ìMNÎÏÈrq><éÿŒıóÓÓÁÙû~\×D^i¹	ŸD°ÎÊfsUÖW oáuzs®pHÄ\ÌËbiæ¦}ãn‡®
+—»0¦6sÃâvİ¥l‚ıä]Ó˜–¯ˆĞ¹ìç9Ğ.û_Å'2å4í¥d+?§ Àì¬ÒÜ`n;}zM>¦~!;ßKQµœ>MìUòˆÀm3¿üñuZ³®È© ³0#Â£¸B¿Ù¨’+°L¨‚òwe5ÍğL¨³„sdí…«*: Í/–ÂØëmIÑ}‰½şï!³ğb¢ùoÿôÿD×_N§ç£ß‘áù«1éö.N&[uˆYOªÆ¦™yÚï?Û­mP@Õš©À¢ã»Òë¬M­9Ñ&¦JÇpÿ·i=y¨ÿ¼°Ì¡€.êkÛÇmšë¦Kåt-˜¦®”Ä#]º]<ëĞÏ|=G(¾¢‚ âÙìEş5Dµc}i˜ë ÕøíÔ¶lÆ›ÊÏˆKƒ@TôiÂÀb÷Òú£“ÉI¿7ä×Ø’¿ıØá50ÉO¿üåşë¿ü©k!ÂññáÁînà÷Œ¾î3È±½
+(¢1ê“¶ÃÙHïg½o/,i=ë‡‘]è5ã|$i€_/ÏÈã.3 NöÂ§Œ[$ÙLâ'%½Cwğa¥ã	Ä¾ğºÀò
+ô#YúÎƒ=|>ï²ã²ÓŒØœîz'Ü4ı]rTştD=v—€7I<5XÚ”ÿXĞ&ñ\¸„Ò'Ã_Ç]¹|œˆ¹¿‰¦?ËxËÃ…Xp ˆÕÛ€t‚&¢½©¯\X‘FÙ{×ºG<ıu‰¿"]€fÀÊDÖ@«£Ô"ìø…ıgh¯
+İ-£§òûsŒI&.ĞI¬ªZ¤ñ¬è¦Kšì2W–ˆÅãŸcÈôñŸÊ+z8ùØ»Y³ÊM"£«dTÏyÕAÆ£›³÷j„JÆ}*¹²ä³+½q)'¶Õl%õe¡fUíö§<şT@aªïÙ½Pœ—LSjºé„T„T'ÇÖ lãÉí!ßö“ÏÛäß*]–ÍoÀ®4L.c/l)“’Çti¨İmp‘4E˜tñ²ßpË\©‚­"Í¡N¾üõ.v:ødéKšwùV€úúŠÖÕï#Ô·	P¤êŸZÎaNm§ò¡åO69§i,Kÿç2># 3\"…r1:¦bg‚›nS‘Ü:(5\H˜{ÁVIŞšY#{Î+ŸÅcÏê`íçY«¹(©¢¾³vSñPHyL-È»ÖÖ<ABƒ$y„¼7€bz†ĞXAhCAh.‘ ”x¤*2
+„º.+êœY²fä		d€R¡!}còî³’ğƒP…CßÂ¡©.y!äj¢iŠ&ffñJ#(‹A² ªòîİ(…ı”-BùA^¤-QËç…PÉ¶¨Ş¹Pórn(+Ñig™Š÷¡¸…ü4ÿÒŒûpv>¤®äBfäÌgb/&³Ü2£YSÆÓHÄF(	^kÁœùªÜ9“Ã¶¢ ¬#3€8]b_(p>Mß»¨4¾Ì“_-Xâ"¬¶,×5Üfv©¶B¬SIv”Å¿á;vo¤#€0iKù`ôı²£øä’©€Z"<×AÔ}i!Kûm’§ı–15òÛ—¤syöÃÙùgOÔ«±òõÄ-~R$CJJ
+Ñ÷ã©íP÷?çIÿ{WÛ-|“šÌ	ğâİ˜É®"»X¹¥y6¼»»õé«’ÍE¨,º4?=²+ÚqÈÿU.HøÂ]Ğ¹‰]Iyz¤r¨DåÖ’¹ğsHçú½áéƒ!raäDNH+¨œ‹4,¹¢šÑ5ñUr7@ÙÉtoÍÕ¯•¦e¿‘É¨½™¾â©Q:§ã}İ4®iÉB.2Š§¢‡bÏŒı«U2PC"dMHšáÙ€)+o9Tÿ#‚šqÈA°øğ’ÈÊu¡{×õçµíËS¥È9KW» gqÀ=s'SÅØ jpgmcqs-œİÀ7"ñP”SaIKöÎ¾u5c"k{6Oa]‘x‹âP!6û ß¡VÀ’'9
+Ûv=º*
+îCÈÕ}ãPWC‘qØˆ-‘ÇWµ*Èñ§nÉhØĞš‡Pyıá6¹|H°Z‡hz-öcï ä0Ú5‚J…´'<µÒePcÀc´æëdI]W_°¸ú›xZ1ÁŠY0¦›—IA}ƒE »ì®;JÃq±Q—uZÖiÇ¢¥vÇ˜¨æ|ı¹2_¯Š[MØ«•»rl ä¸ Q8.(1rÎŞÀ=ŠÚ’.mg­9Ôä—ƒ®Õ’õtç M¯-dvCúšñÈÜnğ&-Ù„Ù_¶²a»­A™86mİCAõSøfñ•Ê‡ô¥á¯Ñ2¼TÒZşR–òÇÌ{iø«ÒK%­å/Ñ©9QX[¾È©6JÈ}&;Œp,ºïÙ1|XØqID6Æ×†Ù
+:ELÌİ ß¡šrÃşS`¢JJG•³L	WÍ‚SZÊQÑ h™ÎÛí]ôeŠÇ[İÍ-[µõ7Xã@cX²Ws‡åa\õµ-L£e)_|[Éf4WåûÅíÄ^”.+Ú4äähîrr¾s~ÖáÂUç´wvÙ6YÓú8V4ÎRüããW°@ÊÇPÅ‘Ãùf|cxÓkù†°$µ,ÊN>OùØ€ñğçú×HÇŞËÈa/°ˆ^^ì^§ÉGEjæDi¦=¹ö—Wå›¥‘¢;GŸ¾SîNbãP,‹µ „Tvú‡Äv"ÃÅØ-SV!6¤ï\ H3–Kš&E»dÛbéc"TÈÌ8%i"JdÚ‘ìllÿ*¼Wv+ïœÊµ3%	Ú·
+%ún§<ãXr©L:ç	wç"VÜñu3µèîlØìˆÒ	w*Õ´:3¬‹+#ê®@™ äÆ|Mºo„ÜæÿeBÁ¼*¶DÚA!¢HÿÏQŒLÔSK®ußÅTÆ¬',æ…PÂHHöhF9XjNU±"Rß
+±B¢™}®X¡»e¤ãĞw1—c:o9JˆRµ1â(`'¤ç{¨åâCJ‘­Šiıº7r•æÏC^2„åq
+ï¬ÓNÇ•c
+«“TÄ\ª;"+©ß™å)½V¤”t±ø’Ï~µÜ‹É|Õ-yá‡îú‡á‰–{Ã“ÃQo28"˜`kg<ùİp¬Úô‚¥ÏišïG1U¢8¶+v4\êåÒ·‚lQÌb,KÕXz´~úŸOZîÁß^{g,Ù}ZïÁ,øÀÈw¶Ò±`ŒêùiÂ?‚RˆœÃ¢dßSãÔË8f—)°Kú JÙK˜¬ÃÊE¥vühR ÉçÖca—Cdd)'0\ã—$h¬ô¶ğºa1+K»ô÷ÿ‡\º°Ü’w7¶•»Q¹a²^ª¥jÉ*ú†>æÃ"­>»Nf®‰Çæê¦Ámcwßñ2­Aš>×a‚.ÖdeLß¹è$\Û¾Ö+â«'K½Wj[k%–«v‹¬õ+<g~Oğ¡Ü9¦˜°Fd}Q[ÿ ã}ª«ZkÖ6j8Ñ‹ÖÄ½`	·Y< v9+ÿ”à¹;íw&(çóìvÆ?œ½z;õ0["á?ÿü`'–Ö“,c§÷êÕh0Ÿ¼ˆ‡şòGÒ[°â8¸¯ûFaÖéŸŸ£7½IìÙüçı—?az ïu‰’Ì<êı.9Ò_şòÏäH_sx³ŒNß¾>?Š×ıéñuC¬†©ıûMòôéùÑ  ñ¶ÿ†ê,9ş¬£ºwS]V‚+I‡#ˆ†‰º[±p§.ûåºŞæ:ãV^ì¢™áòCË¬ÉBJ1Äaä¡ô'P†İX·ÆÂ^ĞÇ‚‘<MÜ<{l`]âşµ±Ê77»ÑÛ£¡ä›“cÉŠrÛ ÈgÂBsø$
+ŸŞ˜~) Çf Ôüy™¼QnÍ-D‹Zş£õ­ÿóğ«¼lq›ŠE-8âı2¹¼OÛº(Ë\R-k‡ˆàÏ¯SYA¨¢ú hËÌ±W´%´å‘¶pØmI‹Úûè_Î‚z¤çºÔs+‰ÖX,“/;¶§¾¼ò!äÊB8+Öù´?´>óyGxçpÒÇºHƒÉküg|>ÄÎŞõğß^ïbØy8>5Ë…×ñ‹ÊT=´kı…)cYw÷„£Ï!êo+wĞã÷4˜9Ék
+¸V4Ùpïùg£}@ä¿$¦'İ³2—ßV¼{p ‘!SÎ}cÆ*¿ı%„:´?4gÍòŒWÌ!^êÚpNñÜ˜MµË¿ü÷ÿMÃahw†[ÿdS@ÚQØp7ôŠîÆ4K;jÍ…Ë…|ùQ.+îÊÔ×g˜=“t£V!MK:wğç-èhŠ®öw"ißßÛ†5±y=­.2ä­OšØ"˜-ºÉaÁ]YcnÄ5¨´rcx×$N¬‘
+kqi5ùÔv_ämš>¢•‹²„dõ2öUPÁŒÄóo/I—ı„
+"¹´Œ MèCOvyÌ“ß³©¿äYåÃBíÊáæ¹–íÏ/=GŸÛ¼3‘û[¿üÈ+ÃI®¹WNr(ìß­Æ¶²cMbW’ÅŸ—{ãÂ!ñM·r#+¹]c“İÉĞ‰0°Õ÷ËüœJ|Î6g½Œ‚¶XNSÓö´İ¹šÖù÷£&YåYˆ3›•Rˆ³kfåä˜3ñDØ2k-¹ ï O¶‹Ié3/)Rdy­¦¨n·
+ø	gÂƒ÷@µ‘§Lô«  ²J)&*Ã4©šLñŸT‹eX+ß;¿ú=åNÇÂëY d¥oy	Õbü¨J/ª=dæ±×Ò§Û]<Û'îÙÒFŸù¥=•×³g‡ºoÁ®ÎsX¯›\:ÌºäŞšÌS)T“3sÖ7ÈA<!E]&ÓÈ®åwÅÍÇÂRâdğ.˜eX,(lP¦Ä$k%ÊO’;ó²¤ò1^ğ×ÀSÁ_Œ¶º‘Ùê`Ÿù’¹_9ÒqRÅP0gO#¯):TÉ!Ï°Á‚Gé¨¶Lvñœ5Ë“¬bc* Ï-TDU	Ğ‘¡¨VINºŠV+­î?Ksà|´F5í¦õ•ZâP5k
+Ïáù4¿Y¢ñÔ4VİXŞ_…Gü–cOÊïäÛJÌ‘åé_Ê;Ô¢7*Y¢òjÙ–>ÚNÖq„Ü$¯F3U“P!Ô*k‡B£‘€jiÂëne/mß%¡D^ûWŠÂê§Q‰+fÏÛN0Vsª­"Vß™w,lİty½fÃòqM:~§4ÙÓçÔ[ ,ºÃÍuşÌğd±ŒiP»t‡êBv«ˆ_¥^V’xFtº\÷?X¶2‰‚{ˆúáú‡(½ÿô›¤ü×JA”¿oğ{4:>‰ÉZ”¼¤!©š4RT9mcUåÉ<ÜW&ß«­lT‰êZvY;Ğ}3LyÿÖd§ÜƒÕ$ãW;ÕSVPÉ[ºø
+´'="”Ju¤H.(”—YÛW&Ùc1²âˆÕBÕ^9úº®<ƒĞ´¢
+BE¹äòôä¬GzƒÓó3Òë³"ÌûO¿şæV%’jVuƒößì—S¤[.ˆI=è7‹«òX†²$‹Z-9¶ İD¸&aÚ‰¼),EÄM=V.BŞo×ğ
+ÃdˆìQ×›è‹n'’ÛŞBwo]6Û‚`ÕšjÌê¬(æ0×0TËğû¾¹jÍV6è?ìæ‡n®Ñ™ºÎ;êÁgïESøi:z]‚ò%Ë‡÷¼‚ë"¼n<üˆ¤'í2ñ…KÿæZ5\ñÑ¨.tV‹n(¼æPX
+Oúu6••ÏU™dy]7éxÔ/Â=JRPºº™Ê¶“_&/ÕØêÕ;ÜONğårµÀë&ªÊ^½Z§ñÔÓ±#ÜGõºtŒ/g€	ÍÖ–¾4¦d¥cˆŒÕeApâ€"Z>Ï¦¸\y&Ôİ+¢mª'C½c¡G–é¢Í¹qOÒ«
+/¦Q©Z’B!/Ç©¾Õù¨ÚãäêŒ}D>˜¤Ö;A?àJ'3“›‘#aà ±2é”âNİ‹kv?ó´ò‡?âfãË~0wÒ$NbAA›ò–\……Ô0= lÂüyQOjª=‚zù“1ˆrgô&²Âbxå+;“Ş#õu8Á;(%xm°‡&OJÍs.pÍpÁj–$½'I—|-Lå¬I;ô‹â	 y|J¯aoØ$ƒXèÕ9Äß³>ë.¬1ñØåÔmr²äR»ÿ,NçòV*¸é ,zAÁ·RĞ¤¼µÅß²	wJ|U‡=ÇUOä™†R9§ã3İÎ@8ôAÑ(ñ•©^@`vƒñ …C âïò+€¤!Æc± NäÔ	©IŸÙ–“/S³De¼Ó)}._`a¿6FRq¯‘íW„²ÁôßF¨{Åv¬)Ææ#›Šk5é+½­É¾Ù.ğ…–•¡lh´SèƒÓ%¹ó24’Pâ°ÊÛth$Hêá,zY|—<?èj•L)”²~#¤¬GÙIæºAh7dEVt£"Zií•&v„öl'-ØOÚµvô/G£ÁÙ„Şœ/1Ù¹ÿõ ?¹U£}[Z»rIÚì¾Wßè°Y¿óCU»Ú”é£JM)åZl¤F®’Á‹ãgƒoÕ†… š‘;áSêYqY¤¡š/Ò¾óÓáë6QN©Êúw†'ÇL}C†çç÷-H×ÛGù9A¸ãòîõ°0pØ)c!B¹s¯:.¶[î¡Q#eËF*RŞwàQŠ*w;Æg÷Ş¸ÑÖZ‹¨>{øuø?²à^E˜çÂâ7™ƒ@FºwÆ†kİ
+<„ÈËtâ‚ÌŒVv‡ÎXÛŒÜØÎ»¹‰Š‹á	+<óTºãO=ßA$ó+r£¨›Ã@û&]gjÀÃÂÜv¾ÃÒ}ñV˜&+ò¾B—@P1!Ş/€ÂŠ]é+ıÊ`i¢úª°êBR.h”¼òÉšfO‹ƒF‹’ÀÑÜ†0>İ¹pl–xíÄšaòU[r7+« 9³\%ÏuøSkÊ=Ó¼³Ñ3jÛXÜ'hÊ‡^£š{yE'š LAµReJSMª°íUèã ¿üñ¿Â¹Ş¡hƒÕµ‰N9m${û®¦i¢PÌ—»9Ø–¾ñyRn¥‚ø)ş²mÊÒº›*ñ1´“<#G+õ$¸ëD}ƒY¦Ç<‘fÂN‚İõ
+w®Xr«	B¾å¡‰^Ó‚‚p{V„z–”¼ ÖÌå5ã'ÔM*÷ª¤­ºy¡%‚ŠF×~ ¬ µ›=ñÖ1;µ»^–-ÖÛùRD
+,ÚÊ}(_óQï2ßš®Ç«ÖªxYêš>BXºıhp69™üî%ùò£œTOÏ¤š†ğ)0k`›ŠÕ–škä¢—jÑIÚŠRP¾Å¾,%»B]ÛBö;ÖO­ŒôúoË† Jèj•äé°ap@[%UĞŠ ^mñdóƒ¤r.R{y+ç¢ø×Æ„Z÷ãv‹™áNqÛ]~5“" Åá'ßÀR	›Åå†FBçkfÀ¤NˆÌ:Väf§ÜÄm@×ógFq}n÷ørBµòÀyPøcqò…0?¤‹_äå‡ŒKb;*äò›kZvV {‰Æ&Eîb©ÈHpt°¼¼…z IŸ§:<†J,vh3‘µFŸ/R}î}ûÍó£}Öç•é«õÈtíD/â¾
+ôê6µZà•¥å×z¦¢™PÒP´¡©h_cĞ¢æ"@u56§É¨Æè<€Ìà¢¾¢šGäËz¬FóÓĞ¶,, š¿«h£4(KÔqh"]Ç!WÒVàq¹}Ö¨MWóMRùûiZşŞSV|T=ªõ+BâÈN1C¦­‘!å|§EĞ²¼%ƒjÛQÎj«·¬¾]BºşòcLÁÄ‹•ziG=Õ'ªb“#ÁQùqµÍSÛŠÆ^œ8ÔrôÅ!áô‹K_£ïe^æğ‹C…ÈŞ:Î¿8d·RıYE×]xàÓ–÷İçÎ»8lNÉ®W+÷=''(¶aîáu@;¢+İñ˜€—MÍ‚õ9Á³ãc6f46?º‹İE6£:¨;@:?š:>JQùµ›º<Ê[´åê¨ĞØ99›Fg½!ÆƒŞ¨ÿš.z£ÉéàL%à¡¹ÄQÏ…Ñ¦ÊV7(áÎ°ÿ-¬11,„‡˜kbXîŠN=—`Sa ŒbË0DLlñ¸MéŠ…´q[Tï@ÀÃ7²–\OC¨`dÍ²ãÈÎúSğŠ©µòW?hê"}Ş?³¥®èà©°ı™ò·Ïò2s§¡ˆuÆôõƒ¨v1I(ü1+Ì%2(cÕ
+¶.•çÒĞcá¹´0É’(N÷3RäÄšÛw#’ñ¡´òü¶cB*HëÅ„ôÄ5H8£A-?†) ¾Q¥]'wf»?§M*§®w¹aƒ£·šp›‘:·e,ù&S94—<!,UğˆÎƒ"õdh/\£	F¬±º
+W<M&Ü/£ÉĞp½Û5—dâ#Şåäüìüôür™GG'ƒãGËH M-#
+[·Ù›Ü
+/3Ïäù´+Ä#«ù°ó½"*Ê{QHïèÊt	Ş´İâX_æ:8~üƒ6Ö-wK.)c&ƒ¦‹oœW·hgX±SÊkV}Oví
+ê“¬`W¨Í8ëDÁm&®åè·*q„›‹z«f™ODRËßÉ}è¬#mj2ÂZVZ±›66ê-Ûl«^sAèÂõ#…U8Í"cÚ‹ĞÉsª&Ùh3Ô¦=-}³*Á£*E?Åwåé][jêmI7¨Jhbıƒ•Õ4õ»;m'Š –ì~s¢Y+F0YÌ0xíÅ£éêÑtÀı2]=İ¹+ÓU5×Õçlº†Ç;£ÁñpĞg9Ñv…ùÇWš®TâGŠ¨wbÚ•ÈÛ¹]ÃÆ“DY¨±Ø°‡Œj¬µË!™´qåå~•æ¯`eCØè]l@¨º—®Ës{ÅAé´n*YäıpP¾ XlÒ´­ò,p¤çºÔu+s›AÑ£Òİ=’î¤y”~…Òİı‹æ®–Âæs–ù‚rQŞÙAotvôÆãÁx|g!İê&²‡#ÿm*§F"s'/¾å±Çl¬4ñ®©KÉ’zúN”ô'–‹§ş\ sŸˆ%e¹4^ú„QÇÖgK}õëˆôVpÜTã%¼:’åõˆ÷+ˆô‹xPRı³jR}s7÷viE‘:búîİ‹é_şÇŸÉ—#”ÑD,Õb÷!´”?·$ö#´z§·ÖŞÅ6M·ÜZáBìÆ®êç†²õTKÎŒ=}A%Ÿ¿Â22™İ“|Q™£`Ón¥ô^¹¥ñ®³Ó×N2Î’pq¼ÿ˜†ëÏ‹w¢st2îŸ¿Œ@è dØÙÓ óÂÌïGÁÀuÉÎtDècØÏ¾F~°ì“Î”ô¦?ù†kàV—u4Œ'a'	=ñOÈ H`]Ş‰°i‹~,H¢ÁËº¼é/{Q7Ï4@nEp“°J¹º5¥eˆ´Ü¬‡ç°º"Íİÿ\æÎ®Fù† Bà<âóÎXñDøk›tW¬†èÌI·ÊDPÄ(Ã½Ğ]–†÷Ì::Ÿ|ı‚pËşü.í&g(ÿD¾ÿA½|ªÂÈz¢H^alÊõ…û–R+çÀï]†äÛñ#Ô	&Ê¦(©¥g(?„ÀªF˜¶Õ’+€å ä/ÀC&)P½»JÔbÅÃÀ¦W„±­éVÑ’'OÈo¢Íªö'‰ä+¬÷-k?^ƒlYTIRÁ( <‚§¼E©Qu@•ŒŒµÜÚeóäñL‰…üD4¼~« íä‚ª$!?2zcVÔ65¿g1¹­œ˜a˜]æ$¯°Ä	°p¥„I<q¼§&^¶BÁ¡‰“M%ÛÅó?;\ù›S….Â¼Ü*LY:†nB„[Q“UV‰­”‚Ú¼¯š)·ºKg$2hÇÑöÁ;qT‰i÷6ãÊˆEdæŸê+û>Buï­\ÌèÊh'@VA;æÎ-†”RjåIŠ7h”
+9sÈ²Ó,ØÁDámVF³Šqæ©À|H¨önGò«S›ò‘<tÀŠÁëfLÜy Ä?“ãÿ>{If'qyA$äAT7‹kÙŸö..NÎ^½}Õ»gjÚçÚ¶Xe¾JeŠ‹¿j¦}#ŠiÁñp»ÏÑgÔé 1PX;olS÷¸Ø¡cIÃò¢˜¹¬³M:½Éˆ¸úœB‹©Mçscj ÛZê« {GæŠ:âÕc^	ü×ñ±\é’|é©áºXS×ÁIÔ›‘w¡y¥;ú’Â!w_¯vi‰Õ?8ûB³#Ü'î áğ?êVƒT¶uÄÏl‹Ì¡m†gê‹»`êj¨¦Àşùy©tĞéYº¹şY”ûÄ:ŸÍ–@9_ş}p	?×È©4Ä³qË˜M	‚5`>öi[Wvº•è×jAt1lxBÆşÕÎÂÖM‘©™¸Tı²K[·‘5÷äDls©Â4[ÌŒ c˜ÏÕÜmY¶RŸUÓ0´æ iK‰T»Í¦T0–ú‚¾¡5´¿/÷E­é­üœœ;&é3Ã>ô=ÀÈKkŠmiåKôyrQ¥nJ2ŸŒÛ¯ÔnÏï!T{ÿ=LéP1:“óŒ:E¬ò¿Ô¸wª¼ÀTV¹­B‘ëK¨Km¡Ù-	jÚR8–ƒ:æÓÊ‰ŠT.LÕ$"A@Û©n§•¼Õóz…`Ôª"2ßü³ŠPÅ¢ÔƒÀğû¡Ú|KD
+äCóPIËµ¢t¯ è¤ª>*;·­0ğv=&È´ŒÄ¸‰¯*ï4×”¯ÖÖT>—Û„ıóWg'““7r<öú?€NİïOG=–R¢~6>ŞMJ‰ÏñJ¡‚RÍrÄªg›Xø…ÂcEct÷)WQ1Ø-Ä„+€.¹Z}ö{ßõBcüÜ˜F%¼×¢º7†áà•BcÆJxÛÃ=ì
+"†OW­Ö­zfi£Páz-Ğ“¥Û¬İ%0Ÿv¢ÀxêØ¦©_ÃçOc*¢Üû×ÆÊm[xÏAIƒX({ÕK¢jé¿š‘ƒûb>Sğ7õŸ×-™—¯K¥Ø±r»€
+ÇG‰Ñ-:·ªÔšGàáÿã l‰›ÆˆÿD=‡3øR©ÓcÃ\ÁC£®tºÑ¢ñ¨›el«o ¾³bŸéA'§U¡ğ'PŠÊŞ-ûKÒâX?‘nªBíVÅô™	ÓÇ³2r›†
+:aÅÛ•¨KD¨jóğ«@¯¨4\±ù}ue$OiØW­…•~÷ÑFù½-›7çNDhİ^86uÀ\1¥{lbºêR}êŞĞøjùoùRuU$I¸4Ò™`ú5y…¡-ª©{ë%(m®´ÜúP}i”Ç9Ëº«yö‰åu·”³ïÖKöw‹ÛN¤q	ùaÄ¡|ÙñŠ+cû™/Ÿ­m½Á§û×xÄ³OèRŠ§ÂğØ@FAO»sMÃÚãŠB7òG>áÈÚV#z×şòJ™©aË›¨¯Ô3¨ËUú.®CpĞø¶MSmå…Ä«Ë@óa•È‰µò‹sHœó9ÏòÔT¸)ÎÁ<0oï«sR](Ÿ€P†¢¨¸¥m¡Í×[4€ÿŸÙ^»È˜ ¶T^¶2ac®¨±M¯¤ÚBª7õ]˜Yê–¾`öÌOmÚ®KÃ}ç’™ïà×ïyÈ&%C-fo,~G½ô ¸	EiXmÈ"ÈEÆŞÚÄwOÄßİÌ*U -|ªEfæ¸® ä23}ËDÁ·*ö“Vğîé’TÌc+Ê—=¦ì*»3Jqm_ò{ƒŞÀô¨©é«•¹¾t©#NrL¯§µ…£«§xeåªŠå"’4N3æ‡¦n½BÒÁi"éÀÚİ@ª¢‰jEg(‚º2%·âD|®·C°Êr‰U Tü`„äéŠ}¬îuhOsCÜ½w½å;ËÚ¨Æ€ĞV‘™—tÎşzĞŸÈg6Ä\ew¦£nLïi3Ôá\Pg—÷­)%§,°ÄÍ	pxLñuoR|0nÌt4K¶ï1İ—Rº¯R«aS¦×ZX²â-ÉØû
+¬‰Q%Àv¢‘¹JuáĞ™Á¶ŞtêƒÒ¾¾­Û0| ÙZVb@b<hRËªj3§$Da÷`ÿ€¼:@tÑÀkßíÆ¹l$l ŸlXù{àtD§†‹Çëo@ã0¼;>]³`4Á`6t´ÂÌ|ï0nÔpYDÇ­n[êÖr4Š´áªÎ±
+ê=İ)ö…F¢œ§Q*É Z·<P7üôXÛ-¹Ç{üß†Be•nY?ºvTHÍæÊ÷ÊrøÙ3ZíZ{pÿªèZ{…k m–´­—A~há®tÌ#>@@*&o¾~ú,Q¯’³‚©·˜U-*<|¦„¨Y^“—”7÷®bôõññáA)ÇEØl¬´BÔ{{­\|¯²AP¹[ZS~èX_æ:8³üƒvj[6ï¬›«§Ï@ÑAQ%‘ÉFÑ¥Ì¡ıPÆdNŸéô¢¼2OÈ”ù“‹C©³g(ì¡ôYÙwÕZ:£êæêû§?ÿ%Ã¦ğ’¤u¬ì,oÖÄ{è–îbÚ-Õr%÷Õ_ìõ¿yñt³ˆ™ÅšUd)åaåWòÒĞZõ“Zhów	co0‡,ŞHæ™Dœÿø`çùÓÃgÇÏoqºı–îGÛy÷pæ—?ı_2ƒ'8ú,¶$'÷¹P•¾yzô0R,«‘1Ï÷¿ =fx¤Ü6R»nœ–,ce6~vŒ|{uÛÉ­?Ìn·}™½R‡ô+¾†œÌF“ªdO1.lÓ“Ùæ5Œ´ØW¬{×„¡løZò)wÊP+‘)ûN®#´x™íó«×­W7ù&%{»$´}‰r$È‡xÚ]ÏÕX¬c9>	,ı ç#–"TgN—¾ëËöÈh>c…Qmßƒ'V¦1¦umC+Oá§I42ÑWğ¤iß`É&Ï7¾¯û3½Ö¸±ü™D­õ™ŒÁÄR³üŒ†G´«–Üv|;N·¨¶NÛŒku½‰2.Oµû6ÄÓ·|²%‰n+øş°cò$º ÏÉxí¢èS®ÓıªŞ8^!ç¶%Ùä_Ÿ¾øôÅÿ  ÿÿ ÎÑI<

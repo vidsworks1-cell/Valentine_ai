@@ -1015,7 +1015,8 @@ fun BacktestLabSection(
             }
 
             if (walkForwardReport != null) {
-                items(walkForwardReport!!.windowResults) { win ->
+                val wfItems = walkForwardReport?.windowResults ?: emptyList()
+            items(wfItems) { win ->
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         shape = RoundedCornerShape(12.dp),
@@ -2567,7 +2568,7 @@ fun BacktestLabSection(
                                 if (lastReport != null) {
                                     Button(
                                         onClick = {
-                                            val singleFormatted = BacktestReportExporter.formatSingleBacktest(lastReport!!)
+                                            val singleFormatted = BacktestReportExporter.formatSingleBacktest(lastReport ?: return@Button)
                                             BacktestReportExporter.copyToClipboard(context, "Trade Ledger", singleFormatted)
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
@@ -2598,11 +2599,11 @@ fun BacktestLabSection(
                         }
 
                         if (lastReport != null) {
-                            val detailsText = lastReport!!.reportDetails
+                            val detailsText = lastReport?.reportDetails ?: ""
                             Spacer(modifier = Modifier.height(10.dp))
 
                             Text(
-                                text = "Lumina Executed Strategy: ${lastReport!!.strategyName} | Total Trades: ${lastReport!!.totalTrades}",
+                                text = "Lumina Executed Strategy: ${lastReport?.strategyName ?: ""} | Total Trades: ${lastReport?.totalTrades ?: 0}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary
@@ -3101,7 +3102,8 @@ fun BacktestLabSection(
             }
 
             // Suite Summary & Risk Ratios
-            if (scenarioSuiteReport != null) {
+            val currentScenarioReport = scenarioSuiteReport
+            if (currentScenarioReport != null) {
                 item {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)),
@@ -3123,30 +3125,30 @@ fun BacktestLabSection(
                             ) {
                                 MetricCard(
                                     title = "Sharpe Ratio",
-                                    value = String.format(Locale.US, "%.2f", scenarioSuiteReport!!.aggregateSharpe),
+                                    value = String.format(Locale.US, "%.2f", currentScenarioReport.aggregateSharpe),
                                     subtitle = "Excess return / Vol",
-                                    valueColor = if (scenarioSuiteReport!!.aggregateSharpe >= 1.5) Color(0xFF2E7D32) else Color(0xFFE65100),
+                                    valueColor = if (currentScenarioReport.aggregateSharpe >= 1.5) Color(0xFF2E7D32) else Color(0xFFE65100),
                                     modifier = Modifier.weight(1f)
                                 )
                                 MetricCard(
                                     title = "Sortino Ratio",
-                                    value = String.format(Locale.US, "%.2f", scenarioSuiteReport!!.aggregateSortino),
+                                    value = String.format(Locale.US, "%.2f", currentScenarioReport.aggregateSortino),
                                     subtitle = "Downside risk adj",
-                                    valueColor = if (scenarioSuiteReport!!.aggregateSortino >= 1.8) Color(0xFF2E7D32) else Color(0xFFE65100),
+                                    valueColor = if (currentScenarioReport.aggregateSortino >= 1.8) Color(0xFF2E7D32) else Color(0xFFE65100),
                                     modifier = Modifier.weight(1f)
                                 )
                                 MetricCard(
                                     title = "Calmar Ratio",
-                                    value = String.format(Locale.US, "%.2f", scenarioSuiteReport!!.aggregateCalmar),
+                                    value = String.format(Locale.US, "%.2f", currentScenarioReport.aggregateCalmar),
                                     subtitle = "Return / Max DD",
-                                    valueColor = if (scenarioSuiteReport!!.aggregateCalmar >= 1.0) Color(0xFF2E7D32) else Color(0xFFE65100),
+                                    valueColor = if (currentScenarioReport.aggregateCalmar >= 1.0) Color(0xFF2E7D32) else Color(0xFFE65100),
                                     modifier = Modifier.weight(1f)
                                 )
                             }
 
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = scenarioSuiteReport!!.executiveResilienceSummary,
+                                text = currentScenarioReport.executiveResilienceSummary,
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 lineHeight = 15.sp
@@ -3155,7 +3157,7 @@ fun BacktestLabSection(
                     }
                 }
 
-                items(scenarioSuiteReport!!.scenarioResults) { res ->
+                items(currentScenarioReport.scenarioResults) { res ->
                     val statusColor = when {
                         res.resilienceStatus.startsWith("PASS") -> Color(0xFF2E7D32)
                         res.resilienceStatus.startsWith("WARN") -> Color(0xFFE65100)
@@ -8287,622 +8289,22 @@ private fun DrawdownAlertNotificationModule(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("ğŸ† Variant A2 (Adaptive Volatility)", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE2E8F0))
-                                        Text("${currentA2Weight.toInt()}% Weight (Sharpe 2.15)", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(5.dp)
-                                            .background(Color(0xFF1E293B), RoundedCornerShape(3.dp))
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .fillMaxWidth(fraction = (currentA2Weight / 100.0).toFloat())
-                                                .background(Color(0xFF38BDF8), RoundedCornerShape(3.dp))
-                                        )
-                                    }
-
-                                    // Variant A (20%)
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("âš¡ Variant A (Core Momentum)", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE2E8F0))
-                                        Text("${currentAWeight.toInt()}% Weight (Sharpe 1.82)", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFFA5B4FC))
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(5.dp)
-                                            .background(Color(0xFF1E293B), RoundedCornerShape(3.dp))
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .fillMaxWidth(fraction = (currentAWeight / 100.0).toFloat())
-                                                .background(Color(0xFFA5B4FC), RoundedCornerShape(3.dp))
-                                        )
-                                    }
-
-                                    // Variant C (20%)
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("ğŸ›¡ï¸ Variant C (Mean Reversion Safeguard)", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE2E8F0))
-                                        Text("${currentCWeight.toInt()}% Weight (Sharpe 1.64)", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34D399))
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(5.dp)
-                                            .background(Color(0xFF1E293B), RoundedCornerShape(3.dp))
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .fillMaxWidth(fraction = (currentCWeight / 100.0).toFloat())
-                                                .background(Color(0xFF34D399), RoundedCornerShape(3.dp))
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(6.dp))
-
-                                Text(
-                                    text = portfolio.rebalanceActionSummary,
-                                    fontSize = 8.5.sp,
-                                    color = Color(0xFFBAE6FD)
-                                )
-
-                                Spacer(modifier = Modifier.height(6.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Rebalance Target Preset:", fontSize = 8.5.sp, color = Color(0xFF94A3B8))
-                                    FilterChip(
-                                        selected = activeSplitMode == "60_20_20",
-                                        onClick = { activeSplitMode = "60_20_20" },
-                                        label = { Text("60-20-20 Optimal", fontSize = 8.sp) }
-                                    )
-                                    FilterChip(
-                                        selected = activeSplitMode == "50_30_20",
-                                        onClick = { activeSplitMode = "50_30_20" },
-                                        label = { Text("50-30-20 Equalized", fontSize = 8.sp) }
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        forecast.riskDriverFactors.forEach { factor ->
-                            Row(
-                                modifier = Modifier.padding(vertical = 1.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("â€¢", fontSize = 10.sp, color = Color(0xFF818CF8), fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(factor, fontSize = 9.sp, color = Color(0xFFE0E7FF))
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Surface(
-                            color = Color(0xFF312E81).copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(6.dp),
-                            border = BorderStroke(1.dp, Color(0xFF818CF8))
-                        ) {
-                            Text(
-                                text = "ğŸ¤– Sentiment-Aware ML Recommendation: ${forecast.proactiveMitigationRecommendation} (Incorporating ${if (dynamicSentimentScore < 0) "Bearish News Spike" else "Neutral Market Sentiment"} multiplier)",
-                                fontSize = 9.sp,
-                                color = Color(0xFFE0E7FF),
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(6.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (actionBannerMessage != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    color = Color(0xFF166534).copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(6.dp),
-                    border = BorderStroke(1.dp, Color(0xFF22C55E))
-                ) {
-                    Text(
-                        text = actionBannerMessage!!,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF86EFAC),
-                        modifier = Modifier.padding(8.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Suggested Corrective Actions Header
-            Text(
-                text = "âš¡ Suggested Real-Time Corrective Actions",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF38BDF8)
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Action 1: Auto-Rebalance
-            Button(
-                onClick = {
-                    onSimulateDrawdown(7.5)
-                    actionBannerMessage = "âœ… Auto-Rebalanced Open Contracts: Reduced exposure by 40%. Drawdown re-anchored to 7.5%."
-                    val newLog = com.example.aza.strategy.DrawdownAlertActionLog(
-                        timestamp = "10:52 AM",
-                        actionType = "AUTO_REBALANCE",
-                        description = "Scales position size down by 40% and liquidates high-risk long leverage contracts",
-                        preActionDrawdownPct = prot.currentDrawdownPct,
-                        postActionProjectedDrawdownPct = 7.5
-                    )
-                    logs = listOf(newLog) + logs
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Execute Auto-Rebalancing (-40% Position Risk)",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Action 2 & 3 Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Button(
-                    onClick = {
-                        onSimulateDrawdown(5.0)
-                        actionBannerMessage = "ğŸ›¡ï¸ Delta-Neutral Futures Hedge Placed: Protected $10,800 USD capital. Drawdown dropped to 5.0%."
-                        val newLog = com.example.aza.strategy.DrawdownAlertActionLog(
-                            timestamp = "10:53 AM",
-                            actionType = "DELTA_HEDGE",
-                            description = "Executed inverse short hedge contracts on BTC/ETH futures",
-                            preActionDrawdownPct = prot.currentDrawdownPct,
-                            postActionProjectedDrawdownPct = 5.0
-                        )
-                        logs = listOf(newLog) + logs
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488)),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("ğŸ›¡ï¸ Apply Inverse Hedge", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Button(
-                    onClick = {
-                        onSimulateDrawdown(2.0)
-                        actionBannerMessage = "ğŸ›‘ Emergency Circuit Breaker Triggered: Speculative trades frozen. Drawdown safely locked at 2.0%."
-                        val newLog = com.example.aza.strategy.DrawdownAlertActionLog(
-                            timestamp = "10:54 AM",
-                            actionType = "CIRCUIT_BREAKER",
-                            description = "Froze high-volatility new trade entries and flattened speculative margins",
-                            preActionDrawdownPct = prot.currentDrawdownPct,
-                            postActionProjectedDrawdownPct = 2.0
-                        )
-                        logs = listOf(newLog) + logs
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("ğŸ›‘ Circuit Breaker", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Real-Time Breach Simulation Chips
-            Text(
-                text = "ğŸ§ª Test Real-Time Breach Threshold Notifications:",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF94A3B8)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                FilterChip(
-                    selected = prot.currentDrawdownPct == 3.5,
-                    onClick = {
-                        onSimulateDrawdown(3.5)
-                        actionBannerMessage = null
-                    },
-                    label = { Text("3.5% (Normal)", fontSize = 9.sp) }
-                )
-                FilterChip(
-                    selected = prot.currentDrawdownPct == 12.5,
-                    onClick = {
-                        onSimulateDrawdown(12.5)
-                        actionBannerMessage = null
-                    },
-                    label = { Text("12.5% (Warning)", fontSize = 9.sp, color = Color(0xFFFBBF24)) }
-                )
-                FilterChip(
-                    selected = prot.currentDrawdownPct == 15.5,
-                    onClick = {
-                        onSimulateDrawdown(15.5)
-                        actionBannerMessage = null
-                    },
-                    label = { Text("15.5% (BREACH!)", fontSize = 9.sp, color = Color(0xFFF87171)) }
-                )
-                FilterChip(
-                    selected = prot.currentDrawdownPct == 18.2,
-                    onClick = {
-                        onSimulateDrawdown(18.2)
-                        actionBannerMessage = null
-                    },
-                    label = { Text("18.2% (CRITICAL)", fontSize = 9.sp, color = Color(0xFFEF4444)) }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Action Audit Trail
-            Text(
-                text = "ğŸ“‹ Real-Time Corrective Action Audit Logs (${logs.size})",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFCBD5E1)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-
-            logs.take(3).forEach { log ->
-                Surface(
-                    color = Color(0xFF0F172A),
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "[${log.timestamp}] ${log.actionType}",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF38BDF8)
-                            )
-                            Text(
-                                text = log.description,
-                                fontSize = 9.sp,
-                                color = Color(0xFF94A3B8)
-                            )
-                        }
-                        Text(
-                            text = "${log.preActionDrawdownPct}% â” ${log.postActionProjectedDrawdownPct}%",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF4ADE80)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun LuminaWeeklyAutonomousReviewCard(
-    viewModel: AppViewModel,
-    modifier: Modifier = Modifier
-) {
-    val weeklyReviews by viewModel.weeklyAutonomousReviews.collectAsStateWithLifecycle()
-    val latestReview = weeklyReviews.firstOrNull()
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Color(0xFF334155)),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // Header Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "Weekly Review",
-                        tint = Color(0xFFA855F7),
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Column {
-                        Text(
-                            text = "ğŸ¤– WEEKLY AUTONOMOUS SELF-REVIEW",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = latestReview?.reviewPeriodLabel ?: "No Review Recorded",
-                            fontSize = 9.sp,
-                            color = Color(0xFF94A3B8)
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = { viewModel.runWeeklyAutonomousReview() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7E22CE)),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.White)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Run Review", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (latestReview != null) {
-                // 1. KPI Grid
-                Text("ğŸ“Š Core Performance & Execution KPIs", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE2E8F0))
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    KpiMetricBox("Expectancy", "+${String.format(Locale.US, "%.2f", latestReview.overallExpectancy)}R", Color(0xFF4ADE80), Modifier.weight(1f))
-                    KpiMetricBox("Sharpe Ratio", String.format(Locale.US, "%.2f", latestReview.sharpeRatio), Color(0xFF38BDF8), Modifier.weight(1f))
-                    KpiMetricBox("Profit Factor", String.format(Locale.US, "%.2f", latestReview.profitFactor), Color(0xFFFACC15), Modifier.weight(1f))
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    KpiMetricBox("Max Drawdown", "${String.format(Locale.US, "%.1f", latestReview.maxDrawdownPct)}%", Color(0xFFFB923C), Modifier.weight(1f))
-                    KpiMetricBox("Average R", "+${String.format(Locale.US, "%.2f", latestReview.averageR)}R", Color(0xFF4ADE80), Modifier.weight(1f))
-                    KpiMetricBox("Exec Quality", "${String.format(Locale.US, "%.1f", latestReview.executionQualityPct)}%", Color(0xFFC084FC), Modifier.weight(1f))
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    KpiMetricBox("Confidence Calib.", "${String.format(Locale.US, "%.1f", latestReview.confidenceCalibrationPct)}%", Color(0xFF22D3EE), Modifier.weight(1f))
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // 2. Strategy & Symbol Rankings
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("ğŸ† Best Strategies", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4ADE80))
-                        Spacer(modifier = Modifier.height(3.dp))
-                        latestReview.bestStrategies.split("|").forEach { strat ->
-                            if (strat.isNotBlank()) {
-                                BadgeTextPill(strat.trim(), Color(0xFF065F46), Color(0xFF34D399))
-                                Spacer(modifier = Modifier.height(2.dp))
-                            }
-                        }
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("âš ï¸ Worst Strategies", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF87171))
-                        Spacer(modifier = Modifier.height(3.dp))
-                        latestReview.worstStrategies.split("|").forEach { strat ->
-                            if (strat.isNotBlank()) {
-                                BadgeTextPill(strat.trim(), Color(0xFF881337), Color(0xFFFCA5A5))
-                                Spacer(modifier = Modifier.height(2.dp))
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("ğŸ’° Most Profitable Symbols", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
-                        Spacer(modifier = Modifier.height(3.dp))
-                        latestReview.mostProfitableSymbols.split("|").forEach { sym ->
-                            if (sym.isNotBlank()) {
-                                BadgeTextPill(sym.trim(), Color(0xFF075985), Color(0xFF38BDF8))
-                                Spacer(modifier = Modifier.height(2.dp))
-                            }
-                        }
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("ğŸ”» Least Profitable Symbols", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFB923C))
-                        Spacer(modifier = Modifier.height(3.dp))
-                        latestReview.leastProfitableSymbols.split("|").forEach { sym ->
-                            if (sym.isNotBlank()) {
-                                BadgeTextPill(sym.trim(), Color(0xFF7C2D12), Color(0xFFFDBA74))
-                                Spacer(modifier = Modifier.height(2.dp))
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Highest Uncertainty Strategies
-                Text("â“ Highest Uncertainty Strategies", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE2E8F0))
-                Spacer(modifier = Modifier.height(3.dp))
-                latestReview.highestUncertaintyStrategies.split("|").forEach { strat ->
-                    if (strat.isNotBlank()) {
-                        Text("â€¢ ${strat.trim()}", fontSize = 8.5.sp, color = Color(0xFFCBD5E1))
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Biggest Mistakes
-                Text("ğŸš¨ Biggest Mistakes Identified", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF87171))
-                Spacer(modifier = Modifier.height(3.dp))
-                latestReview.biggestMistakes.split("â€¢").forEach { mistake ->
-                    if (mistake.isNotBlank()) {
-                        Text("â€¢ ${mistake.trim()}", fontSize = 8.5.sp, color = Color(0xFFFECDD3))
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Recommended Improvements
-                Text("ğŸ¯ Recommended System Improvements", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34D399))
-                Spacer(modifier = Modifier.height(3.dp))
-                latestReview.recommendedImprovements.split("â€¢").forEach { imp ->
-                    if (imp.isNotBlank()) {
-                        Text("âœ“ ${imp.trim()}", fontSize = 8.5.sp, color = Color(0xFFA7F3D0))
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // AI Performance Narrative Box
-                Surface(
-                    color = Color(0xFF1E293B),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, Color(0xFF475569)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text(
-                            text = "ğŸ§  AI PERFORMANCE NARRATIVE & CAUSAL DIAGNOSIS",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFC084FC)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = latestReview.aiPerformanceNarrative,
-                            fontSize = 8.5.sp,
-                            color = Color(0xFFE2E8F0),
-                            lineHeight = 12.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Month-over-Month Comparison Accordion / History
-                Surface(
-                    color = Color(0xFF0F172A),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text(
-                            text = "ğŸ“… MONTH-OVER-MONTH PERMANENT EVOLUTION COMPARISON",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF60A5FA)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = latestReview.monthOverMonthComparison,
-                            fontSize = 8.5.sp,
-                            color = Color(0xFF93C5FD),
-                            lineHeight = 12.sp
-                        )
-
-                        if (weeklyReviews.size > 1) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "ğŸ“œ Stored Historical Weekly Reviews (${weeklyReviews.size} permanent records):",
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFCBD5E1)
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            weeklyReviews.drop(1).take(4).forEach { historical ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(historical.reviewPeriodLabel, fontSize = 8.sp, color = Color(0xFF94A3B8))
-                                    Text(
-                                        "Exp: +${String.format(Locale.US, "%.2f", historical.overallExpectancy)}R | Sharpe: ${String.format(Locale.US, "%.2f", historical.sharpeRatio)} | DD: ${String.format(Locale.US, "%.1f", historical.maxDrawdownPct)}%",
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF38BDF8)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                Text(
-                    text = "No weekly autonomous reviews generated yet. Click 'Run Review' to compute and store.",
-                    fontSize = 9.sp,
-                    color = Color(0xFF94A3B8)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun KpiMetricBox(label: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
-    Surface(
-        color = Color(0xFF1E293B),
-        shape = RoundedCornerShape(6.dp),
-        border = BorderStroke(1.dp, Color(0xFF334155)),
-        modifier = modifier
-    ) {
-        Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, fontSize = 7.5.sp, color = Color(0xFF94A3B8), maxLines = 1)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(value, fontSize = 10.5.sp, fontWeight = FontWeight.ExtraBold, color = valueColor, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun BadgeTextPill(text: String, bgColor: Color, textColor: Color) {
-    Surface(
-        color = bgColor,
-        shape = RoundedCornerShape(4.dp)
-    ) {
-        Text(
-            text = text,
-            fontSize = 7.5.sp,
-            fontWeight = FontWeight.Bold,
-            color = textColor,
-            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-        )
-    }
-}
-
+               xœì]_oãHrßOÑ'ÌìQ8›#Q’-Ù»Pµ#¬ÿEòxÁ€–ZÏ©kRckçÜËİCäp™C6›ì]à‚¼$òmöd?Bªš”DŠÿ%ÚãI¦aØÙ««êW]]İ&$&]Ò;G(ığİoC®4¦k¦Cd‰òP›9ú[J®,CstCwåÒY¦Ó×¿¦äÒ¢=s½¦úxâÀÃÎê‹Ø²ŒáX†Åà…‚…Ê]§£Jj³S)—?‹ëQtŸ½Ì£¦#K^Õ5¡|ÿœxÍı‰Æf”HbµQPgkÍV»ÓÌØÙûL¹ZÖyìSk¨tŠ:õ>f.‹Ié†qªİ½Ö‡ÎDÈNs^vÂi#4Äá,gÉkmp3fÖÜ
+kZVUé¨Ö*ï‘¾ CÅb&e0g3*Ô°l”É»ÌÉEkL»ÒÓ’æ/]òå#¿wÒFL8ºeB—„ /HµR+e…aiĞØ­EN–Çø»N¦¬Â“)Û‹k5E©ò<[í=ëv'¡Û£½ÌuM,¦zF3dÆ4sL§0P±ï›ØŸiÚ¢Î-¥föšßRæè¨×ĞÇæ²ÖågQ_”]yyŒEá¢åjåï¿ù£>€K(Ğ{0Ÿ>¼Hƒ‹ªØ”
+ê«ÜhÕ;Ê'¸øÙÓ#ÀÅƒ£…Ç÷O-”OhñÁÑâ‡ïşñÿó_¿õÏÉ)ÕLÒ£Ğ=™¶¯èx®±á%<êE­5êíÚÑÑ'ğøÙÓÃƒ‡òğK—ï<Òs¤fáj˜	QÚßãå·ï©5q•“©ãä„†fsF–¡["£×š¡™*óiëÏ§S-²¡BXce*Ö[-Y=è´ÓIŸÅ53„ßY ÛÆá[¡£ÈVoÁÀU£¹8Ø[ò¹ÔØ˜:ä‚Q›:ÇÑ€f£º\keuŸutÆ¢LôYv=jSƒ:„VQs½¥ı™¡;0‘Ğ¯/Hé òFÂŸRvCÉ2CÜ@…ïÂUúj$÷Ùë4´kjğ]²Tö%ü!ç3GŸjÆ&9íY9#À0Ê6*ojÅRvUã.”mTökœ²ê/æšô>$m“ë‰› /é°™‰éÔSTèÈbt ÙÈtû¦Í`XæËb¶¯Tm0rø²ÿÓDdÒÂQ]iÃ¡n…¥öƒwÕl:³@}™EWzn°_ıKÏª•Ø¬6îWMZ¤s^Â,ßrÔªg3œx÷İ¹ôÿ(¦ûjE=ìtR*~ ÆOƒşşœÁHh2ÃE,»ª°F¬–Å5[š1›hğº"6F)Ìf£
+Y#¬ÖƒtV½¶Ø²Å?ôfİPy|/Ì-ñäNcÑl¶¥gWÂúü_ÿôADt–}ùVCwî	¬ÏÖ5´2É³w+1c–«ËOuGó÷ÁÜ÷Dèš‹Ñ
+ßÍ1ÖGD.LmªVõè:ş3R)“R‹j z&äŒŞÚÀú-jØ””ÎèÜa N5vÖÈªtéLç†£PVÎ€I›¬Z V²µ%é}:Õ¹/`'yºb-¨á§Á'BŒ³é®[š	"pJm[Sò£/ˆ97Œ(İäE<<EÕƒƒF­ízœho'ÒÙDY’”FCSœ'‹®'²Q„ÿÙ1)%ˆ@¥sÆ:°bKE`ŞÚ‘•IIâïf,‡Ÿ&òi:ÓU¥„yñ¸n<¦6ÚÂÀ ÷x\„»â¶ÉKª77Ñ3·T²¸e¶®±G5cÿ”XDİ“èŸ¼jääå›´Øˆ‡@ÎrNBF!5ĞÑ©yîXû«Åe _kî8–&ŸoõÉ–Ù×4‡¶™v;´nMáPlDsN”ÔàÌ|ûëa…FM é gÌ>†ùÎñ9½›Yö ëzAê•ç"Y¶Jİ‡¢€³!q,x.–"»ñÌ¤·'ÖZÌé6TÔ¾ÖDZtèx!.+–°Z]B‰Í Ìd;P©Z9nHD>MĞ.1.\ó•äW—çozjK>‘Ï5¡ØÚ¦Ï<oa©æ4µ	EçldRN—@D3‡ÄĞ1×Á,€Œ`”}\`Ã£ÀÀ œ†Á’Ô	MÏ˜çïZ’æbÀİbÌrDÏké{“Pe{½`ÖÏùj7X#Ì]FÍƒÉ°Æ62tÛ9	îÄ–ÉOøó°ªŠ‘E¬Á6i`ÓØâ5ÿÊ%Ô>š|«„$·"5ëÊa9BÏ&àZ3×Ò½bA!”]èª€¿lÑŠØ£#FíÉŸeœ¥ ¡µ°Ù22“P=ˆ±	Ò–B1åâñu©©Õ;:˜;4¨Ğ„ö‘£/–¼Ş63:Óö2WœÒ»¡\²r–Èç¤†ëöÀûÈuü6Ó\^Ò°iÅgq€)4Ü<!àhˆ•x£9<–{›mj8Úşr¡Ò™; h%!Û…#;& n×¹ö¬ZÙkV*äU¿MÚLÂø dÈ¬ÙÌ…èRŒ`z(Á‚“Z2œ¬I´„”¶zr)¿y©¶¿LÂL˜âÉßè&îSĞcsÈ„Ór0¤u©¼P/_’‘Kî”fŠÂ^W†ÀÄÅ¯ŞcßäÂL1>Ó1¥}To6£0S~\Á©©=|”s}´;y63¤ë1
+·H\>·[„¿êÔ´ºùQ§”©9XEgƒ¹î£Úö’é°Â`¨lú3"Œá†…HÈ1ëkjú­(Ï°7 nšC¤'£nêyÕÒí)¯º—oZ=UşJíåS9¤Œkœ¾]¾ãP]ÒPL
+¢5;‚÷`Å Ál‰§ë‘k7zT$}Ô*¨­HÒÁÓVA¿ÛÀBtOğ[AÎŒµÃ»:˜O¡ àapn“]?|÷§‡,¶®õr‚–>ŒœYtlÀ[°S|Ñ©]}Ş6ôN>¨]³§l§íùúöwc´îóÖÄF´m	uµ8—¦h¨Ãea}³¹%M>'Â™Å¦š±©w³îb1Ô™,–œXácÓÛ‚¾Ö˜	káŠFívZ­T/?*±E»ñˆİàÄF[Fyù£¬ÄnV«Kì¦(Kl¨ğÑ‰m±•^÷²«È'©­vê2P»0÷\5ò|Ç%Óôà¨Ó0ûıß&í:xÕ õ'<{‡Ö÷¿İGy¸º•V»¡V‹‡n>.L5¡Vö…µÀã¨˜–œû•NõP’İdÌ,œ5;*ÊFŠÜn‹3€ã{òÆ7ç‰nÆ¯Š;PQ@\QR°0Ï|jF{±W“b£=şŠK·¸Zqßÿ5qŸ¬×Ó÷ùB)Rö“ı%òï+/S¶-ËÍ”ü6áD>·Á£›D­`6SŞ8Lé_r‹ËQ~‹ûçäûş½Ç;ÉÎˆûç)•™âI½s˜–ÎMa2×å¶ÚLpÆE¿I˜	~ºÿL?W¬)K»6èg£¹INæSİÔ^Szc,pÃÉ´¦ÖÜîÑ·:½U46tg	¿aÀ¬qŒÏ«å7wœKåq¼Ò~Õ»Tè»»åÍ¸•Û¸C»ªW¼ì-±Ğ”í¾vÚkİ™œè#:Xêéj¬m8ÛqË@ãv@¿3Û9gg`¦	¯G¶štáã•£h _2xª]ÌõaAĞV76[O­V¯6ş&|êz½ÖçYız;AÑ/1­ê,Ê?7ÖäÃîÎ%£å(n8²|UÆA$ß•k}
++ˆ+ÊCš¿ ÁMkù–ÚÖ”&=Elh—\i&.ÿ'h>Gç£ò§m6ÃœS|—\ªäˆ—Â´íö9&——Œ’ìğÂCO_«êW'I0åìüôüUŸôÕ“Î~O½êª¯s GüF»?wQÈ!¾èÍ&™©ã×ª?ÿ{A™nOø#şÎ,Ïx´.h±av‚¥[%ù-’ìPz”q‹ÍZlnF#§P~¨m‰CU’µØm	O‹\¸8 Å½OWš1§¶°VÏ®y„èä[ºÕs-İ
+Ïá+Ç½€.s%cK½“p‚Á;œ67Wª5ì¨Éqú:®›»îÀT"ü-0’Â¤ñ«"ùê¢K¾dz8h¹ûôşo¿w4Â½Üx\ïsâOàÔAvîı¨\‡é·?» ŸÁRÙbƒ$ï¿šé§Ôaú Ïk—Ô» >l*ıäÙ;0ı@àDNHG8±0¬Q|Õ‡—ÏEi™ü“'ZµhëZÊ÷½Ò^xA±¹šÏĞ?ï–îAÅùzgóÂ¼ly/¼^ŞºS°²éq…åîÕŒ—vºÕ‘¥ÚÈÚ­ÜøxÙÚXc #&óa5DÓ©vç[e—q™Ø|9’jÊöó-{±¹½­dDsK÷ŠTpä/ğ”§³Ø†ft© ½:"§Tšîµ6ÿÿ8R±Ì‘>¤ˆ%
+çZÜ†ÄƒU%¼Æc "è,Iíšª>(#Á€¬$¢
+ã1K œıÅôÚ2@åš70Ôp¨ËãÏÌÎ¾aßŸ-ŒÖğF«S{GËÉ/È»IN¹æ#ÀT×ğq= è1¯PúeÉ¿ÃCĞÒ'£)Æ3Šº}f9-f\Hõ±cjiÃ1E¢^Àœ{u€`L… UúAy³^ñ“N2)ı€oÒ9Üè§É~ßóÔ|ëª¢9p¹áıHx‹Cø(X°Ù¬Öj‡A+K‘rãé²`øÉÚ¾ùdPµ0İı÷ÿ	%m¼ÍgÜ6ğª	J½ç¸X	šÂHÖñÆ#G‹i&)ZLw•!¨!B‰6š¨åÓ“• ‡åÃßÿ79¡Úƒ1¢·Vy,F4p('*R»*uy»%ÖŸ.'†Ÿ¨Ëq?2 =û
+VµÎÂgYÄ8Ì¾ÿ§÷)‹àã|e1üàÛ‰; _ÿw²GòÛ!«{oÈ³w~ëã>ëÕ`^`×Û;±NKç'ğÉ©ncX³üğİ7ÿÊKºC¼xZ>¨õZ«\»½_v~Éxe‘Ÿ?¦îû$ñ²lÅ#Ë²9¹¤£*ívíƒqÉê*:$İéŒYo¹íÏ-÷2ı…íĞi h!ÖZÜ2²aëø{Ç9út–Ä5ğ:/Ç|ûo	‚r9¹E>ìÔÚqˆ‚¸%É‘$w›0gcî¡°–un*ç]6Ş¶n7f‹z©6Gq9/
+À´ÅRiSIZkaÊqğ§?ğS{óŞ)^wAÎä^O¾ì^©äs¢È¯úò	iwå/ÏÎûİ~íôôëT·Œ€R×M½EBæØé¸
+¶
+a5İ'&+)ÉLß,×ÕÆZdÉÅİ¤/—ÓR• ™œT}-s
+”˜ìãÖã>ÿH0’oLÃàıÆ~à®/ZÇ¶c±p(ò#³ï¬xj­¦Ô9ˆº˜ïÿ .zÿkrz~vùrÿüJííó¨™@-©g—D½:?yuÙ=?#Êùé…ÜëöÏÏ®>:¨Èüé£)ŠÑ9—§µ8=°F:ª)N»Hû
+±`0.¿ é§¤šæØùBZLy¯¡|ÿ-,ÇùZ®ãNhJ~8)<¢{2£+è®e<Î.G9ŞL[\†^ô)†¨“N›)ùíÎÒƒ)HS¼F¨–İ“Ru¿Õ?YOLŠSS×±ÇZ*îvŒsj¥¹nT_S-Æº¨zçÕ³ÿgLuL²ÄwøFE~IÜ¸%¼)6Oeş€¥{¨¥İN«¡ºQCD LæñoR?WÁí5Á2mw®i™ò²òlO7¢%İ{Ã¢‘~íÚ™å)!¢­¢y	ó´ş˜‚©áyäuDâÿx
+úc¼,k ·á--ÈTL¿->:{ìóæyßà§Ğ±ŸÓßÂPÿ	DßğƒÉÇ^\İ¬™Ó¯¼3ÇnŸö’Oş,TÈîÏàdÈ~XµÀ#4ü]Î33noüÚ=á¸ÈËU®ğÎŸFH¦ı˜íîŒ5Œ)ß€ñ­¶_xGø\oÆî&ÿ{©õ†Ug××ËÜ£Ba]³äõ8ÈøÖÿ$•½
+21Ş:Îİ?wa½âéüìğ´†^gSçËŞ¯†|Ä¯XşÆf(ğvy=9ÿ  ÿÿ ÕoY

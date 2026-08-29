@@ -1928,7 +1928,7 @@ fun MarketIntelligenceSection(
     }
 
     if (activeApprovalProposal != null) {
-        val prop = activeApprovalProposal!!
+        val prop = activeApprovalProposal ?: return
         val orderEnabled by viewModel.isOrderPlacementEnabled.collectAsState()
         
         AlertDialog(
@@ -1977,7 +1977,7 @@ fun MarketIntelligenceSection(
                             Text("Fetching live order book price...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     } else if (livePriceResult != null) {
-                        val livePrice = livePriceResult!!
+                        val livePrice = livePriceResult ?: 0.0
                         val diff = (livePrice - prop.entry) / prop.entry * 100.0
                         val slippagePercent = if (prop.side.uppercase() == "BUY") diff else -diff
                         
@@ -3471,7 +3471,7 @@ fun TradingDiagnosticsDashboard(
                             }
                         }
                     } else if (engineValidationReport != null) {
-                        val report = engineValidationReport!!
+                        val report = engineValidationReport ?: return@Column
                         
                         // Summary Bar
                         Row(
@@ -5853,7 +5853,7 @@ fun TradingDiagnosticsDashboard(
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(
-                                            text = chaosResult!!,
+                                            text = chaosResult ?: "",
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 11.sp,
                                             color = Color(0xFF81C784),
@@ -7338,7 +7338,7 @@ fun AutonomousParameterTuningCard() {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            rollbackSuccessNotice!!,
+                            rollbackSuccessNotice ?: "",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2E7D32)

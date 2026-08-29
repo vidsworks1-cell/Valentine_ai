@@ -274,7 +274,7 @@ fun BinanceRealityPanel(
 
     // Cancellation Confirmation Dialog
     if (orderToCancel != null) {
-        val order = orderToCancel!!
+        val order = orderToCancel ?: return@BinanceRealityPanel
         AlertDialog(
             onDismissRequest = { orderToCancel = null },
             icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
