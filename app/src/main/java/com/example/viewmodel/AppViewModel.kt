@@ -9422,19 +9422,20 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 strategyTotal[strategy] = (strategyTotal[strategy] ?: 0) + 1
                 totalProfitLoss += pnlAmount
 
+                val hour = (8 + (i / 60)) % 24
+                val minute = i % 60
+                val exitMin = (i + 5) % 60
+                val entryTimeStr = String.format(java.util.Locale.US, "2026-07-31T%02d:%02d:00Z", hour, minute)
+                val exitTimeStr = String.format(java.util.Locale.US, "2026-07-31T%02d:%02d:00Z", hour, exitMin)
+                val entryReasonStr = "Autonomous AI Confluence (" + strategy + ")"
+
                 val tradeRecord = com.example.data.api.ContaboTrade(
                     id = (baseId + i).toInt(),
                     symbol = symbol,
                     side = side,
                     entryPrice = basePrice,
-                    positionSize = (tradeRisk * 10) / basePrice,
-                    stopLoss = if (side == "BUY") basePrice * 0.985 else basePrice * 1.015,
-                    takeProfit = if (side == "BUY") basePrice * 1.03 else basePrice * 0.97,
-                    strategyUsed = strategy,
-                    marketRegime = if (i % 2 == 0) "TRENDING" else "VOLATILE",
-                    confidenceScore = 0.72 + (Math.random() * 0.22),
-                    entryReason = "Autonomous AI Conxœ¬WmoÛ6ş_qœArFv“,–v’®ò†ØA°6Ã@K´ÍE&‘jâ¦şï;R’#Krëóƒ¢xÏ½ğî¹Ó0J˜¸¥cªÙhæ9ÛPóã"äÕ2VpÎËƒ+şàÁş!ÙÛ†‡êØ<¶ÈŞş|AYs¢ş}ÌÕcg"¡ñš²[ÜY}ö&ĞÏ¯?Â¹¾‰9zw|®â!.Ñøîİ_ªXúº	.‚ÀLE„˜°H±êûü}½ºi,‡\_He„'SOV˜&t<ëó‰1Íiûíƒÿ·7­~ãÅ=D;\¾{à{lB{o~Ôxá¸:ğçG¾ÿqEh¯ëã¹7÷½ï¢ÊDr’Ç«{.<pî?\9iˆœ‹ë^Ï©ˆz•Áúæ>ÕWšĞ0tÓëeŒCo£rş3 N„àbÔÅå1IcĞÌÃh©it³wEÚ[>)£¸¢˜é^ñ_ÏÕÆô)”O"AQö|Ü¥­œ»Ëz›Ğò}L#9\Ôš½Ğwú|–=yÅ4%?Uœ½'sÏû&Ó}øú¸Y):™FìÔd¤/µ—mÜÍÂ|oê´§cô„e<¡Úı—~¦$Ñ<"2 #w½mp6IkèlƒûÄ…Å&ZÉd1×¸ÏNW3Âü0úc™ŒÆÚu’ömA·Ó?}çW~¸:?‚ßm,Ï¼H©AaÎ³ Ñ,$pšš÷·(³ğas®˜†q»—µüÙ"mãP)Ã¼¹Sõ`^Ùy”:ââ™`RcåpÁ	YDgn»€ùòÅ™È'Óé7L«£ï.•&ı?šdºIP&aÑô‘¹û~	¿î,b.é¨š€—x‹ïÿ—«_Ê·Ú$0#ŒíO¨4b?­s£tzµ¨v™˜†<Ò,†¬!M
-|şöÈ¬gJæD%“ë!ª;SÊŠ…Â¬-\R=&t ÜÓûÇz«¦‡ŞÑ ›vÆ_¯¶XöZ/è¶"ŠaÛ}õ)ë•N‹üŞv*¦oDôÎÂcâ­{ÍÛõEXÍX-§=3¶œ›vŠèùƒ}JÓc9f?Rgwv_%Q„Á³vNjÙŞj,àôÍó'+BÙìoìVEÒMØ*[ÎH‹W.ıUN˜™§èÏ[£Òhtº1öd¸Äf,t2©F:—¼Ïª±ŒOù{ë‚¿RÜ:\H£°„ĞZmÀ¶²åå–+”vÅˆÔ—L):2Œ2Hx¦–Ôt<:2š¾¾	ñ?(4›DK!qrSĞ¥:ƒ­R8·­†K§ÒŒ¶s¡3¥Åì5›âAÔ4‹Wu8µQ‘uziC[À«fó_Ö@äup1Œf YHY¸œ£›8É62šß<
-få­‡Œ5X^0±EÎé|,Åü ¶éÓ·ŒFü²6ì~»v‰Bæp×;[7]¥˜Y\$Åuq.é3Ü`	B>‚¥X;kÎi¢Ç¹ùæºªûr
-½¬3ò’°!-;¼ÏÛ5£İ¥Á#2x"B8#œSr!óÏ(›`ª»@óÏ~EçñcOiäï;ùİA’]Ê^;«Al}cŠxÆ¶şÑïš-A³™"XLœoK1›b*âıÍR‹õé˜æuïV,ÃÂ­EÇjÿÌ·ù¦˜ù)t‰>s:;+>‘4{6\ùÊ<ßù*±VÑ:ú…–3éÍ0à“+©ùĞ|wãÖ{M18j,ŸŠÛUÛ5×‘ıÌ‡jËdU«qi² Oç\ñVà¿,8'ìœW
-S7pyÀòuJÉWikÄËoü  ÿÿ ¬ú¯Û
+                    positionSize = (tradeRisk * 10.0) / basexœ¬WmsÚ8şŞ_±çInl’¨@›k›¹¤	m3Cä2wÍÍbĞa$Æ–›Ğ”ÿ~+ùc›†vŒ%kŸ}Ñî³ë~À]vø*~¡’‹®C8>;äƒÓS°Ú7ZÜÓõµ0Ô NŞ½=æ‡lc»AêãjlEgxL¹za^•ÁQç›mvT±Éò&d¢§ËêÃsÌ˜°	Ÿ³ÄûĞÔ¶Ô°FƒNïâ²÷ÑŠ-°ş¸î¶F—İUçJ1FO„Ë†®4b¼iÂØWTMI@…'ç¶cìo6j&T°0J ¹ÕPÕ\xÜ¥Jú²¬§;+ùuÇoÉëC¸³¨
+ô²A^¯¶XGPVŸ¨~ğpÖšËHèÃzl€;ÛÏö]eğê[||ä*¾ÊgïßFŒàBøˆé”3Á¼?JßW«[˜\K²OÆ|'ü£8²ç­¡×¤‡“Ç­ge¤\¹Î³ğ–L±ÛË^š]İëáĞ*‰:¥ÁFú
+Â.¡gÇ7Â0é<çEéüêC	ÁÅ¤§àFA€¾éÅ(©¨ßÏ"T’ÖÆæ¤Ï`ÁèŸ(¦¹“_ ğú\¥^@<ù ’äeÏt½Ù[G98^nêEb¨×ñæMäğ¡ÒìLßVúãE²rò4%=U\ÆÇ†àÛ7àú)¤ó…ÏÎu9ğTyÙÚİ$Ì·º´0+Ğ2–Áœ*û_ú…’HqŸt¥K}Fn†‡`í“ÆØ:ûƒM”¼Ñ½Ïlí>Ïœ.g„şaŒ¦2šL•mİEÍßhÚ­Ñù'èô>^ö:'°Ç_îå,O¼ˆ«9Äôen¤˜Gà<6n(“ù°=¦ /º¸»÷´“?¤©*d˜³²Ê¬J;3©|.	&5V,$óéÒn°Ú¼8ùhá!ë{q•`ôí’Á¤ÿ©ZÑ{o”‰˜Ct_²ëüª³ˆ¹¡£l^â ßÿ/W¿‘o•I 5úÛŸP©Å~Zç$@é¬•oÓ˜ûŠğ„5¤H‚ßŸè‚utÉÃŠ„ÑüzŒ‡ªÎ²"S˜0¹iªô>´Lïï;è-{ú@]ì³	­m1ìµ[ĞMEäÃöríSÒŞ¬y×´J¦úÂÿ`à•nvÒxX]„åŒÅo¨§¥îz¹Ñ	ûTHt+ä˜ıHíåuĞ‹|ƒg$U²½Ñ˜Ãéõg#Bflù·v£$iÇL•mf¤Á+–ş6'ô˜’÷ç½V©5Zí û2
+\a3*š—#JŞ&ÕXÆçô½q¡¾UÜ8\ˆ£°ĞØnÀ¶¢åÅË•vÉˆ{©®XÒ‰f”ûˆû^lIEÇ£‹î;ŞÛWş».…Z­))$[!´©r§`ª:¦ÕpœoÏ¥&¤,{£3ÅÅìÔjwâNT4‹µºf½ÙDEÆ!Æ-ƒkµ|Y­‘wÁÅ0ê$“2p)G×pøÜKh~ğ(è'g7d¬ÁpÆÄ9¥ó}0óØºOã'ƒÏ¿"K`Ãá°k(d7Ã‹]c‘ĞUÌ€‰ÅyRÜçŠ>BKÒ,Æ:Úq¦ˆ=?Î­öwU=’&u˜x–„	ùºìğ>;F»Mİ2x$<èˆ	Î)9—ù”Í1Õí–«ø¿¢óø}*äç™ün!Énd¯™Õ 0ƒ~SŠx÷Œ	lı“	Ş5J‚š&3øÌ›°€Xß—¶ÀTÄû[¤6¨ó)MëŞ.Y†0„=‹?ÔüéÏ1ò]1ıÑ%¦ùÌjıÕÚòªØ£æÊ5ó<ó5T`­¼uô+%,e2\bÀç=©øX*ãÖ'æ/08áT>ä·Ë¶+®|Í€ÙPm˜¬Ìa.Í3ú´>pÁÃ)ŞÑöü—ŒCpÂNy%7ucG ,_«ô)nxÙ«ÿ  ÿÿ `n
+K
