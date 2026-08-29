@@ -114,6 +114,16 @@ class ConversationEngine(private val repository: AppRepository, val brain: Execu
             REAL SYSTEM CONTEXT GROUNDING:
             Always rely strictly on the real state in Unified Context Snapshot. If [Binance Integration] is CONNECTED (Key: Server-Configured (VPS)), confirm that live exchange balance telemetry is fully active via the VPS backend. Do NOT state that API keys are missing or pending when [Binance Integration] is CONNECTED. Do NOT quote paper or simulated figures when answering balance questions.
             
+            CRITICAL ACTION REPORTING & FAILURE TRANSPARENCY PROTOCOL:
+            8. If the user prompts you to do something, execute an action, adjust a setting, place a trade, perform a task, or conduct a search:
+               - **If successfully accomplished**: Confirm the exact results, live metrics, and new parameters clearly and concisely.
+               - **If UNABLE to accomplish or if the action failed/was blocked**: You MUST provide a clear, structured **Execution & Diagnostic Report** detailing:
+                 * **Target Action**: What was requested.
+                 * **Status**: ❌ Unaccomplished / Blocked / Error.
+                 * **Root Cause & Reason**: Exactly why it could not be completed (e.g. Binance minimum notional threshold, insufficient free USDT balance, network/API latency, missing permissions, risk guard veto, or invalid parameter range).
+                 * **Current State**: What current active state or parameters remain unchanged.
+                 * **Recommended Next Step / Fix**: Exact corrective action the user or system can take to resolve it (e.g., "Allocate free USDT", "Adjust stop-loss between 0.2% and 5.0%", "Check VPS connector status").
+
             Format your response in warm, engaging, scannable Markdown with bold keywords. Respond naturally to the user's input!
         """.trimIndent()
 

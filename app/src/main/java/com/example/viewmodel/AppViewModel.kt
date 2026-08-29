@@ -235,7 +235,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             _isChaosDrillRunning.value = true
             _chaosDrillResult.value = null
             delay(1200)
-            val summary = "üõ°Ô∏è BLACK SWAN DRILL PASSED ($symbol):\n‚Ä¢ Flash Crash Shock: -10.0%\n‚Ä¢ Latency Spike: 450ms\n‚Ä¢ Orderbook Spread Widening: +1.5%\n‚Ä¢ Emergency Circuit Breakers: TRIGGERED & ACTIVE\n‚Ä¢ Slippage Drain: 0.00% (Protected via trailing stops)"
+            val summary = "\ud83d\udee1\ufe0f BLACK SWAN DRILL PASSED ($symbol):\n\u2022 Flash Crash Shock: -10.0%\n\u2022 Latency Spike: 450ms\n\u2022 Orderbook Spread Widening: +1.5%\n\u2022 Emergency Circuit Breakers: TRIGGERED & ACTIVE\n\u2022 Slippage Drain: 0.00% (Protected via trailing stops)"
             _chaosDrillResult.value = summary
             _isChaosDrillRunning.value = false
             onAppEventOccurred("CHAOS_DRILL_COMPLETED", "Black Swan Chaos Drill executed successfully with 0 slippage drain.")
@@ -329,12 +329,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun setAutoProfitSellOnBinanceEnabled(enabled: Boolean) {
         _isAutoProfitSellOnBinanceEnabled.value = enabled
-        addThought(if (enabled) "‚ö° LUMINA FAST PROFIT HARVESTER ARMED: Autonomous Binance selling active for any green profit ‚â• +${_customProfitHarvestThresholdPct.value}% net and TP hits." else "‚è∏Ô∏è LUMINA FAST PROFIT HARVESTER PAUSED.")
+        addThought(if (enabled) "\u26a1 LUMINA FAST PROFIT HARVESTER ARMED: Autonomous Binance selling active for any green profit \u2265 +${_customProfitHarvestThresholdPct.value}% net and TP hits." else "\u23f8\ufe0f LUMINA FAST PROFIT HARVESTER PAUSED.")
     }
 
     fun setCustomProfitHarvestThresholdPct(pct: Double) {
         _customProfitHarvestThresholdPct.value = pct
-        addThought("üéØ PROFIT HARVEST THRESHOLD CALIBRATED: Lumina will auto-sell on Binance Spot when net profit ‚â• +${String.format(java.util.Locale.US, "%.2f", pct)}%.")
+        addThought("\ud83c\udfaf PROFIT HARVEST THRESHOLD CALIBRATED: Lumina will auto-sell on Binance Spot when net profit \u2265 +${String.format(java.util.Locale.US, "%.2f", pct)}%.")
     }
 
     fun evaluatePreBuySellabilityCheck(symbol: String, amountUsdt: Double): com.example.aza.strategy.PreBuyExitViabilityReport {
@@ -375,7 +375,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     }
 
     fun harvestProfitsAndSellOnBinance(symbol: String) {
-        addThought("‚ö° MANUAL PROFIT HARVEST TRIGGERED: Executing immediate market sell on Binance Spot for $symbol...")
+        addThought("\u26a1 MANUAL PROFIT HARVEST TRIGGERED: Executing immediate market sell on Binance Spot for $symbol...")
         executeExitTradeWithFullLifecycle(symbol = symbol, isOperatorInitiated = true, operatorAction = "MANUAL_PROFIT_HARVEST_BINANCE_SELL")
     }
 
@@ -391,7 +391,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     ) {
         viewModelScope.launch {
             if (com.example.aza.strategy.LuminaTradeLifecycle10StepEngine.isCycleRunning.value) {
-                addThought("‚ö†Ô∏è A 10-Step Lifecycle cycle is already in progress.")
+                addThought("\u26a0\ufe0f A 10-Step Lifecycle cycle is already in progress.")
                 return@launch
             }
             com.example.aza.strategy.LuminaTradeLifecycle10StepEngine.setCycleRunning(true)
@@ -405,7 +405,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             )
             val auditId = audit.auditId
 
-            addThought("üöÄ [LUMINA 10-STEP LIFECYCLE INITIATED] Audit #$auditId on $symbol ($${amountUsdt} USDT)...")
+            addThought("\ud83d\ude80 [LUMINA 10-STEP LIFECYCLE INITIATED] Audit #$auditId on $symbol ($${amountUsdt} USDT)...")
 
             // STEP 1: DETECT A SIGNAL
             delay(400)
@@ -437,7 +437,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 data = step1Data,
                 entryPrice = currentPrice
             )
-            addThought("‚úì [STEP 1/10] Signal detected on $symbol @ $$currentPrice (SL: $$slPrice, TP: $$tpPrice)")
+            addThought("\u2713 [STEP 1/10] Signal detected on $symbol @ $$currentPrice (SL: $$slPrice, TP: $$tpPrice)")
 
             // STEP 2: PLACE AN ORDER ON BINANCE
             delay(500)
@@ -481,7 +481,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 quantity = execQty,
                 buyOrderId = confirmedBuyOrderId
             )
-            addThought("‚úì [STEP 2/10] Dispatched signed BUY order to Binance Spot API (Qty: $execQty $symbol)")
+            addThought("\u2713 [STEP 2/10] Dispatched signed BUY order to Binance Spot API (Qty: $execQty $symbol)")
 
             // STEP 3: CONFIRM ORDER APPEARS ON BINANCE
             delay(400)
@@ -492,7 +492,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 details = "Binance API returned HTTP 200 with Order #$confirmedBuyOrderId (ClientOrderId: $buyClientOrderId)",
                 data = mapOf("status" to "CONFIRMED_ON_EXCHANGE", "orderId" to confirmedBuyOrderId)
             )
-            addThought("‚úì [STEP 3/10] Confirmed order appears on Binance Spot (Order #$confirmedBuyOrderId)")
+            addThought("\u2713 [STEP 3/10] Confirmed order appears on Binance Spot (Order #$confirmedBuyOrderId)")
 
             // STEP 4: LET IT FILL
             delay(500)
@@ -503,7 +503,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 details = "Order #$confirmedBuyOrderId FILLED @ average price $$currentPrice (Filled Qty: $execQty $symbol)",
                 data = mapOf("status" to "FILLED", "fillPrice" to "$$currentPrice", "executedQty" to "$execQty")
             )
-            addThought("‚úì [STEP 4/10] Order #$confirmedBuyOrderId confirmed FILLED on Binance @ $$currentPrice")
+            addThought("\u2713 [STEP 4/10] Order #$confirmedBuyOrderId confirmed FILLED on Binance @ $$currentPrice")
 
             // STEP 5: VERIFY POSITION IS REGISTERED
             delay(400)
@@ -528,11 +528,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 details = "Position verified registered in Room DB & memory as OPEN (Symbol: $symbol, Owned: $execQty @ $$currentPrice)",
                 data = mapOf("dbStatus" to "OPEN", "symbol" to symbol, "amountOwned" to "$execQty")
             )
-            addThought("‚úì [STEP 5/10] Position successfully registered in active memory and Room DB")
+            addThought("\u2713 [STEP 5/10] Position successfully registered in active memory and Room DB")
 
             if (!isAutoExit) {
                 com.example.aza.strategy.LuminaTradeLifecycle10StepEngine.setCycleRunning(false)
-                addThought("‚ÑπÔ∏è [LUMINA 10-STEP] Position is OPEN. You can close manually via 'Sell on Binance' or let AI harvest profits to complete steps 6-10.")
+                addThought("\u2139\ufe0f [LUMINA 10-STEP] Position is OPEN. You can close manually via 'Sell on Binance' or let AI harvest profits to complete steps 6-10.")
                 return@launch
             }
 
@@ -552,7 +552,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 exitPrice = exitPrice,
                 netPnl = netProfit
             )
-            addThought("‚úì [STEP 6/10] Triggered position close on $symbol @ $$exitPrice (Net PnL: +$${String.format(Locale.US, "%.3f", netProfit)})")
+            addThought("\u2713 [STEP 6/10] Triggered position close on $symbol @ $$exitPrice (Net PnL: +$${String.format(Locale.US, "%.3f", netProfit)})")
 
             // STEP 7: CONFIRM THE SELL APPEARS ON BINANCE
             delay(500)
@@ -576,7 +576,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 data = mapOf("sellOrderId" to confirmedSellOrderId, "status" to "FILLED"),
                 sellOrderId = confirmedSellOrderId
             )
-            addThought("‚úì [STEP 7/10] Confirmed SELL order #$confirmedSellOrderId filled on Binance Spot")
+            addThought("\u2713 [STEP 7/10] Confirmed SELL order #$confirmedSellOrderId filled on Binance Spot")
 
             // STEP 8: CONFIRM ASSET DISAPPEARS FROM HOLDINGS
             delay(400)
@@ -595,7 +595,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 details = "Binance holdings synced: $symbol spot balance liquidated (0.00 remaining), position status set to CLOSED in DB",
                 data = mapOf("holdingsRemaining" to "0.00 $symbol", "positionStatus" to "CLOSED")
             )
-            addThought("‚úì [STEP 8/10] Confirmed asset $symbol liquidated and pruned from active holdings")
+            addThought("\u2713 [STEP 8/10] Confirmed asset $symbol liquidated and pruned from active holdings")
 
             // STEP 9: CONFIRM USDT IS RELEASED
             delay(400)
@@ -612,7 +612,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 data = mapOf("releasedUsdt" to "$$releasedUsdt", "newUsdtBalance" to "$$newTotalUsdt"),
                 usdtBalanceAfter = newTotalUsdt
             )
-            addThought("‚úì [STEP 9/10] Confirmed USDT released back into available capital (+$${String.format(Locale.US, "%.3f", netProfit)} net gain)")
+            addThought("\u2713 [STEP 9/10] Confirmed USDT released back into available capital (+$${String.format(Locale.US, "%.3f", netProfit)} net gain)")
 
             // STEP 10: CONFIRM LUMINA RECORDS COMPLETED TRADE CORRECTLY
             delay(400)
@@ -649,7 +649,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 details = "Trade record permanently archived in Room DB (Review #${review.id ?: "10STEP"}) with full audit trail, net PnL, duration, and AI reflection.",
                 data = mapOf("reviewArchived" to "TRUE", "realizedPnL" to "+$$netProfit", "status" to "LIFECYCLE_COMPLETED")
             )
-            addThought("üéâ [STEP 10/10] Full 10-Step Lifecycle Certified: Trade recorded in review logs with complete audit trail!")
+            addThought("\ud83c\udf89 [STEP 10/10] Full 10-Step Lifecycle Certified: Trade recorded in review logs with complete audit trail!")
             onAppEventOccurred("LIFECYCLE_10STEP_VERIFIED", "Lumina successfully executed and verified the entire 10-step trading cycle for $symbol (Net PnL +$${String.format(Locale.US, "%.3f", netProfit)}).")
 
             com.example.aza.strategy.LuminaTradeLifecycle10StepEngine.setCycleRunning(false)
@@ -667,12 +667,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 val netPnl = grossPnl - feeEst
                 if (netPnl > 0.0 || (pos.takeProfitPrice > 0.0 && currentPrice >= pos.takeProfitPrice)) {
                     harvestedCount++
-                    addThought("üí∞ HARVESTING PROFIT on ${pos.symbol}: Net PnL +$${String.format(java.util.Locale.US, "%.3f", netPnl)} (Exit @ $$currentPrice). Sending SELL to Binance...")
+                    addThought("\ud83d\udcb0 HARVESTING PROFIT on ${pos.symbol}: Net PnL +$${String.format(java.util.Locale.US, "%.3f", netPnl)} (Exit @ $$currentPrice). Sending SELL to Binance...")
                     executeExitTradeWithFullLifecycle(symbol = pos.symbol, isOperatorInitiated = true, operatorAction = "BULK_PROFIT_HARVEST_BINANCE_SELL")
                 }
             }
             if (harvestedCount == 0) {
-                addThought("‚ÑπÔ∏è No active positions currently meet the net profit harvest criteria.")
+                addThought("\u2139\ufe0f No active positions currently meet the net profit harvest criteria.")
             } else {
                 _lastBinanceProfitHarvestEvent.value = "Harvested $harvestedCount profitable position(s) on Binance Spot"
             }
@@ -681,7 +681,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun scanAndAssessMultiSymbolUniverse() {
         viewModelScope.launch {
-            addThought("üåå LUMINA MULTI-UNIVERSE SCANNER: Evaluating cross-market symbols across Blue-Chips, Major Alts & Moonshots...")
+            addThought("\ud83c\udf0c LUMINA MULTI-UNIVERSE SCANNER: Evaluating cross-market symbols across Blue-Chips, Major Alts & Moonshots...")
             val totalUsdt = _binanceBalances.value.find { it.asset.equals("USDT", ignoreCase = true) }?.let { it.free + it.locked } ?: 13.0
             
             // Gather live prices for monitored universe
@@ -702,7 +702,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
             val topPick = summary.topSelectedCandidate
             if (topPick != null) {
-                addThought("üèÜ UNIVERSE CHAMPION TRADE SELECTED: ${topPick.symbol} [${topPick.category.displayName}] (Score: ${String.format(Locale.US, "%.1f", topPick.compositeRankScore)}, Win Prob: ${String.format(Locale.US, "%.0f", topPick.winProbabilityPct)}%, Exp R/R: ${String.format(Locale.US, "%.1f", topPick.expectedRewardRisk)}x, Asymmetric Upside: ${String.format(Locale.US, "%.1f", topPick.moonshotGrowthMultiplier)}x).")
+                addThought("\ud83c\udfc6 UNIVERSE CHAMPION TRADE SELECTED: ${topPick.symbol} [${topPick.category.displayName}] (Score: ${String.format(Locale.US, "%.1f", topPick.compositeRankScore)}, Win Prob: ${String.format(Locale.US, "%.0f", topPick.winProbabilityPct)}%, Exp R/R: ${String.format(Locale.US, "%.1f", topPick.expectedRewardRisk)}x, Asymmetric Upside: ${String.format(Locale.US, "%.1f", topPick.moonshotGrowthMultiplier)}x).")
             }
             recomputeCapitalAllocation()
         }
@@ -714,7 +714,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun selectUniverseSymbolForTargeting(symbol: String) {
         viewModelScope.launch {
-            addThought("üéØ OPERATOR TARGET OVERRIDE: Focus shifted to $symbol. Running deep ML inference & pre-buy feasibility...")
+            addThought("\ud83c\udfaf OPERATOR TARGET OVERRIDE: Focus shifted to $symbol. Running deep ML inference & pre-buy feasibility...")
             runDeepMlMarketAnalysis(symbol)
             recomputeCapitalAllocation()
         }
@@ -722,7 +722,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun runDeepMlMarketAnalysis(symbol: String = "BTCUSDT") {
         viewModelScope.launch {
-            addThought("üß† LUMINA DEEP ML: Extracting 32-dimensional market features & running Deep Ensemble prediction for $symbol...")
+            addThought("\ud83e\udde0 LUMINA DEEP ML: Extracting 32-dimensional market features & running Deep Ensemble prediction for $symbol...")
             val priceRes = try { com.example.aza.connector.BinanceConnector.fetchMarketPrice(symbol) } catch(e: Exception) { Result.failure(e) }
             val tickerPrice = if (priceRes.isSuccess && (priceRes.getOrNull() ?: 0.0) > 0.0) {
                 priceRes.getOrNull()!!
@@ -759,7 +759,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             )
             _adaptiveRiskReport.value = riskReport
 
-            addThought("üéØ DEEP ML PREDICTION ($symbol): ${prediction.predictedDirection} (${String.format(Locale.US, "%.1f", prediction.bullishProbabilityPct)}% Bullish, ${String.format(Locale.US, "%.1f", prediction.ensembleConfidencePct)}% Confidence). Regime: ${prediction.currentRegime.displayName}.")
+            addThought("\ud83c\udfaf DEEP ML PREDICTION ($symbol): ${prediction.predictedDirection} (${String.format(Locale.US, "%.1f", prediction.bullishProbabilityPct)}% Bullish, ${String.format(Locale.US, "%.1f", prediction.ensembleConfidencePct)}% Confidence). Regime: ${prediction.currentRegime.displayName}.")
         }
     }
 
@@ -777,22 +777,22 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             mlPrediction = _deepMlPrediction.value
         )
         _adaptiveRiskReport.value = riskReport
-        addThought("üõ°Ô∏è ADAPTIVE REGIME RISK RECALIBRATED: Switched to ${regime.displayName}. Target Stop: ${riskReport.maxStopLossRiskCapitalUsdt} USDT, Risk Multiplier: ${String.format(Locale.US, "%.2f", riskReport.regimeRiskMultiplier)}x.")
+        addThought("\ud83d\udee1\ufe0f ADAPTIVE REGIME RISK RECALIBRATED: Switched to ${regime.displayName}. Target Stop: ${riskReport.maxStopLossRiskCapitalUsdt} USDT, Risk Multiplier: ${String.format(Locale.US, "%.2f", riskReport.regimeRiskMultiplier)}x.")
     }
 
     fun setMicroCompoundingMode(mode: com.example.aza.strategy.MicroCompoundingMode) {
         com.example.aza.strategy.MicroCompoundingEngine.setCompoundingMode(mode)
         _microCompoundingState.value = com.example.aza.strategy.MicroCompoundingEngine.getCompoundingState()
-        addThought("‚öôÔ∏è MICRO-COMPOUNDING MODE UPDATED: Set to ${mode.displayName} (Target Win: $${mode.targetWinNetUsd}, Breakeven trigger: +${mode.breakevenTriggerPct}%).")
+        addThought("\u2699\ufe0f MICRO-COMPOUNDING MODE UPDATED: Set to ${mode.displayName} (Target Win: $${mode.targetWinNetUsd}, Breakeven trigger: +${mode.breakevenTriggerPct}%).")
     }
 
     fun triggerDeepTradeStudy() {
         viewModelScope.launch {
-            addThought("üî¨ LUMINA TRADE STUDY: Conducting deep post-trade review & adaptive self-tuning...")
+            addThought("\ud83d\udd2c LUMINA TRADE STUDY: Conducting deep post-trade review & adaptive self-tuning...")
             delay(400)
             _tradeStudySummary.value = com.example.aza.strategy.DynamicTradeStudyEngine.getSummary()
             _microCompoundingState.value = com.example.aza.strategy.MicroCompoundingEngine.getCompoundingState()
-            addThought("‚úÖ TRADE STUDY COMPLETE: Loss mitigation score: ${_tradeStudySummary.value.lossMitigationEffectivenessScore}%. Calibrated ATR Stop: ${_tradeStudySummary.value.recommendedStopMultiplier}x ATR.")
+            addThought("\u2705 TRADE STUDY COMPLETE: Loss mitigation score: ${_tradeStudySummary.value.lossMitigationEffectivenessScore}%. Calibrated ATR Stop: ${_tradeStudySummary.value.recommendedStopMultiplier}x ATR.")
         }
     }
 
@@ -801,14 +801,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     // ==========================================
     fun updateSmallAccountScalpConfig(newConfig: com.example.aza.strategy.SmallAccountScalpConfig) {
         com.example.aza.strategy.LuminaSmallAccountScalpingEngine.updateConfig(newConfig)
-        addThought("‚öôÔ∏è SCALPING CONFIG UPDATED: Target Profit: +${newConfig.targetProfitPct}%, Stop Loss: -${newConfig.tightStopLossPct}%, Max Duration: ${newConfig.maxHoldingMinutes}m, Allocation: ${newConfig.allocationPctOfFreeUsdt}%.")
+        addThought("\u2699\ufe0f SCALPING CONFIG UPDATED: Target Profit: +${newConfig.targetProfitPct}%, Stop Loss: -${newConfig.tightStopLossPct}%, Max Duration: ${newConfig.maxHoldingMinutes}m, Allocation: ${newConfig.allocationPctOfFreeUsdt}%.")
     }
 
     fun startContinuousSmallAccountScalpLoop() {
         viewModelScope.launch {
             if (com.example.aza.strategy.LuminaSmallAccountScalpingEngine.isLoopActive.value) return@launch
             com.example.aza.strategy.LuminaSmallAccountScalpingEngine.setLoopActive(true)
-            addThought("‚ö° [SMALL ACCOUNT HIGH-FREQUENCY SCALPER ENGAGED] Starting automated Buy -> Quick Profit -> Sell -> Repeat cycle...")
+            addThought("\u26a1 [SMALL ACCOUNT HIGH-FREQUENCY SCALPER ENGAGED] Starting automated Buy -> Quick Profit -> Sell -> Repeat cycle...")
             onAppEventOccurred("SCALPING_LOOP_STARTED", "Lumina high-velocity micro-scalping engine armed for small account profit maximization.")
 
             while (com.example.aza.strategy.LuminaSmallAccountScalpingEngine.isLoopActive.value) {
@@ -836,7 +836,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                                 com.example.aza.strategy.ScalpingCyclePhase.EXECUTING_SELL,
                                 symbol = pos.symbol
                             )
-                            addThought("‚ö° [SCALP EXIT TRIGGERED] $reason. Executing instant market sell on Binance Spot...")
+                            addThought("\u26a1 [SCALP EXIT TRIGGERED] $reason. Executing instant market sell on Binance Spot...")
                             executeExitTradeWithFullLifecycle(symbol = pos.symbol, isOperatorInitiated = false, operatorAction = reason)
                             delay(1200) // allow wallet balances to settle
                         }
@@ -913,7 +913,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                                 strategyName = "HIGH_VELOCITY_MICRO_SCALPER"
                             )
                             repository.insertPosition(newPosition)
-                            addThought("‚úì [SCALP BUY EXECUTED] Entered $selectedSymbol @ $$currentPrice ($${String.format(Locale.US, "%.2f", allocUsdt)} USDT, Order #$buyOrderId). Monitoring for quick profit harvest...")
+                            addThought("\u2713 [SCALP BUY EXECUTED] Entered $selectedSymbol @ $$currentPrice ($${String.format(Locale.US, "%.2f", allocUsdt)} USDT, Order #$buyOrderId). Monitoring for quick profit harvest...")
 
                             com.example.aza.strategy.LuminaSmallAccountScalpingEngine.updatePhase(
                                 com.example.aza.strategy.ScalpingCyclePhase.MONITORING_PROFIT,
@@ -921,11 +921,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                                 entryPrice = currentPrice
                             )
                         } else {
-                            addThought("‚ö†Ô∏è Scalper waiting: Available USDT ($${String.format(Locale.US, "%.2f", freeUsdt)}) is below minimum notional ($${config.minOrderNotionalUsdt}).")
+                            addThought("\u26a0\ufe0f Scalper waiting: Available USDT ($${String.format(Locale.US, "%.2f", freeUsdt)}) is below minimum notional ($${config.minOrderNotionalUsdt}).")
                         }
                     }
                 } catch (e: Exception) {
-                    addThought("‚ö†Ô∏è Scalper loop iteration handled: ${e.localizedMessage}")
+                    addThought("\u26a0\ufe0f Scalper loop iteration handled: ${e.localizedMessage}")
                 }
                 delay(1500) // 1.5s tick rate for ultra-fast scalping response
             }
@@ -934,13 +934,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun stopContinuousSmallAccountScalpLoop() {
         com.example.aza.strategy.LuminaSmallAccountScalpingEngine.setLoopActive(false)
-        addThought("‚è∏Ô∏è [SMALL ACCOUNT SCALPER PAUSED] Continuous loop stopped.")
+        addThought("\u23f8\ufe0f [SMALL ACCOUNT SCALPER PAUSED] Continuous loop stopped.")
         onAppEventOccurred("SCALPING_LOOP_STOPPED", "Lumina scalping loop safely paused by user.")
     }
 
     fun executeSingleScalpCycle(symbol: String = "BTCUSDT", amountUsdt: Double = 10.50) {
         viewModelScope.launch {
-            addThought("‚ö° [SINGLE SCALP TRIGGERED] Initiating high-velocity scalp on $symbol ($${amountUsdt} USDT)...")
+            addThought("\u26a1 [SINGLE SCALP TRIGGERED] Initiating high-velocity scalp on $symbol ($${amountUsdt} USDT)...")
             val freeUsdt = _binanceBalances.value.find { it.asset.equals("USDT", ignoreCase = true) }?.free ?: 13.0
             val config = com.example.aza.strategy.LuminaSmallAccountScalpingEngine.config.value
 
@@ -984,7 +984,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 strategyName = "HIGH_VELOCITY_MICRO_SCALPER"
             )
             repository.insertPosition(newPos)
-            addThought("‚úì Scalp Buy placed for $symbol ($execQty @ $$currentPrice). Monitoring for quick profit...")
+            addThought("\u2713 Scalp Buy placed for $symbol ($execQty @ $$currentPrice). Monitoring for quick profit...")
 
             com.example.aza.strategy.LuminaSmallAccountScalpingEngine.updatePhase(
                 com.example.aza.strategy.ScalpingCyclePhase.MONITORING_PROFIT,
@@ -1504,11 +1504,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                         }
                     }
                     _executionStates.value = currentStates
-                    addThought("‚ö†Ô∏è EXCHANGE RECONCILIATION: Discovered ${result.externalOrders.size} external open orders on Binance (${result.externalOrders.joinToString { "${it.symbol} #${it.orderId}" }}). Marked as EXTERNAL_ORDER_DISCOVERED.")
+                    addThought("\u26a0\ufe0f EXCHANGE RECONCILIATION: Discovered ${result.externalOrders.size} external open orders on Binance (${result.externalOrders.joinToString { "${it.symbol} #${it.orderId}" }}). Marked as EXTERNAL_ORDER_DISCOVERED.")
                 }
 
                 if (result.discrepanciesFound > 0 && result.externalOrders.isEmpty()) {
-                    addThought("‚ö†Ô∏è RECONCILIATION AUDIT: Detected ${result.discrepanciesFound} discrepancies (${result.staleTradesCount} stale/orphan trades where exit_time IS NULL against zero Binance Spot balance). Safe close available.")
+                    addThought("\u26a0\ufe0f RECONCILIATION AUDIT: Detected ${result.discrepanciesFound} discrepancies (${result.staleTradesCount} stale/orphan trades where exit_time IS NULL against zero Binance Spot balance). Safe close available.")
                 }
             } catch (e: Exception) {
                 android.util.Log.e("Reconciliation", "Failed to run execution reconciliation: ${e.message}")
@@ -1556,7 +1556,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 }
             }
 
-            addThought("üõ°Ô∏è RECONCILIATION SUCCESS: Safely closed $closedCount stale/orphan trades. All position records aligned with Binance Spot balances.")
+            addThought("\ud83d\udee1\ufe0f RECONCILIATION SUCCESS: Safely closed $closedCount stale/orphan trades. All position records aligned with Binance Spot balances.")
             performLiveReconciliation()
         }
     }
@@ -1657,13 +1657,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 _executionReconciliation.value = recResponse
 
                 if (prunedCount > 0) {
-                    addThought("üßπ AUTO-SYNC PRUNED: Removed $prunedCount ghost position(s) that no longer exist on Binance Spot. Stopped impossible close retry loop.")
+                    addThought("\ud83e\uddf9 AUTO-SYNC PRUNED: Removed $prunedCount ghost position(s) that no longer exist on Binance Spot. Stopped impossible close retry loop.")
                     onAppEventOccurred(
                         "POSITION_SYNC_PRUNED",
                         "Autonomously pruned **$prunedCount ghost position(s)** (zero Binance Spot balance). Internal positions synchronized with real Binance holdings."
                     )
                 } else if (triggerSource == "MANUAL_UI") {
-                    addThought("üõ°Ô∏è POSITION SYNC VERIFIED: All ${syncResult.verifiedRealPositions.size} active positions match real Binance Spot balances.")
+                    addThought("\ud83d\udee1\ufe0f POSITION SYNC VERIFIED: All ${syncResult.verifiedRealPositions.size} active positions match real Binance Spot balances.")
                 }
             } catch (e: Exception) {
                 android.util.Log.e("PositionSync", "Auto-synchronization failed: ${e.message}", e)
@@ -1684,7 +1684,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         viewModelScope.launch {
             if (com.example.aza.strategy.LuminaTripartiteSyncEngine.isSyncInProgress.value) return@launch
             com.example.aza.strategy.LuminaTripartiteSyncEngine.setSyncInProgress(true)
-            addThought("üîÑ [3-WAY HARMONIOUS SYNC] Initiating synchronization across Lumina App, Backend Server, and Binance Spot...")
+            addThought("\ud83d\udd04 [3-WAY HARMONIOUS SYNC] Initiating synchronization across Lumina App, Backend Server, and Binance Spot...")
 
             try {
                 // 1. Sync Binance Node
@@ -1758,14 +1758,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     prunedGhosts = syncResult.prunedGhostPositions
                 )
 
-                addThought("‚úì [3-WAY SYNC HARMONIOUS] Report #${report.syncId}: Lumina App (Room DB), Backend VPS, and Binance Spot are 100% converged.")
+                addThought("\u2713 [3-WAY SYNC HARMONIOUS] Report #${report.syncId}: Lumina App (Room DB), Backend VPS, and Binance Spot are 100% converged.")
                 onAppEventOccurred(
                     "TRIPARTITE_SYNC_CONVERGED",
                     "Harmonious synchronization established between Lumina App, Backend VPS Server, and Binance Spot Exchange (100% Convergence)."
                 )
             } catch (e: Exception) {
                 android.util.Log.e("TripartiteSync", "Sync failed: ${e.message}", e)
-                addThought("‚ö†Ô∏è Tripartite sync encountered non-blocking warning: ${e.localizedMessage}")
+                addThought("\u26a0\ufe0f Tripartite sync encountered non-blocking warning: ${e.localizedMessage}")
             } finally {
                 com.example.aza.strategy.LuminaTripartiteSyncEngine.setSyncInProgress(false)
             }
@@ -1779,7 +1779,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun setOperatingMode(mode: com.example.aza.strategy.LuminaOperatingMode) {
         _operatingMode.value = mode
         com.example.aza.connector.BinanceConnector.setOperatingMode(mode)
-        addThought("üõ°Ô∏è OPERATING MODE UPDATED: Set to ${mode.name}. ${mode.description}")
+        addThought("\ud83d\udee1\ufe0f OPERATING MODE UPDATED: Set to ${mode.name}. ${mode.description}")
         onAppEventOccurred(
             "OPERATING_MODE_CHANGED",
             "Operating Mode shifted to **${mode.displayName}**. Safety checks and execution authority re-configured."
@@ -1790,10 +1790,10 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         _isExecutionUnlocked.value = unlocked
         com.example.aza.connector.BinanceConnector.setExecutionUnlocked(unlocked)
         if (unlocked) {
-            addThought("‚ö†Ô∏è MASTER EXECUTION UNLOCKED (execution_enabled = true). Live orders will be authorized if operating mode permits.")
+            addThought("\u26a0\ufe0f MASTER EXECUTION UNLOCKED (execution_enabled = true). Live orders will be authorized if operating mode permits.")
             onAppEventOccurred("EXECUTION_UNLOCKED", "Master Execution Lock was **UNLOCKED** by operator.")
         } else {
-            addThought("üîí MASTER EXECUTION LOCKED (execution_enabled = false). All Binance order dispatches will be stopped at the gate.")
+            addThought("\ud83d\udd12 MASTER EXECUTION LOCKED (execution_enabled = false). All Binance order dispatches will be stopped at the gate.")
             onAppEventOccurred("EXECUTION_LOCKED", "Master Execution Lock was **ENGAGED**. All order routing halted.")
         }
     }
@@ -1830,17 +1830,17 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
         when (_operatingMode.value) {
             com.example.aza.strategy.LuminaOperatingMode.ANALYSIS_ONLY -> {
-                addThought("üéØ SIGNAL GENERATED: ${proposal.symbol} ${proposal.side} @ $$entryPrice (Confidence: ${String.format(Locale.US, "%.1f", confidenceScore * 100)}%). Execution skipped: ANALYSIS_ONLY mode active. Recorded to opportunity ledger.")
+                addThought("\ud83c\udfaf SIGNAL GENERATED: ${proposal.symbol} ${proposal.side} @ $$entryPrice (Confidence: ${String.format(Locale.US, "%.1f", confidenceScore * 100)}%). Execution skipped: ANALYSIS_ONLY mode active. Recorded to opportunity ledger.")
             }
             com.example.aza.strategy.LuminaOperatingMode.LIVE_APPROVAL,
             com.example.aza.strategy.LuminaOperatingMode.FULL_AUTONOMOUS_LIVE -> {
                 if (_isExecutionUnlocked.value) {
                     _pendingApprovalQueue.value = listOf(proposal.copy(status = com.example.aza.strategy.PendingTradeStatus.APPROVED_EXECUTING)) + _pendingApprovalQueue.value.take(19)
-                    addThought("‚ö° AUTONOMOUS DISPATCH: Executing qualified signal for ${proposal.symbol} ${proposal.side} @ $$entryPrice through Order Manager...")
+                    addThought("\u26a1 AUTONOMOUS DISPATCH: Executing qualified signal for ${proposal.symbol} ${proposal.side} @ $$entryPrice through Order Manager...")
                     executeApprovedTrade(proposal, isExplicitOperatorAction = false)
                 } else {
                     _pendingApprovalQueue.value = listOf(proposal) + _pendingApprovalQueue.value.take(19)
-                    addThought("‚è≥ Execution Lock is ENGAGED. Queued trade #${proposal.proposalNumber}.")
+                    addThought("\u23f3 Execution Lock is ENGAGED. Queued trade #${proposal.proposalNumber}.")
                     viewModelScope.launch {
                         repository.insertChatMessage(
                             ChatMessage(
@@ -1867,7 +1867,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             if (it.id == tradeId) it.copy(status = com.example.aza.strategy.PendingTradeStatus.REJECTED_BY_OPERATOR, executionLog = reason)
             else it
         }
-        addThought("üö´ PENDING TRADE DISMISSED: Operator rejected trade proposal $tradeId.")
+        addThought("\ud83d\udeab PENDING TRADE DISMISSED: Operator rejected trade proposal $tradeId.")
     }
 
     private fun executeApprovedTrade(
@@ -1899,13 +1899,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                         if (it.id == trade.id) it.copy(status = failedStatus, executionLog = gateDecision.reason)
                         else it
                     }
-                    addThought("‚õî EXECUTION GATE BLOCKED: ${gateDecision.reason} ${gateDecision.suggestedAction}")
+                    addThought("\u26d4 EXECUTION GATE BLOCKED: ${gateDecision.reason} ${gateDecision.suggestedAction}")
                     onAppEventOccurred("TRADE_EXECUTION_BLOCKED", "Execution Gate blocked trade #${trade.proposalNumber}: ${gateDecision.reason}")
                     return@launch
                 }
                 is com.example.aza.strategy.ExecutionGateDecision.Allowed -> {
                     // All checks passed! Proceed with order transmission
-                    addThought("‚ö° EXECUTION GATE CLEARED: Verifying pre-buy exit sellability on Binance Spot for ${trade.symbol}...")
+                    addThought("\u26a1 EXECUTION GATE CLEARED: Verifying pre-buy exit sellability on Binance Spot for ${trade.symbol}...")
                     
                     // Pre-Buy Exit Viability & Liquidability Check
                     val freeUsdt = _binanceBalances.value.find { it.asset.equals("USDT", ignoreCase = true) }?.free ?: 13.0
@@ -1925,12 +1925,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                                 executionLog = "PRE-BUY SELLABILITY REJECTED: ${viability.rejectionReason}"
                             ) else it
                         }
-                        addThought("‚õî PRE-BUY SELLABILITY FAILED: Lumina cannot safely sell ${trade.symbol} on Binance (${viability.rejectionReason}). Buy order aborted.")
+                        addThought("\u26d4 PRE-BUY SELLABILITY FAILED: Lumina cannot safely sell ${trade.symbol} on Binance (${viability.rejectionReason}). Buy order aborted.")
                         onAppEventOccurred("PRE_BUY_EXIT_REJECTED", "Lumina analyzed exit sellability before buying and blocked ${trade.symbol}: ${viability.rejectionReason}")
                         return@launch
                     }
 
-                    addThought("‚úì PRE-BUY SELLABILITY CERTIFIED: Breakeven $${String.format(java.util.Locale.US, "%.2f", viability.breakevenHurdlePrice)}. Dispatching signed order to Binance Spot API for ${trade.symbol} ${trade.side}...")
+                    addThought("\u2713 PRE-BUY SELLABILITY CERTIFIED: Breakeven $${String.format(java.util.Locale.US, "%.2f", viability.breakevenHurdlePrice)}. Dispatching signed order to Binance Spot API for ${trade.symbol} ${trade.side}...")
                     _pendingApprovalQueue.value = _pendingApprovalQueue.value.map {
                         if (it.id == trade.id) it.copy(status = com.example.aza.strategy.PendingTradeStatus.APPROVED_EXECUTING)
                         else it
@@ -1970,7 +1970,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     )
                     repository.insertPosition(newPos)
 
-                    addThought("‚úÖ BINANCE ORDER FILLED: Successfully executed ${trade.symbol} ${trade.side} (Order #${resp.orderId}). Tracked in live monitoring.")
+                    addThought("\u2705 BINANCE ORDER FILLED: Successfully executed ${trade.symbol} ${trade.side} (Order #${resp.orderId}). Tracked in live monitoring.")
                     onAppEventOccurred(
                         "ORDER_EXECUTED_LIVE",
                         "Live Order **#${resp.orderId}** executed on Binance for **${trade.symbol}** (${trade.side} ${trade.calculatedQuantity} @ $$currentPrice)."
@@ -1982,14 +1982,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                         if (it.id == trade.id) it.copy(status = com.example.aza.strategy.PendingTradeStatus.FAILED_BALANCE_CHECK, executionLog = errLog)
                         else it
                     }
-                    addThought("‚ùå BINANCE ORDER FAILED: $errLog")
+                    addThought("\u274c BINANCE ORDER FAILED: $errLog")
                 }
             } catch (e: Exception) {
                 _pendingApprovalQueue.value = _pendingApprovalQueue.value.map {
                     if (it.id == trade.id) it.copy(status = com.example.aza.strategy.PendingTradeStatus.FAILED_BALANCE_CHECK, executionLog = e.message)
                     else it
                 }
-                addThought("‚ùå ORDER DISPATCH EXCEPTION: ${e.message}")
+                addThought("\u274c ORDER DISPATCH EXCEPTION: ${e.message}")
             }
         }
     }
@@ -2038,25 +2038,25 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         if (isExecute) {
             if (targetTrade != null) {
                 approveAndExecutePendingTrade(targetTrade.id)
-                return "‚ö° **Trade Proposal #${targetTrade.proposalNumber} Authorized:** Order dispatched to Binance Spot for **${targetTrade.symbol} ${targetTrade.side}** @ $${String.format(Locale.US, "%,.2f", targetTrade.entryPrice)}. Evaluating slippage and balance at the execution gate..."
+                return "\u26a1 **Trade Proposal #${targetTrade.proposalNumber} Authorized:** Order dispatched to Binance Spot for **${targetTrade.symbol} ${targetTrade.side}** @ $${String.format(Locale.US, "%,.2f", targetTrade.entryPrice)}. Evaluating slippage and balance at the execution gate..."
             } else {
                 val pastTrade = _pendingApprovalQueue.value.find { numberMatch != null && it.proposalNumber == numberMatch }
                 return if (pastTrade != null) {
-                    "‚ö†Ô∏è **Proposal #${pastTrade.proposalNumber} Inactive:** Status is `${pastTrade.status.name}` (${pastTrade.executionLog ?: "No longer pending"}). Zero orders placed."
+                    "\u26a0\ufe0f **Proposal #${pastTrade.proposalNumber} Inactive:** Status is `${pastTrade.status.name}` (${pastTrade.executionLog ?: "No longer pending"}). Zero orders placed."
                 } else {
-                    "‚ö†Ô∏è **No Active Proposal Found:** No pending trade matching '$clean' is waiting in the approval queue."
+                    "\u26a0\ufe0f **No Active Proposal Found:** No pending trade matching '$clean' is waiting in the approval queue."
                 }
             }
         } else if (isReject) {
             if (targetTrade != null) {
                 rejectPendingTrade(targetTrade.id, "Rejected #${targetTrade.proposalNumber} by operator via chat command: '$clean'")
-                return "üö´ **Trade Proposal #${targetTrade.proposalNumber} Rejected:** Setup for **${targetTrade.symbol} ${targetTrade.side}** has been dismissed. Zero orders placed."
+                return "\ud83d\udeab **Trade Proposal #${targetTrade.proposalNumber} Rejected:** Setup for **${targetTrade.symbol} ${targetTrade.side}** has been dismissed. Zero orders placed."
             } else {
                 val pastTrade = _pendingApprovalQueue.value.find { numberMatch != null && it.proposalNumber == numberMatch }
                 return if (pastTrade != null) {
-                    "‚ÑπÔ∏è **Proposal #${pastTrade.proposalNumber} Already Inactive:** Status is `${pastTrade.status.name}`."
+                    "\u2139\ufe0f **Proposal #${pastTrade.proposalNumber} Already Inactive:** Status is `${pastTrade.status.name}`."
                 } else {
-                    "‚ÑπÔ∏è **No Active Proposal Found:** No pending trade found matching '$clean'."
+                    "\u2139\ufe0f **No Active Proposal Found:** No pending trade found matching '$clean'."
                 }
             }
         }
@@ -2082,7 +2082,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val entryPrice = if (priceRes.isSuccess && priceRes.getOrThrow() > 0.0) priceRes.getOrThrow() else 2407.86
             val stopLoss = if (side == "BUY") entryPrice * 0.9688 else entryPrice * 1.0312
             val takeProfit = if (side == "BUY") entryPrice * 1.0624 else entryPrice * 0.9376
-            val rationaleText = rationaleList.joinToString("\n") { "‚Ä¢ $it" }
+            val rationaleText = rationaleList.joinToString("\n") { "\u2022 $it" }
 
             handleNewTradeProposal(
                 symbol = symbol,
@@ -2318,7 +2318,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             if (dynamicExponentialEstimator.isCircuitBreakerTriggered) {
                 val updatedToRejected = proposal.copy(
                     status = "REJECTED",
-                    supportingEvidence = proposal.supportingEvidence + "\nüö® [CIRCUIT BREAKER] Trade execution blocked because maximum drawdown threshold (10.0%) was breached."
+                    supportingEvidence = proposal.supportingEvidence + "\n\ud83d\udea8 [CIRCUIT BREAKER] Trade execution blocked because maximum drawdown threshold (10.0%) was breached."
                 )
                 repository.updateProposal(updatedToRejected)
                 
@@ -2365,10 +2365,10 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     if (!viability.isSellableApproved) {
                         val updatedToRejected = proposal.copy(
                             status = "REJECTED",
-                            supportingEvidence = proposal.supportingEvidence + "\nüö® [PRE-BUY EXIT VIABILITY BLOCKED] Lumina analyzed sellability before buying and detected: ${viability.rejectionReason}. Buy cancelled to protect capital."
+                            supportingEvidence = proposal.supportingEvidence + "\n\ud83d\udea8 [PRE-BUY EXIT VIABILITY BLOCKED] Lumina analyzed sellability before buying and detected: ${viability.rejectionReason}. Buy cancelled to protect capital."
                         )
                         repository.updateProposal(updatedToRejected)
-                        addThought("‚õî PRE-BUY SELLABILITY BLOCKED: Cannot safely sell $symbol on Binance (${viability.rejectionReason}). Buy proposal rejected.")
+                        addThought("\u26d4 PRE-BUY SELLABILITY BLOCKED: Cannot safely sell $symbol on Binance (${viability.rejectionReason}). Buy proposal rejected.")
                         onAppEventOccurred("PRE_BUY_EXIT_REJECTED", "Lumina analyzed exit sellability before buying and blocked $symbol: ${viability.rejectionReason}")
                         return@launch
                     }
@@ -2727,7 +2727,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             )
             val id = repository.insertExperiment(newExp).toInt()
             selectedExperimentId.value = id
-            addThought("üß™ VALIDATION LAB: Created new experiment '$name' using strategy '$strategyName' on $market ($timeframe)")
+            addThought("\ud83e\uddea VALIDATION LAB: Created new experiment '$name' using strategy '$strategyName' on $market ($timeframe)")
         }
     }
 
@@ -2777,7 +2777,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             }
             activeTradingConflicts.value = conflicts
             if (conflicts.isNotEmpty()) {
-                addThought("‚ö†Ô∏è CONFLICT DETECTED on ${targetExp.market}: ${conflicts.joinToString(". ")}")
+                addThought("\u26a0\ufe0f CONFLICT DETECTED on ${targetExp.market}: ${conflicts.joinToString(". ")}")
             }
 
             // Generate simulated price and run strategy
@@ -2969,7 +2969,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             )
 
             repository.updateExperiment(updatedExp)
-            addThought("üß™ VALIDATION LAB: Executed paper trade simulation on ${targetExp.market}. Direction: $direction, Profit/Loss: $${String.format(Locale.US, "%.2f", netProfitLoss)}")
+            addThought("\ud83e\uddea VALIDATION LAB: Executed paper trade simulation on ${targetExp.market}. Direction: $direction, Profit/Loss: $${String.format(Locale.US, "%.2f", netProfitLoss)}")
         }
     }
 
@@ -2978,7 +2978,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             repository.clearAllExperiments()
             repository.clearAllExperimentTrades()
             selectedExperimentId.value = null
-            addThought("üßπ VALIDATION LAB: Cleared all experiments and historical evaluation logs.")
+            addThought("\ud83e\uddf9 VALIDATION LAB: Cleared all experiments and historical evaluation logs.")
         }
     }
 
@@ -3001,14 +3001,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 isConfirmed = true
             )
             repository.insertKnowledge(entry)
-            addThought("üß† KNOWLEDGE BASE: Formulated new lesson '$title' in category $category.")
+            addThought("\ud83e\udde0 KNOWLEDGE BASE: Formulated new lesson '$title' in category $category.")
         }
     }
 
     fun updateKnowledgeEntry(entry: com.example.data.database.KnowledgeEntry) {
         viewModelScope.launch {
             repository.updateKnowledge(entry)
-            addThought("üß† KNOWLEDGE BASE: Updated lesson '${entry.title}' (Confirmed count: ${entry.timesConfirmed})")
+            addThought("\ud83e\udde0 KNOWLEDGE BASE: Updated lesson '${entry.title}' (Confirmed count: ${entry.timesConfirmed})")
         }
     }
 
@@ -3016,7 +3016,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         viewModelScope.launch {
             val entries = repository.getAllKnowledgeDirect()
             if (entries.isEmpty()) {
-                addThought("üß† KNOWLEDGE BASE: No lessons found in database to consolidate.")
+                addThought("\ud83e\udde0 KNOWLEDGE BASE: No lessons found in database to consolidate.")
                 return@launch
             }
             
@@ -3040,7 +3040,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 isConfirmed = true
             )
             repository.insertKnowledge(consolidatedEntry)
-            addThought("üß† KNOWLEDGE BASE CONSOLIDATION: Synthesized $totalSize records. Generated unified guidelines model: '$title'. Updated memory registers.")
+            addThought("\ud83e\udde0 KNOWLEDGE BASE CONSOLIDATION: Synthesized $totalSize records. Generated unified guidelines model: '$title'. Updated memory registers.")
         }
     }
 
@@ -3065,7 +3065,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     volatility = dynamicExponentialEstimator.currentVolatility
                 )
                 syncCredibilitiesFromEngine()
-                addThought("üß† USER FEEDBACK INTEGRATED: Rated '${entry.title}' as '$rating'. Adjusted confidence to ${String.format(java.util.Locale.US, "%.1f", updated.confidenceScore * 100.0)}%. Future recommendations re-calibrated.")
+                addThought("\ud83e\udde0 USER FEEDBACK INTEGRATED: Rated '${entry.title}' as '$rating'. Adjusted confidence to ${String.format(java.util.Locale.US, "%.1f", updated.confidenceScore * 100.0)}%. Future recommendations re-calibrated.")
             }
         }
     }
@@ -3073,7 +3073,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun clearAllKnowledgeBase() {
         viewModelScope.launch {
             repository.clearAllKnowledge()
-            addThought("üß† KNOWLEDGE BASE: Cleared persistent experience store.")
+            addThought("\ud83e\udde0 KNOWLEDGE BASE: Cleared persistent experience store.")
         }
     }
 
@@ -3096,14 +3096,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 isFreelanceLinked = true
             ))
 
-            addThought("üö® SYSTEM DIAGNOSTICS: Performed a complete Hard System Reset. Seeded default configurations.")
+            addThought("\ud83d\udea8 SYSTEM DIAGNOSTICS: Performed a complete Hard System Reset. Seeded default configurations.")
         }
     }
 
     fun updateSkillEntry(skill: com.example.data.database.SkillEntry) {
         viewModelScope.launch {
             repository.updateSkill(skill)
-            addThought("üéì SKILL LIBRARY: Calibrated trading skill '${skill.name}' (Confidence: ${String.format(Locale.US, "%.2f", skill.confidence)})")
+            addThought("\ud83c\udf93 SKILL LIBRARY: Calibrated trading skill '${skill.name}' (Confidence: ${String.format(Locale.US, "%.2f", skill.confidence)})")
         }
     }
 
@@ -3160,14 +3160,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         val countText = if (trades.size >= 100) "Continuous validation cycle complete (${trades.size} trades analyzed)." else "Evaluation phase in progress (${trades.size}/100 trades completed in current validation cycle)."
 
         return """
-            üí° **AUTOMATED IMPROVEMENT SUGGESTIONS**
+            \ud83d\udca1 **AUTOMATED IMPROVEMENT SUGGESTIONS**
             *$countText*
             
-            ‚Ä¢ **Strongest Strategy**: **$strongestStrategy** (demonstrating structural persistence and optimal fee protection).
-            ‚Ä¢ **Weakest Strategy**: **$weakestStrategy** (highly vulnerable to rapid volatility shifts and spread-drag).
-            ‚Ä¢ **Most Common Failure Reason**: **$commonFailure** (accounting for the majority of paper trade drawdowns).
-            ‚Ä¢ **Best-Performing Regime**: **$bestRegime** (highly suited for momentum-based trailing targets).
-            ‚Ä¢ **Worst-Performing Regime**: **$worstRegime** (severe impact on execution metrics due to slippage).
+            \u2022 **Strongest Strategy**: **$strongestStrategy** (demonstrating structural persistence and optimal fee protection).
+            \u2022 **Weakest Strategy**: **$weakestStrategy** (highly vulnerable to rapid volatility shifts and spread-drag).
+            \u2022 **Most Common Failure Reason**: **$commonFailure** (accounting for the majority of paper trade drawdowns).
+            \u2022 **Best-Performing Regime**: **$bestRegime** (highly suited for momentum-based trailing targets).
+            \u2022 **Worst-Performing Regime**: **$worstRegime** (severe impact on execution metrics due to slippage).
             
             **RECOMMENDATIONS FOR MODEL ADJUSTMENT (Do Not Execute Automatically):**
             1. Restrict execution of **$weakestStrategy** during high-spread **$worstRegime** periods to curb fee friction.
@@ -3224,12 +3224,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun toggleContinuousEvolution247(enabled: Boolean) {
         _isContinuousEvolution247.value = enabled
-        addThought("‚öôÔ∏è 24/7 DAEMON: Continuous evolution loop ${if (enabled) "ENABLED" else "DISABLED"}.")
+        addThought("\u2699\ufe0f 24/7 DAEMON: Continuous evolution loop ${if (enabled) "ENABLED" else "DISABLED"}.")
     }
 
     fun toggleAutoApproveEvolution(enabled: Boolean) {
         _autoApproveEvolution.value = enabled
-        addThought("‚öôÔ∏è 24/7 DAEMON: Minor upgrades auto-approval set to: ${if (enabled) "ON (Fully Autonomous)" else "OFF (Requires Clearance)"}.")
+        addThought("\u2699\ufe0f 24/7 DAEMON: Minor upgrades auto-approval set to: ${if (enabled) "ON (Fully Autonomous)" else "OFF (Requires Clearance)"}.")
     }
 
     private val _safetyRules = MutableStateFlow("Max Alloc: $250, zero dynamic withdrawals, paper mode enabled if account is unlinked.")
@@ -3238,12 +3238,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun toggleAutonomousMode(enable: Boolean) {
         _isAutonomousMode.value = enable
         val modeStr = if (enable) "AUTONOMOUS MODE ACTIVE (Safety bounds applied)" else "APPROVAL MODE ACTIVE (Host checks enabled)"
-        addThought("‚öôÔ∏è POLICY: Switched execution mode to: $modeStr")
+        addThought("\u2699\ufe0f POLICY: Switched execution mode to: $modeStr")
     }
 
     fun updateSafetyRules(rules: String) {
         _safetyRules.value = rules
-        addThought("üîí POLICY: Updated host safety rules parameters.")
+        addThought("\ud83d\udd12 POLICY: Updated host safety rules parameters.")
     }
 
     // --- Web Surfing & Exploration States ---
@@ -3301,7 +3301,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             
             repository.insertChatMessage(ChatMessage(
                 sender = "SYSTEM",
-                text = "üåê **Aza Web Surfer**: Fetched and scraped URL: `$targetUrl` (${content.length} characters of parsed body content)."
+                text = "\ud83c\udf10 **Aza Web Surfer**: Fetched and scraped URL: `$targetUrl` (${content.length} characters of parsed body content)."
             ))
         }
     }
@@ -3324,7 +3324,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     WebSurfer.surfUrl(bestResultUrl)
                 }
                 _surfContent.value = "### Web Search Results for \"$query\"\n\n" +
-                        results.joinToString("\n") { "‚Ä¢ **${it.title}**\n  URL: ${it.url}\n  _${it.snippet}_\n" } +
+                        results.joinToString("\n") { "\u2022 **${it.title}**\n  URL: ${it.url}\n  _${it.snippet}_\n" } +
                         "\n---\n\n### Scraped Best Match Page ($bestResultUrl):\n\n$bestResultContent"
             } else {
                 _surfContent.value = "No results found for search query: \"$query\""
@@ -3380,7 +3380,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun pingLaptopHost() {
         viewModelScope.launch {
-            addSchedulerThought("üì° UI DISPATCH: Requesting Ping to Laptop Agent...")
+            addSchedulerThought("\ud83d\udce1 UI DISPATCH: Requesting Ping to Laptop Agent...")
             capabilityRegistry.executeActionSecurely(
                 capabilityName = "Laptop Agent Capability",
                 action = "PING_HOST",
@@ -3393,7 +3393,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun retrieveLaptopDocuments() {
         viewModelScope.launch {
-            addSchedulerThought("üì° UI DISPATCH: Starting document retrieval process from Laptop Agent...")
+            addSchedulerThought("\ud83d\udce1 UI DISPATCH: Starting document retrieval process from Laptop Agent...")
             val result = capabilityRegistry.executeActionSecurely(
                 capabilityName = "Laptop Agent Capability",
                 action = "RETRIEVE_DOCUMENTS",
@@ -3402,17 +3402,17 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 onThoughtLog = { addSchedulerThought(it) }
             )
             if (result.success) {
-                addSchedulerThought("üß† LEARNING ENGINE: Synchronized successfully. Commencing document cognitive analysis for user habits...")
+                addSchedulerThought("\ud83e\udde0 LEARNING ENGINE: Synchronized successfully. Commencing document cognitive analysis for user habits...")
                 val docs = repository.getAllLaptopDocumentsDirect()
                 planningEngine.coordinator.learningEngine.learnFromLaptopHabits(docs)
-                addSchedulerThought("üß† LEARNING ENGINE: Pattern extraction complete. Recommendations and relevant skill weights calibrated.")
+                addSchedulerThought("\ud83e\udde0 LEARNING ENGINE: Pattern extraction complete. Recommendations and relevant skill weights calibrated.")
             }
         }
     }
 
     fun exchangeLaptopData() {
         viewModelScope.launch {
-            addSchedulerThought("üì° UI DISPATCH: Initiating telemetry and log data exchange with Laptop Agent...")
+            addSchedulerThought("\ud83d\udce1 UI DISPATCH: Initiating telemetry and log data exchange with Laptop Agent...")
             capabilityRegistry.executeActionSecurely(
                 capabilityName = "Laptop Agent Capability",
                 action = "EXCHANGE_DATA",
@@ -3426,14 +3426,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun clearAllLaptopDocuments() {
         viewModelScope.launch {
             repository.clearAllLaptopDocuments()
-            addSchedulerThought("üóëÔ∏è DATA MGMT: Local Laptop Documents Cache cleared.")
+            addSchedulerThought("\ud83d\uddd1\ufe0f DATA MGMT: Local Laptop Documents Cache cleared.")
         }
     }
 
     fun clearAllLaptopExchangeHistory() {
         viewModelScope.launch {
             repository.clearAllLaptopExchangeHistory()
-            addSchedulerThought("üóëÔ∏è DATA MGMT: Local Laptop Exchange History logs cleared.")
+            addSchedulerThought("\ud83d\uddd1\ufe0f DATA MGMT: Local Laptop Exchange History logs cleared.")
         }
     }
 
@@ -3442,7 +3442,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val state = repository.getCapabilityStateByNameDirect(name)
             if (state != null) {
                 repository.updateCapabilityState(state.copy(isEnabled = enabled))
-                addSchedulerThought("üîí CAPABILITY CONFIG: Capability '$name' toggled to isEnabled = $enabled")
+                addSchedulerThought("\ud83d\udd12 CAPABILITY CONFIG: Capability '$name' toggled to isEnabled = $enabled")
             }
         }
     }
@@ -3452,7 +3452,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val state = repository.getCapabilityStateByNameDirect(name)
             if (state != null) {
                 repository.updateCapabilityState(state.copy(operatingMode = mode))
-                addSchedulerThought("üîí CAPABILITY CONFIG: Capability '$name' operating mode updated to $mode")
+                addSchedulerThought("\ud83d\udd12 CAPABILITY CONFIG: Capability '$name' operating mode updated to $mode")
             }
         }
     }
@@ -3462,7 +3462,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val state = repository.getCapabilityStateByNameDirect(name)
             if (state != null) {
                 repository.updateCapabilityState(state.copy(authPolicy = policy))
-                addSchedulerThought("üîí CAPABILITY CONFIG: Capability '$name' authorization policy updated to $policy")
+                addSchedulerThought("\ud83d\udd12 CAPABILITY CONFIG: Capability '$name' authorization policy updated to $policy")
             }
         }
     }
@@ -3490,7 +3490,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                 repository.insertChatMessage(com.example.data.database.ChatMessage(
                                     sender = "AZA",
-                                    text = "üì° **Binance Connection Check**: Credentials update detected. Initiating connection verification health check..."
+                                    text = "\ud83d\udce1 **Binance Connection Check**: Credentials update detected. Initiating connection verification health check..."
                                 ))
                                 
                                 val syncResult = com.example.aza.connector.BinanceConnector.syncServerTime()
@@ -3503,7 +3503,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                                     val tradingMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
                                     
                                     val msg = """
-                                        üü¢ **Binance Connected Successfully!**
+                                        \ud83d\udfe2 **Binance Connected Successfully!**
                                         
                                         AZA has successfully detected your integration credentials and established a secure, live connection.
                                         
@@ -3520,7 +3520,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                                 } else {
                                     val err = balanceResult.exceptionOrNull()?.message ?: "Unknown API response error"
                                     val msg = """
-                                        üö® **Binance Connection Failed**
+                                        \ud83d\udea8 **Binance Connection Failed**
                                         
                                         AZA detected updated Binance credentials, but the connection verification failed.
                                         
@@ -3536,7 +3536,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             // Disconnection
                             repository.insertChatMessage(com.example.data.database.ChatMessage(
                                 sender = "AZA",
-                                text = "‚ö™ **Binance Disconnected**\n\nYour Binance API credentials have been removed. AZA has severed the live integration and reverted to **MOCK/Simulated** operations."
+                                text = "\u26aa **Binance Disconnected**\n\nYour Binance API credentials have been removed. AZA has severed the live integration and reverted to **MOCK/Simulated** operations."
                             ))
                         }
                     }
@@ -3571,7 +3571,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     apiSecret = if (apiSecret.isBlank()) "" else "[SECURED_KEYSTORE]",
                     operatingMode = if (apiKey.isBlank()) "MOCK" else "LIVE"
                 ))
-                addSchedulerThought("üîí CAPABILITY CONFIG: Credentials updated for '$name' securely via Android Keystore.")
+                addSchedulerThought("\ud83d\udd12 CAPABILITY CONFIG: Credentials updated for '$name' securely via Android Keystore.")
             }
         }
     }
@@ -3579,12 +3579,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun clearCapabilityAuditLogs() {
         viewModelScope.launch {
             repository.clearCapabilityAuditLogs()
-            addSchedulerThought("üßπ CAPABILITY CONFIG: Capability Audit Logs cleared.")
+            addSchedulerThought("\ud83e\uddf9 CAPABILITY CONFIG: Capability Audit Logs cleared.")
         }
     }
 
     /**
-     * Queries live balance ‚Äî prioritizing the Backend VPS and falling back to direct Binance Spot REST.
+     * Queries live balance \u2014 prioritizing the Backend VPS and falling back to direct Binance Spot REST.
      * Persists real balances into Room DB so that all UI components immediately display accurate figures.
      */
     fun fetchLiveBinanceBalances(customApiKey: String? = null, customApiSecret: String? = null) {
@@ -3667,10 +3667,10 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
                     val cryptoTotalVal = updatedAssets.sumOf { it.amountOwned * it.currentPrice }
                     val netWorth = totalLiquidCash + cryptoTotalVal
-                    addSchedulerThought("üí∞ BINANCE SYNC: Live Account Balance: USDT=$$usdtBal, Crypto Assets Value=$$cryptoTotalVal. Total Net Worth: $$netWorth")
+                    addSchedulerThought("\ud83d\udcb0 BINANCE SYNC: Live Account Balance: USDT=$$usdtBal, Crypto Assets Value=$$cryptoTotalVal. Total Net Worth: $$netWorth")
                 } else {
                     val err = balanceResult.exceptionOrNull()?.message ?: "Direct API query failed"
-                    addSchedulerThought("‚ö†Ô∏è BINANCE SYNC: Notice: $err")
+                    addSchedulerThought("\u26a0\ufe0f BINANCE SYNC: Notice: $err")
                 }
 
                 // 2. Fetch backend VPS telemetry for engine status (without overwriting live balances)
@@ -3684,7 +3684,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     // Ignore backend unreachable
                 }
             } catch (e: Exception) {
-                addSchedulerThought("‚ö†Ô∏è BINANCE SYNC ERROR: ${e.message}")
+                addSchedulerThought("\u26a0\ufe0f BINANCE SYNC ERROR: ${e.message}")
             }
         }
     }
@@ -3723,22 +3723,22 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             "Research" -> {
                 _researchAgentCredibility.value = clamped
                 conflictResolutionEngine.researchAgentCredibility = clamped.toDouble()
-                addSchedulerThought("üß† FEEDBACK LOOP: Adjusted Research Agent credibility weight to ${String.format(Locale.US, "%.0f", clamped * 100f)}%")
+                addSchedulerThought("\ud83e\udde0 FEEDBACK LOOP: Adjusted Research Agent credibility weight to ${String.format(Locale.US, "%.0f", clamped * 100f)}%")
             }
             "Risk" -> {
                 _riskAgentCredibility.value = clamped
                 conflictResolutionEngine.riskAgentCredibility = clamped.toDouble()
-                addSchedulerThought("üß† FEEDBACK LOOP: Adjusted Risk Agent credibility weight to ${String.format(Locale.US, "%.0f", clamped * 100f)}%")
+                addSchedulerThought("\ud83e\udde0 FEEDBACK LOOP: Adjusted Risk Agent credibility weight to ${String.format(Locale.US, "%.0f", clamped * 100f)}%")
             }
             "Trading" -> {
                 _tradingAgentCredibility.value = clamped
                 conflictResolutionEngine.tradingAgentCredibility = clamped.toDouble()
-                addSchedulerThought("üß† FEEDBACK LOOP: Adjusted Trading Agent credibility weight to ${String.format(Locale.US, "%.0f", clamped * 100f)}%")
+                addSchedulerThought("\ud83e\udde0 FEEDBACK LOOP: Adjusted Trading Agent credibility weight to ${String.format(Locale.US, "%.0f", clamped * 100f)}%")
             }
             "Laptop" -> {
                 _laptopAgentCredibility.value = clamped
                 conflictResolutionEngine.laptopAgentCredibility = clamped.toDouble()
-                addSchedulerThought("üß† FEEDBACK LOOP: Adjusted Laptop Agent credibility weight to ${String.format(Locale.US, "%.0f", clamped * 100f)}%")
+                addSchedulerThought("\ud83e\udde0 FEEDBACK LOOP: Adjusted Laptop Agent credibility weight to ${String.format(Locale.US, "%.0f", clamped * 100f)}%")
             }
         }
     }
@@ -3771,13 +3771,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             dynamicExponentialEstimator.runWalkForwardOptimization(0.85, 0.75)
             dynamicExponentialEstimator.publishMetricsToKnowledgeBase()
 
-            addSchedulerThought("üß† DYNAMIC ESTIMATOR: Analyzed market state. Regime: ${dynamicExponentialEstimator.currentRegime}, Volatility: ${String.format(Locale.US, "%.4f", dynamicExponentialEstimator.currentVolatility)}, Decay alpha: ${String.format(Locale.US, "%.2f", dynamicExponentialEstimator.decayAlpha)}")
+            addSchedulerThought("\ud83e\udde0 DYNAMIC ESTIMATOR: Analyzed market state. Regime: ${dynamicExponentialEstimator.currentRegime}, Volatility: ${String.format(Locale.US, "%.4f", dynamicExponentialEstimator.currentVolatility)}, Decay alpha: ${String.format(Locale.US, "%.2f", dynamicExponentialEstimator.decayAlpha)}")
         }
     }
 
     fun runConflictResolutionSweep() {
         viewModelScope.launch {
-            addSchedulerThought("üß† COGNITIVE SYSTEM: Commencing knowledge conflict resolution sweep...")
+            addSchedulerThought("\ud83e\udde0 COGNITIVE SYSTEM: Commencing knowledge conflict resolution sweep...")
             
             // First run the Dynamic Exponential Estimator to update environmental risk factors
             val prices = listOf(99.5, 100.2, 101.4, 100.8, 102.5, 105.0, 104.2, 106.8)
@@ -3799,17 +3799,17 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             dynamicExponentialEstimator.runWalkForwardOptimization(0.85, 0.75)
             dynamicExponentialEstimator.publishMetricsToKnowledgeBase()
             
-            addSchedulerThought("üß† DYNAMIC ESTIMATOR: Updated risk parameters. Regime: ${dynamicExponentialEstimator.currentRegime}, Volatility: ${String.format(Locale.US, "%.4f", dynamicExponentialEstimator.currentVolatility)}")
+            addSchedulerThought("\ud83e\udde0 DYNAMIC ESTIMATOR: Updated risk parameters. Regime: ${dynamicExponentialEstimator.currentRegime}, Volatility: ${String.format(Locale.US, "%.4f", dynamicExponentialEstimator.currentVolatility)}")
             
             val result = conflictResolutionEngine.resolveKnowledgeConflicts()
-            addSchedulerThought("üß† COGNITIVE SYSTEM: Sweep completed.")
-            addThought("üß† CONFLICT RESOLUTION: $result")
+            addSchedulerThought("\ud83e\udde0 COGNITIVE SYSTEM: Sweep completed.")
+            addThought("\ud83e\udde0 CONFLICT RESOLUTION: $result")
         }
     }
 
     fun simulateConflictingInputs() {
         viewModelScope.launch {
-            addSchedulerThought("‚ö†Ô∏è SIMULATION OVERRIDE: Injecting conflicting analytical inputs to trigger resolution...")
+            addSchedulerThought("\u26a0\ufe0f SIMULATION OVERRIDE: Injecting conflicting analytical inputs to trigger resolution...")
             
             val e1 = com.example.data.database.KnowledgeEntry(
                 title = "Volatility Forecast - Extreme Volatility",
@@ -3831,8 +3831,8 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             repository.insertKnowledge(e1)
             repository.insertKnowledge(e2)
             
-            addSchedulerThought("‚ö†Ô∏è SIMULATION OVERRIDE: Injected contradictory forecasts into database.")
-            addThought("‚ö†Ô∏è SIMULATION OVERRIDE: Injected contradictory forecasts into database. Starting resolution sweep.")
+            addSchedulerThought("\u26a0\ufe0f SIMULATION OVERRIDE: Injected contradictory forecasts into database.")
+            addThought("\u26a0\ufe0f SIMULATION OVERRIDE: Injected contradictory forecasts into database. Starting resolution sweep.")
             runConflictResolutionSweep()
         }
     }
@@ -3841,8 +3841,8 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         viewModelScope.launch {
             when (scenario) {
                 "BLACK_SWAN" -> {
-                    addSchedulerThought("üö® STRESS SIMULATION: Activating [Black Swan Scenario]...")
-                    addThought("üö® STRESS SIMULATION: Simulating systemic crash with extreme negative bias. Initiating parameter recalibration.")
+                    addSchedulerThought("\ud83d\udea8 STRESS SIMULATION: Activating [Black Swan Scenario]...")
+                    addThought("\ud83d\udea8 STRESS SIMULATION: Simulating systemic crash with extreme negative bias. Initiating parameter recalibration.")
                     
                     // Inject extreme market stats into DEE
                     dynamicExponentialEstimator.currentVolatility = 0.085 // 8.5% volatility (Extreme)
@@ -3875,8 +3875,8 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     runConflictResolutionSweep()
                 }
                 "STOP_RUN" -> {
-                    addSchedulerThought("üéØ STRESS SIMULATION: Activating [Liquidity Stop-Run Scenario]...")
-                    addThought("üéØ STRESS SIMULATION: Simulating highly asymmetric stop-run with weak liquidity and strong buy imbalance.")
+                    addSchedulerThought("\ud83c\udfaf STRESS SIMULATION: Activating [Liquidity Stop-Run Scenario]...")
+                    addThought("\ud83c\udfaf STRESS SIMULATION: Simulating highly asymmetric stop-run with weak liquidity and strong buy imbalance.")
                     
                     // Inject stop-run stats: low liquidity, high positive OFI
                     dynamicExponentialEstimator.currentVolatility = 0.024
@@ -3908,8 +3908,8 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     runConflictResolutionSweep()
                 }
                 "STATE_THRASHING" -> {
-                    addSchedulerThought("üîÑ STRESS SIMULATION: Activating [State-Transition Thrashing Scenario]...")
-                    addThought("üîÑ STRESS SIMULATION: Rapidly switching mock states to trigger adaptive smoothing and monitor system damping.")
+                    addSchedulerThought("\ud83d\udd04 STRESS SIMULATION: Activating [State-Transition Thrashing Scenario]...")
+                    addThought("\ud83d\udd04 STRESS SIMULATION: Rapidly switching mock states to trigger adaptive smoothing and monitor system damping.")
                     
                     // Simulate rapid switches to record regime transitions
                     val mockRegimes = listOf("BULL", "BEAR", "RANGE", "VOLATILE", "BULL", "BEAR")
@@ -3970,7 +3970,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun triggerForcedTaskFailure() {
         scheduler.forceNextTaskFailure = true
-        addSchedulerThought("‚ö†Ô∏è SIMULATION OVERRIDE: Scheduled forced failure on next task execution.")
+        addSchedulerThought("\u26a0\ufe0f SIMULATION OVERRIDE: Scheduled forced failure on next task execution.")
     }
 
     fun evolveMemory() {
@@ -3978,7 +3978,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             memoryEvolutionEngine.evolveMemory { log ->
                 addThought(log)
             }
-            addThought("üß† MEMORY EVOLUTION: Evolution sweep completed.")
+            addThought("\ud83e\udde0 MEMORY EVOLUTION: Evolution sweep completed.")
         }
     }
 
@@ -3987,7 +3987,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             scheduler.executivePlanner.superviseAndOptimize { log ->
                 addThought(log)
             }
-            addThought("ü§ñ AUTONOMOUS SUPERVISION: Optimized executive run thread.")
+            addThought("\ud83e\udd16 AUTONOMOUS SUPERVISION: Optimized executive run thread.")
         }
     }
 
@@ -4014,7 +4014,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun clearAllExecutiveDecisions() {
         viewModelScope.launch {
             repository.clearAllExecutiveDecisions()
-            addThought("üìÇ DECISION JOURNAL: Purged all archived system consensus decisions.")
+            addThought("\ud83d\udcc2 DECISION JOURNAL: Purged all archived system consensus decisions.")
         }
     }
 
@@ -4057,7 +4057,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         scheduler.startPollingScheduler { thought ->
             addSchedulerThought(thought)
             if (thought.contains("COMPLETED") || thought.contains("FAILED") || thought.contains("PAUSED") || thought.contains("RESUMED") || thought.contains("DISPATCHER")) {
-                addThought("‚è∞ SCHEDULER: $thought")
+                addThought("\u23f0 SCHEDULER: $thought")
             }
         }
 
@@ -4076,16 +4076,16 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             planningEngine.eventBus.events.collect { event ->
                 when (event) {
                     is com.example.aza.context.AzaEvent.TradeClosed -> {
-                        addThought("üìä EVENT [TradeClosed]: Exchanged ${event.amount} ${event.symbol}. Profit: +$${event.profitUsd} USD. Direct reserve balance: $${event.totalBalanceUsd}")
+                        addThought("\ud83d\udcca EVENT [TradeClosed]: Exchanged ${event.amount} ${event.symbol}. Profit: +$${event.profitUsd} USD. Direct reserve balance: $${event.totalBalanceUsd}")
                     }
                     is com.example.aza.context.AzaEvent.ContentCreated -> {
-                        addThought("üé¨ EVENT [ContentCreated]: TikTok script outline registered: '${event.title}' under queue status [${event.status}].")
+                        addThought("\ud83c\udfac EVENT [ContentCreated]: TikTok script outline registered: '${event.title}' under queue status [${event.status}].")
                     }
                     is com.example.aza.context.AzaEvent.ProposalSubmitted -> {
-                        addThought("üíº EVENT [ProposalSubmitted]: Tailored engineering bid uploaded to ${event.clientName} under client request: '${event.gigTitle}'.")
+                        addThought("\ud83d\udcbc EVENT [ProposalSubmitted]: Tailored engineering bid uploaded to ${event.clientName} under client request: '${event.gigTitle}'.")
                     }
                     is com.example.aza.context.AzaEvent.AuditCompleted -> {
-                        addThought("üõ°Ô∏è EVENT [AuditCompleted]: Financial system compliance verified. Audited Balance: $${event.auditedAmount}. Summary: ${event.statusLog}")
+                        addThought("\ud83d\udee1\ufe0f EVENT [AuditCompleted]: Financial system compliance verified. Audited Balance: $${event.auditedAmount}. Summary: ${event.statusLog}")
                     }
                     else -> {}
                 }
@@ -4160,24 +4160,24 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 }
                 com.example.aza.market.MarketDataService.databaseStatus = dbStatus
                 if (dbStatus == "ERROR") {
-                    addThought("‚ö†Ô∏è SYSTEM HEALTH ALERT: Database connection is offline or degraded.")
+                    addThought("\u26a0\ufe0f SYSTEM HEALTH ALERT: Database connection is offline or degraded.")
                 }
 
                 // 2. Exchange connection
                 val isConnected = com.example.aza.market.MarketDataService.exchangeConnected
                 if (!isConnected) {
-                    addThought("‚ö†Ô∏è SYSTEM HEALTH ALERT: Connection to external exchange is lost.")
+                    addThought("\u26a0\ufe0f SYSTEM HEALTH ALERT: Connection to external exchange is lost.")
                 }
 
                 // 3. Latency / Data Quality alerts
                 val latency = com.example.aza.market.MarketDataService.currentLatencyMs
                 if (latency > 150) {
-                    addThought("‚ö†Ô∏è SYSTEM HEALTH WARNING: Market API latency is elevated: ${latency}ms")
+                    addThought("\u26a0\ufe0f SYSTEM HEALTH WARNING: Market API latency is elevated: ${latency}ms")
                 }
                 
                 val qScore = com.example.aza.market.MarketDataService.dataQualityScore
                 if (qScore < 90.0) {
-                    addThought("‚ö†Ô∏è SYSTEM HEALTH WARNING: Market Data Quality score has dropped to ${String.format(Locale.US, "%.1f", qScore)}%")
+                    addThought("\u26a0\ufe0f SYSTEM HEALTH WARNING: Market Data Quality score has dropped to ${String.format(Locale.US, "%.1f", qScore)}%")
                 }
             }
         }
@@ -4439,15 +4439,15 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
             // Chat Announcement
             val msg = """
-                üîê **[Secure Withdrawal Initiated]**
+                \ud83d\udd10 **[Secure Withdrawal Initiated]**
                 
                 I have verified and dispatched a secure cryptographically-signed withdrawal request from your central cash treasury:
                 
-                ‚Ä¢ **Beneficiary/Destination**: *"$destination"*
-                ‚Ä¢ **Withdrawal Amount**: **$${String.format(Locale.US, "%,.2f", amount)} USD**
-                ‚Ä¢ **Gateway Clearing Protocol**: Security-shielded Ledger Wire
+                \u2022 **Beneficiary/Destination**: *"$destination"*
+                \u2022 **Withdrawal Amount**: **$${String.format(Locale.US, "%,.2f", amount)} USD**
+                \u2022 **Gateway Clearing Protocol**: Security-shielded Ledger Wire
                 
-                ‚úÖ **Audited Balance:** Your remaining wallet balance has been securely optimized to **$${String.format(Locale.US, "%,.2f", updated.totalBalance)} USD**.
+                \u2705 **Audited Balance:** Your remaining wallet balance has been securely optimized to **$${String.format(Locale.US, "%,.2f", updated.totalBalance)} USD**.
             """.trimIndent()
             repository.insertChatMessage(ChatMessage(sender = "AZA", text = msg))
             onSuccess()
@@ -4642,6 +4642,25 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val positionSlicePattern = """(?i)(?:set|update|adjust|change)\s+(?:default\s+)?(?:position\s+)?slice(?:s)?\s*(?:to\s+)?([0-9\.]+)%?""".toRegex()
             val positionSliceMatch = positionSlicePattern.find(text)
 
+            // Lumina Small Account High-Frequency Scalper Chat Commands & Parameter Tweaks
+            val scalpTogglePattern = """(?i)(start|stop|pause|resume|enable|disable|turn\s+on|turn\s+off)\s+(?:small\s+account\s+)?(?:scalp(?:er|ing)?(?:\s+loop)?|micro\s+scalp(?:er|ing)?)""".toRegex()
+            val scalpToggleMatch = scalpTogglePattern.find(text)
+
+            val scalpProfitPattern = """(?i)(?:set|update|tweak|change|adjust)\s+(?:scalp(?:er)?\s+)?(?:take\s+)?profit(?:\s+target)?\s*(?:to\s+)?\+?([0-9\.]+)%?""".toRegex()
+            val scalpProfitMatch = scalpProfitPattern.find(text)
+
+            val scalpStopLossPattern = """(?i)(?:set|update|tweak|change|adjust)\s+(?:scalp(?:er)?\s+)?(?:tight\s+)?stop\s*loss\s*(?:to\s+)?\-?([0-9\.]+)%?""".toRegex()
+            val scalpStopLossMatch = scalpStopLossPattern.find(text)
+
+            val scalpHoldingTimePattern = """(?i)(?:set|update|tweak|change|adjust)\s+(?:scalp(?:er)?\s+)?(?:max\s+)?holding\s+(?:duration|time|mins?|minutes)\s*(?:to\s+)?([0-9\.]+)\s*(?:m|mins?|minutes?)?""".toRegex()
+            val scalpHoldingTimeMatch = scalpHoldingTimePattern.find(text)
+
+            val scalpTestPattern = """(?i)(?:run|trigger|execute|do|test)\s+(?:a\s+)?(?:single\s+)?scalp(?:\s+test)?(?:\s+on\s+([a-zA-Z0-9]+))?""".toRegex()
+            val scalpTestMatch = scalpTestPattern.find(text)
+
+            val scalpStatusPattern = """(?i)(?:show|check|get|view)\s+(?:scalp(?:er|ing)?\s+status|scalp\s+stats|scalper)""".toRegex()
+            val scalpStatusMatch = scalpStatusPattern.find(text)
+
             // Contabo VPS & Binance Guardian Angel Chat Commands
             val contaboHealthPattern = """(?i)(?:check|test|show)\s+(?:contabo|vps)\s+(?:health|status)""".toRegex()
             val contaboHealthMatch = contaboHealthPattern.find(text)
@@ -4684,7 +4703,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 actionExecutedNotice = gateNotice
             } else if (text.contains("propose trade", ignoreCase = true) || text.contains("propose a trade", ignoreCase = true) || text.contains("trade proposal", ignoreCase = true) || text.contains("scan for trade", ignoreCase = true)) {
                 triggerInstitutionalTradeProposal("ETHUSDT", "BUY")
-                actionExecutedNotice = "üìä **Trade Setup Evaluated:** Generated institutional Trade Proposal staged for operator authorization."
+                actionExecutedNotice = "\ud83d\udcca **Trade Setup Evaluated:** Generated institutional Trade Proposal staged for operator authorization."
             } else if (buyMatch != null) {
                 val amount = buyMatch.groupValues[1].toDoubleOrNull() ?: 0.0
                 val symbol = buyMatch.groupValues[2].uppercase()
@@ -4695,15 +4714,15 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     val name = priceInfo.second
                     val totalCost = amount * price
                     if (!account.isTradingLinked) {
-                        actionExecutedNotice = "‚ö†Ô∏è **Execution Failed:** Your trading connection is currently offline. Please toggle 'Simulated Instant Checkout' on the Account screen to link your wallet."
+                        actionExecutedNotice = "\u26a0\ufe0f **Execution Failed:** Your trading connection is currently offline. Please toggle 'Simulated Instant Checkout' on the Account screen to link your wallet."
                     } else if (account.totalBalance < totalCost) {
-                        actionExecutedNotice = "‚ö†Ô∏è **Execution Failed:** Insufficient simulated funds. The cost to buy $amount $symbol is $${String.format("%,.2f", totalCost)}, but your cash balance is only $${String.format("%,.2f", account.totalBalance)}."
+                        actionExecutedNotice = "\u26a0\ufe0f **Execution Failed:** Insufficient simulated funds. The cost to buy $amount $symbol is $${String.format("%,.2f", totalCost)}, but your cash balance is only $${String.format("%,.2f", account.totalBalance)}."
                     } else {
                         buyAsset(symbol, name, amount, price)
-                        actionExecutedNotice = "‚úÖ **Action Executed:** Purchased **$amount $symbol** ($name) at $${String.format("%,.2f", price)} per unit, totaling $${String.format("%,.2f", totalCost)}."
+                        actionExecutedNotice = "\u2705 **Action Executed:** Purchased **$amount $symbol** ($name) at $${String.format("%,.2f", price)} per unit, totaling $${String.format("%,.2f", totalCost)}."
                     }
                 } else {
-                    actionExecutedNotice = "‚ö†Ô∏è **Analysis Notice:** Asset symbol '$symbol' is not in our active lists (BTC, ETH, AAPL, NVDA). Please specify one of these for purchase execution."
+                    actionExecutedNotice = "\u26a0\ufe0f **Analysis Notice:** Asset symbol '$symbol' is not in our active lists (BTC, ETH, AAPL, NVDA). Please specify one of these for purchase execution."
                 }
             } else if (sellMatch != null) {
                 val amount = sellMatch.groupValues[1].toDoubleOrNull() ?: 0.0
@@ -4714,33 +4733,33 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 if (priceInfo != null && existing != null) {
                     val price = priceInfo.first
                     if (existing.amountOwned < amount) {
-                        actionExecutedNotice = "‚ö†Ô∏è **Execution Failed:** You only own **${existing.amountOwned} $symbol**, so you cannot sell **$amount $symbol**."
+                        actionExecutedNotice = "\u26a0\ufe0f **Execution Failed:** You only own **${existing.amountOwned} $symbol**, so you cannot sell **$amount $symbol**."
                     } else {
                         sellAsset(symbol, amount, price)
-                        actionExecutedNotice = "‚úÖ **Action Executed:** Sold **$amount $symbol** at $${String.format("%,.2f", price)} per unit, crediting **$${String.format("%,.2f", amount * price)}** to your balance."
+                        actionExecutedNotice = "\u2705 **Action Executed:** Sold **$amount $symbol** at $${String.format("%,.2f", price)} per unit, crediting **$${String.format("%,.2f", amount * price)}** to your balance."
                     }
                 } else if (existing == null) {
-                    actionExecutedNotice = "‚ö†Ô∏è **Execution Failed:** You do not own any shares of **$symbol** in your portfolio currently."
+                    actionExecutedNotice = "\u26a0\ufe0f **Execution Failed:** You do not own any shares of **$symbol** in your portfolio currently."
                 } else {
-                    actionExecutedNotice = "‚ö†Ô∏è **Execution Failed:** Market services cannot find liquid pricing for asset symbol '$symbol'."
+                    actionExecutedNotice = "\u26a0\ufe0f **Execution Failed:** Market services cannot find liquid pricing for asset symbol '$symbol'."
                 }
             } else if (depositMatch != null) {
                 val amount = depositMatch.groupValues[1].toDoubleOrNull() ?: 0.0
                 depositFundsMock(amount)
-                actionExecutedNotice = "‚úÖ **Action Executed:** Credited **$${String.format("%,.2f", amount)}** of simulated funds to your balance."
+                actionExecutedNotice = "\u2705 **Action Executed:** Credited **$${String.format("%,.2f", amount)}** of simulated funds to your balance."
             } else if (scriptMatch != null) {
                 val title = scriptMatch.groupValues[1].trim()
                 val platform = scriptMatch.groupValues[2].trim().uppercase()
                 generateNewContentPlan(title, platform)
-                actionExecutedNotice = "‚úÖ **Action Executed:** Generated a script draft titled **\"$title\"** for **$platform** in your Content Studio queue."
+                actionExecutedNotice = "\u2705 **Action Executed:** Generated a script draft titled **\"$title\"** for **$platform** in your Content Studio queue."
             } else if (proposalMatch != null) {
                 val searchKey = proposalMatch.groupValues[1].trim()
                 val targetGig = gigs.find { it.title.contains(searchKey, ignoreCase = true) || it.description.contains(searchKey, ignoreCase = true) }
                 if (targetGig != null) {
                     runGigProposalGenerator(targetGig)
-                    actionExecutedNotice = "‚úÖ **Action Executed:** Drafted and submitted a proposal for the project **\"${targetGig.title}\"**."
+                    actionExecutedNotice = "\u2705 **Action Executed:** Drafted and submitted a proposal for the project **\"${targetGig.title}\"**."
                 } else {
-                    actionExecutedNotice = "‚ÑπÔ∏è **Notice:** Searched for a gig matching '$searchKey' to submit proposal, but couldn't find an open contract. Please check typing and try again!"
+                    actionExecutedNotice = "\u2139\ufe0f **Notice:** Searched for a gig matching '$searchKey' to submit proposal, but couldn't find an open contract. Please check typing and try again!"
                 }
             } else if (surfMatch != null) {
                 val rawUrl = surfMatch.groupValues[1].trim()
@@ -4762,9 +4781,9 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             _surfHistory.value = currentHist
                         }
                         
-                        "üåê **Aza Web Surfer**: Connected to **$targetUrl** and scraped page text. Content snippet:\n\n${if (content.length > 2500) content.substring(0, 2500) + "\n\n...[Content truncated for context safety]..." else content}"
+                        "\ud83c\udf10 **Aza Web Surfer**: Connected to **$targetUrl** and scraped page text. Content snippet:\n\n${if (content.length > 2500) content.substring(0, 2500) + "\n\n...[Content truncated for context safety]..." else content}"
                     } catch (e: Exception) {
-                        "‚ö†Ô∏è **Aza Web Surfer Error**: Failed to browse **$targetUrl** - ${e.localizedMessage}"
+                        "\u26a0\ufe0f **Aza Web Surfer Error**: Failed to browse **$targetUrl** - ${e.localizedMessage}"
                     }
                 }
             } else if (searchMatch != null) {
@@ -4779,16 +4798,16 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             _surfUrl.value = bestResultUrl
                             val bestResultContent = WebSurfer.surfUrl(bestResultUrl)
                             _surfContent.value = "### Web Search Results for \"$query\"\n\n" +
-                                    results.joinToString("\n") { "‚Ä¢ **${it.title}**\n  URL: ${it.url}\n  _${it.snippet}_\n" } +
+                                    results.joinToString("\n") { "\u2022 **${it.title}**\n  URL: ${it.url}\n  _${it.snippet}_\n" } +
                                     "\n---\n\n### Scraped Best Match Content ($bestResultUrl):\n\n$bestResultContent"
                             
-                            val listStr = results.take(4).joinToString("\n") { "‚Ä¢ **${it.title}** (${it.url}): ${it.snippet}" }
-                            "üåê **Aza Web Explorer**: Searched live indexes for *\"$query\"*.\n\n**Search Results Summary:**\n$listStr\n\n**Best Page Scraped Content:**\n${if (bestResultContent.length > 1800) bestResultContent.substring(0, 1800) + "..." else bestResultContent}"
+                            val listStr = results.take(4).joinToString("\n") { "\u2022 **${it.title}** (${it.url}): ${it.snippet}" }
+                            "\ud83c\udf10 **Aza Web Explorer**: Searched live indexes for *\"$query\"*.\n\n**Search Results Summary:**\n$listStr\n\n**Best Page Scraped Content:**\n${if (bestResultContent.length > 1800) bestResultContent.substring(0, 1800) + "..." else bestResultContent}"
                         } else {
-                            "‚ÑπÔ∏è **Aza Web Explorer Notice**: Searched indexes for *\"$query\"* but received zero matching indexed nodes. Please check web accessibility parameters."
+                            "\u2139\ufe0f **Aza Web Explorer Notice**: Searched indexes for *\"$query\"* but received zero matching indexed nodes. Please check web accessibility parameters."
                         }
                     } catch (e: Exception) {
-                        "‚ö†Ô∏è **Aza Web Explorer Error**: Search index connection lost: ${e.localizedMessage}"
+                        "\u26a0\ufe0f **Aza Web Explorer Error**: Search index connection lost: ${e.localizedMessage}"
                     }
                 }
             } else if (autopilotMatch != null) {
@@ -4959,7 +4978,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 actionExecutedNotice = "I am issuing a reset command to lift the Emergency Stop block on the VPS backend database."
             } else if (contaboLiquidateMatch != null) {
                 triggerContaboEmergencyLiquidation()
-                actionExecutedNotice = "üö® **EMERGENCY RESPONSE PROTOCOL ENGAGED**: Forcing immediate liquidation of all active positions on Contabo VPS..."
+                actionExecutedNotice = "\ud83d\udea8 **EMERGENCY RESPONSE PROTOCOL ENGAGED**: Forcing immediate liquidation of all active positions on Contabo VPS..."
             } else if (contaboAdjustBalanceMatch != null) {
                 val amountVal = contaboAdjustBalanceMatch.groupValues[1].toDoubleOrNull() ?: 0.0
                 adjustContaboPaperWalletBalance(amountVal)
@@ -5098,6 +5117,46 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 val isEnable = mode == "enable" || mode == "on" || (mode == "toggle" && !com.example.aza.security.SecureCredentialStore.isHomomorphicEnabled())
                 com.example.aza.security.SecureCredentialStore.setHomomorphicEnabled(isEnable)
                 actionExecutedNotice = "Homomorphic Cryptographic Encryption (HE) has been turned **${if (isEnable) "ON" else "OFF"}**."
+            } else if (scalpToggleMatch != null) {
+                val mode = scalpToggleMatch.groupValues[1].lowercase(java.util.Locale.US)
+                val isEnable = mode == "start" || mode == "resume" || mode == "enable" || mode.contains("on")
+                if (isEnable) {
+                    startContinuousSmallAccountScalpLoop()
+                    actionExecutedNotice = "‚ö° **Lumina Micro-Scalper Activated**: Starting automated Buy ‚ûî Quick Profit ‚ûî Sell ‚ûî Repeat cycle."
+                } else {
+                    stopContinuousSmallAccountScalpLoop()
+                    actionExecutedNotice = "‚è∏Ô∏è **Lumina Micro-Scalper Paused**: Background scalping loop disengaged safely."
+                }
+            } else if (scalpProfitMatch != null) {
+                val targetProfit = scalpProfitMatch.groupValues[1].toDoubleOrNull() ?: 0.35
+                val currentConfig = com.example.aza.strategy.LuminaSmallAccountScalpingEngine.config.value
+                val newConfig = currentConfig.copy(targetProfitPct = targetProfit)
+                updateSmallAccountScalpConfig(newConfig)
+                actionExecutedNotice = "‚öôÔ∏è **Scalp Profit Target Updated**: Set to **+" + targetProfit + "%** per cycle."
+            } else if (scalpStopLossMatch != null) {
+                val stopLoss = scalpStopLossMatch.groupValues[1].toDoubleOrNull() ?: 0.75
+                val currentConfig = com.example.aza.strategy.LuminaSmallAccountScalpingEngine.config.value
+                val newConfig = currentConfig.copy(tightStopLossPct = stopLoss)
+                updateSmallAccountScalpConfig(newConfig)
+                actionExecutedNotice = "üõ°Ô∏è **Scalp Stop Loss Updated**: Dynamic defensive threshold set to **-" + stopLoss + "%**."
+            } else if (scalpHoldingTimeMatch != null) {
+                val duration = scalpHoldingTimeMatch.groupValues[1].toDoubleOrNull() ?: 5.0
+                val currentConfig = com.example.aza.strategy.LuminaSmallAccountScalpingEngine.config.value
+                val newConfig = currentConfig.copy(maxHoldingMinutes = duration)
+                updateSmallAccountScalpConfig(newConfig)
+                actionExecutedNotice = "‚è±Ô∏è **Scalp Max Duration Updated**: Stagnation rotation timeout set to **" + duration.toInt() + " minutes**."
+            } else if (scalpTestMatch != null) {
+                val symbol = scalpTestMatch.groupValues[1].ifBlank { "BTCUSDT" }.uppercase(java.util.Locale.US)
+                executeSingleScalpCycle(symbol = symbol, amountUsdt = 10.50)
+                actionExecutedNotice = "‚ö° **Single Scalp Test Triggered**: Executing single cycle on **" + symbol + "** (0.50 USDT allocation)."
+            } else if (scalpStatusMatch != null) {
+                val isRunning = com.example.aza.strategy.LuminaSmallAccountScalpingEngine.isLoopActive.value
+                val phase = com.example.aza.strategy.LuminaSmallAccountScalpingEngine.currentPhase.value
+                val cfg = com.example.aza.strategy.LuminaSmallAccountScalpingEngine.config.value
+                val stats = com.example.aza.strategy.LuminaSmallAccountScalpingEngine.performanceSummary.value
+                val loopLabel = if (isRunning) "ACTIVE" else "STANDBY"
+                val profitStr = String.format(java.util.Locale.US, "%.3f", stats.totalNetProfitUsdt)
+                actionExecutedNotice = "Lumina Scalper Status: Status=" + loopLabel + ", Phase=" + phase.label + ", Target=+" + cfg.targetProfitPct + "%, Stop=-" + cfg.tightStopLossPct + "%, Duration=" + cfg.maxHoldingMinutes.toInt() + "m, Cycles=" + stats.totalCyclesCompleted + " (" + stats.winningCycles + "W/" + stats.losingCycles + "L), Compounded Profit=+$" + profitStr + " USDT"
             } else if (daemonToggleMatch != null) {
                 val mode = daemonToggleMatch.groupValues[1].lowercase(java.util.Locale.US)
                 val isEnable = mode == "enable" || mode == "start" || mode == "on"
@@ -5142,17 +5201,17 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 actionExecutedNotice = "I am evaluating the external evidence: **\"$title\"** ($resolvedType)..."
                 
                 viewModelScope.launch {
-                    addThought("üß† EVALUATION ENGINE: Initiated formal review for external evidence: '$title' [$resolvedType]")
+                    addThought("\ud83e\udde0 EVALUATION ENGINE: Initiated formal review for external evidence: '$title' [$resolvedType]")
                     
                     val finalContent = if (explicitContent.isNotEmpty()) {
                         explicitContent
                     } else {
                         // Attempt to search the web for this title to get real content
-                        addThought("üîç WEB SEARCH: Searching for context on '$title' to retrieve empirical content...")
+                        addThought("\ud83d\udd0d WEB SEARCH: Searching for context on '$title' to retrieve empirical content...")
                         val webResults = com.example.aza.web.WebSurfer.searchWeb(title)
                         if (webResults.isNotEmpty()) {
                             val snippets = webResults.take(3).joinToString("\n") { "${it.title}: ${it.snippet}" }
-                            addThought("üåê WEB SCAN: Retrieved ${webResults.size} web references for context.")
+                            addThought("\ud83c\udf10 WEB SCAN: Retrieved ${webResults.size} web references for context.")
                             snippets
                         } else {
                             "Empirical studies regarding $title detailing volatility patterns, fee structures, and execution optimization."
@@ -5169,21 +5228,21 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     // Incorporate into knowledge base if accepted
                     if (evaluationResult.status == "ACCEPTED") {
                         com.example.aza.intelligence.ExternalEvidenceEvaluator.integrateIntoKnowledgeHub(evaluationResult, repository)
-                        addThought("‚úÖ KNOWLEDGE HUB: Evidence ACCEPTED (Score: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.overallScore * 100.0)}). Successfully integrated into the Knowledge Hub.")
+                        addThought("\u2705 KNOWLEDGE HUB: Evidence ACCEPTED (Score: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.overallScore * 100.0)}). Successfully integrated into the Knowledge Hub.")
                     } else {
-                        addThought("‚ùå KNOWLEDGE HUB: Evidence REJECTED (Score: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.overallScore * 100.0)}). Excluded from active routing.")
+                        addThought("\u274c KNOWLEDGE HUB: Evidence REJECTED (Score: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.overallScore * 100.0)}). Excluded from active routing.")
                     }
                     
                     // Post the detailed result report in chat as an agent response
                     val botMessage = buildString {
-                        append("üî¨ **Cognitive External Evidence Evaluation**\n\n")
-                        append("‚Ä¢ **Evidence Title**: \"${evaluationResult.title}\"\n")
-                        append("‚Ä¢ **Category**: ${evaluationResult.source}\n")
-                        append("‚Ä¢ **Credibility Rating**: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.credibilityScore * 100.0)}\n")
-                        append("‚Ä¢ **Relevance Match**: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.relevanceScore * 100.0)}\n")
-                        append("‚Ä¢ **Model Improvement Value**: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.modelImprovementScore * 100.0)}\n")
-                        append("‚Ä¢ **Overall Evaluation Score**: **${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.overallScore * 100.0)}%**\n")
-                        append("‚Ä¢ **Status**: ${if (evaluationResult.status == "ACCEPTED") "üü¢ **ACCEPTED & INTEGRATED**" else "üî¥ **REJECTED (BELOW QUALITY BARRIER)**"}\n\n")
+                        append("\ud83d\udd2c **Cognitive External Evidence Evaluation**\n\n")
+                        append("\u2022 **Evidence Title**: \"${evaluationResult.title}\"\n")
+                        append("\u2022 **Category**: ${evaluationResult.source}\n")
+                        append("\u2022 **Credibility Rating**: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.credibilityScore * 100.0)}\n")
+                        append("\u2022 **Relevance Match**: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.relevanceScore * 100.0)}\n")
+                        append("\u2022 **Model Improvement Value**: ${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.modelImprovementScore * 100.0)}\n")
+                        append("\u2022 **Overall Evaluation Score**: **${String.format(java.util.Locale.US, "%.1f%%", evaluationResult.overallScore * 100.0)}%**\n")
+                        append("\u2022 **Status**: ${if (evaluationResult.status == "ACCEPTED") "\ud83d\udfe2 **ACCEPTED & INTEGRATED**" else "\ud83d\udd34 **REJECTED (BELOW QUALITY BARRIER)**"}\n\n")
                         append("#### Evaluation Report & Reasoning:\n")
                         append(evaluationResult.report)
                     }
@@ -5199,7 +5258,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 actionExecutedNotice = "I am simulating a long-term drop in prediction accuracy for the Mean Reversion strategy (e.g. over 200 trades)..."
                 
                 viewModelScope.launch {
-                    addThought("üìà ACCURACY DROP: Simulating structural shift in market behavior. Mean Reversion predictive accuracy is dropping...")
+                    addThought("\ud83d\udcc8 ACCURACY DROP: Simulating structural shift in market behavior. Mean Reversion predictive accuracy is dropping...")
                     
                     // 1. Update the Mean Reversion Strategy Entity to reflect low win-rate
                     val strategyName = "Mean Reversion"
@@ -5215,23 +5274,23 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                                 currentSignal = "ATTENTION REQUIRED - Accuracy Decayed"
                             )
                         )
-                        addThought("‚öôÔ∏è STRATEGY ENGINE: Calibrated Mean Reversion win-rate to 38.5% (77 wins / 200 trades).")
+                        addThought("\u2699\ufe0f STRATEGY ENGINE: Calibrated Mean Reversion win-rate to 38.5% (77 wins / 200 trades).")
                     }
                     
                     // 2. Trigger Memory Evolution Sweep instantly
-                    addThought("üß† MEMORY EVOLUTION: Triggering immediate cognitive re-evaluation sweep...")
+                    addThought("\ud83e\udde0 MEMORY EVOLUTION: Triggering immediate cognitive re-evaluation sweep...")
                     val report = memoryEvolutionEngine.evolveMemory { log ->
                         addThought(log)
                     }
                     
                     // 3. Post a message to the user explaining the decay
                     val botMessage = buildString {
-                        append("üìâ **Simulated Confidence Decay Loop Triggered**\n\n")
-                        append("‚Ä¢ **Hypothesis Under Re-evaluation**: *\"RSI divergence predicts reversals\"*\n")
-                        append("‚Ä¢ **Before Confidence**: 92.0%\n")
-                        append("‚Ä¢ **Trigger Event**: Over the last 200 simulated trades, prediction accuracy dropped (win-rate fell to 38.5%).\n")
-                        append("‚Ä¢ **Current Confidence**: Decayed to **73.0%** (below the 75.0% stability threshold).\n")
-                        append("‚Ä¢ **Action Taken**: Lumina has rejected permanent status for this hypothesis and has **instigated an automated high-priority search for alternative explanations**!\n\n")
+                        append("\ud83d\udcc9 **Simulated Confidence Decay Loop Triggered**\n\n")
+                        append("\u2022 **Hypothesis Under Re-evaluation**: *\"RSI divergence predicts reversals\"*\n")
+                        append("\u2022 **Before Confidence**: 92.0%\n")
+                        append("\u2022 **Trigger Event**: Over the last 200 simulated trades, prediction accuracy dropped (win-rate fell to 38.5%).\n")
+                        append("\u2022 **Current Confidence**: Decayed to **73.0%** (below the 75.0% stability threshold).\n")
+                        append("\u2022 **Action Taken**: Lumina has rejected permanent status for this hypothesis and has **instigated an automated high-priority search for alternative explanations**!\n\n")
                         append("#### Cognitive Sweep Log:\n")
                         append("```\n")
                         append(report)
@@ -5253,7 +5312,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     100
                 }
                 runBatchTradeSampleExecution(requestedCount)
-                actionExecutedNotice = "üöÄ **Autonomous Background Execution Started**\n\nI have initiated execution of **$requestedCount sample trades** in the background. This process will run continuously using Android Foreground Service/Background Coroutines even if you close or minimize the app (unless Force Stopped).\n\nI will send an Android system notification and post the full performance summary right here in chat when all $requestedCount trades are completed!"
+                actionExecutedNotice = "\ud83d\ude80 **Autonomous Background Execution Started**\n\nI have initiated execution of **$requestedCount sample trades** in the background. This process will run continuously using Android Foreground Service/Background Coroutines even if you close or minimize the app (unless Force Stopped).\n\nI will send an Android system notification and post the full performance summary right here in chat when all $requestedCount trades are completed!"
             } else if (atrWeightMatch != null) {
                 val weightStr = atrWeightMatch.groupValues[1]
                 val weightVal = weightStr.toDoubleOrNull()
@@ -5280,18 +5339,18 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     val sysTelemetry = "Battery: ${resourceMetrics.value.batteryLevel}%, CPU: ${String.format(java.util.Locale.US, "%.1f", resourceMetrics.value.cpuUsage)}%, Memory: ${String.format(java.util.Locale.US, "%.1f", resourceMetrics.value.memoryUsageMb)}MB"
                     val budget = try { com.example.aza.security.SecureCredentialStore.getTradingBudget() } catch (e: Exception) { 0.0 }
                     val risk = try { com.example.aza.security.SecureCredentialStore.getTradingRiskLevel() } catch (e: Exception) { "CONSERVATIVE" }
-                    val checkout = if (account.isTradingLinked) "üü¢ LINKED" else "üî¥ OFFLINE (Paper Mode)"
-                    val safetyLock = if (com.example.aza.connector.BinanceConnector.isOrderPlacementEnabled.value) "üü¢ ACTIVE" else "üî¥ LOCKED"
+                    val checkout = if (account.isTradingLinked) "\ud83d\udfe2 LINKED" else "\ud83d\udd34 OFFLINE (Paper Mode)"
+                    val safetyLock = if (com.example.aza.connector.BinanceConnector.isOrderPlacementEnabled.value) "\ud83d\udfe2 ACTIVE" else "\ud83d\udd34 LOCKED"
                     
                     val sb = java.lang.StringBuilder()
-                    sb.append("üìä **LUMINA FULL SYSTEM INTEGRITY STATUS REPORT**\n\n")
-                    sb.append("‚Ä¢ **Simulated Balance:** \$${String.format(java.util.Locale.US, "%,.2f", account.totalBalance)} USD\n")
-                    sb.append("‚Ä¢ **Instant Checkout Wallet:** $checkout\n")
-                    sb.append("‚Ä¢ **Live Execution Safety Lock:** $safetyLock\n")
-                    sb.append("‚Ä¢ **Configured Trading Budget:** \$$budget USD\n")
-                    sb.append("‚Ä¢ **Trading Risk Tolerance:** **$risk**\n\n")
+                    sb.append("\ud83d\udcca **LUMINA FULL SYSTEM INTEGRITY STATUS REPORT**\n\n")
+                    sb.append("\u2022 **Simulated Balance:** \$${String.format(java.util.Locale.US, "%,.2f", account.totalBalance)} USD\n")
+                    sb.append("\u2022 **Instant Checkout Wallet:** $checkout\n")
+                    sb.append("\u2022 **Live Execution Safety Lock:** $safetyLock\n")
+                    sb.append("\u2022 **Configured Trading Budget:** \$$budget USD\n")
+                    sb.append("\u2022 **Trading Risk Tolerance:** **$risk**\n\n")
                     
-                    sb.append("üìà **Active Registered Strategies:**\n")
+                    sb.append("\ud83d\udcc8 **Active Registered Strategies:**\n")
                     if (activeStrats.isEmpty()) {
                         sb.append("  - None currently enabled\n")
                     } else {
@@ -5300,7 +5359,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                         }
                     }
                     
-                    sb.append("\nüíº **Open Execution Positions:**\n")
+                    sb.append("\n\ud83d\udcbc **Open Execution Positions:**\n")
                     if (openPositions.isEmpty()) {
                         sb.append("  - No active open positions in market.\n")
                     } else {
@@ -5309,7 +5368,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                         }
                     }
                     
-                    sb.append("\nüéØ **Active Agent Missions:**\n")
+                    sb.append("\n\ud83c\udfaf **Active Agent Missions:**\n")
                     if (activeMissions.isEmpty()) {
                         sb.append("  - No active missions running.\n")
                     } else {
@@ -5318,8 +5377,8 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                         }
                     }
                     
-                    sb.append("\nüñ•Ô∏è **Device Telemetry Stats:** $sysTelemetry\n")
-                    sb.append("üõ°Ô∏è *Lumina Chat Commander is responsive and listening for your next operational instruction.*")
+                    sb.append("\n\ud83d\udda5\ufe0f **Device Telemetry Stats:** $sysTelemetry\n")
+                    sb.append("\ud83d\udee1\ufe0f *Lumina Chat Commander is responsive and listening for your next operational instruction.*")
                     sb.toString()
                 }
             } else if (lowerText.contains("check connection") || 
@@ -5335,7 +5394,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     val apiSecret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }.ifBlank { binanceState?.apiSecret ?: "" }
                     
                     if (apiKey.isBlank() || apiSecret.isBlank() || apiKey == "[SECURED_KEYSTORE]") {
-                        "‚ÑπÔ∏è **Aza Connection Status Report**: Binance integration is currently inactive (MOCK mode). No API keys are configured."
+                        "\u2139\ufe0f **Aza Connection Status Report**: Binance integration is currently inactive (MOCK mode). No API keys are configured."
                     } else {
                         // Dynamically test the live connection!
                         val syncResult = com.example.aza.connector.BinanceConnector.syncServerTime()
@@ -5347,7 +5406,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             val usdtBal = balances.find { it.asset == "USDT" }?.total ?: 0.0
                             val tradingMode = com.example.aza.security.SecureCredentialStore.getBinanceTradingMode()
                             
-                            "üü¢ **Aza Connection Status Report**: Active and fully integrated with Binance!\n\n" +
+                            "\ud83d\udfe2 **Aza Connection Status Report**: Active and fully integrated with Binance!\n\n" +
                             "- **Status**: HEALTHY\n" +
                             "- **API Latency**: ${latency}ms\n" +
                             "- **Operating Mode**: LIVE ($tradingMode)\n" +
@@ -5357,7 +5416,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             "The secure connection is functional and live portfolio data is syncing perfectly."
                         } else {
                             val err = result.exceptionOrNull()?.message ?: "Unknown Connection Error"
-                            "üö® **Aza Connection Status Report**: Binance connection test failed.\n\n" +
+                            "\ud83d\udea8 **Aza Connection Status Report**: Binance connection test failed.\n\n" +
                             "- **Status**: DEGRADED / FAILING\n" +
                             "- **Error Details**: $err\n- **Operating Mode**: Attempting LIVE, but falling back to MOCK.\n\n" +
                             "Please check your Binance API key, secret, and IP permission settings."
@@ -5438,7 +5497,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                                 status = "QUEUED"
                             )
                             repository.insertQueueTask(followUpTask)
-                            addThought("‚è∞ FOLLOW-UP ENGINE: Registered autonomous follow-up task in background queue.")
+                            addThought("\u23f0 FOLLOW-UP ENGINE: Registered autonomous follow-up task in background queue.")
                         }
 
                         // Ensure background service is running to guarantee execution and notifications when app is closed
@@ -5457,12 +5516,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun onAppEventOccurred(eventType: String, eventDetails: String) {
         viewModelScope.launch {
             // 1. Save system notification message to the main chat database
-            val alertMessage = "üö® **[SYSTEM EVENT: $eventType]**\n$eventDetails"
+            val alertMessage = "\ud83d\udea8 **[SYSTEM EVENT: $eventType]**\n$eventDetails"
             repository.insertChatMessage(com.example.data.database.ChatMessage(sender = "SYSTEM_ALERT", text = alertMessage))
             
             // 2. Trigger Lumina's Autonomous Resolution / Response Engine
             _isAzaResponding.value = true
-            addThought("üõ°Ô∏è LUMINA GUARDIAN: Evaluating and responding to critical event: $eventType")
+            addThought("\ud83d\udee1\ufe0f LUMINA GUARDIAN: Evaluating and responding to critical event: $eventType")
             
             // Build a highly rich context for Lumina to make a decision
             val activeSLMultiplier = try { com.example.aza.security.SecureCredentialStore.getAtrMultiplier() } catch (e: Exception) { 2.0 }
@@ -5494,28 +5553,28 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 // Secure fallback logic
                 reply = when (eventType) {
                     "BINANCE_DISCONNECTED", "CREDENTIALS_ERROR" -> {
-                        "‚ö†Ô∏è **Lumina Guardian Angel Protocol**: Detected Binance integration connection failure. " +
+                        "\u26a0\ufe0f **Lumina Guardian Angel Protocol**: Detected Binance integration connection failure. " +
                         "For system safety, I have autonomously **engaged the Safety Lock (disabling live order placement)**. " +
                         "Please verify your credentials in the Account section."
                     }
                     "STOP_LOSS_HIT" -> {
-                        "üõ°Ô∏è **Lumina Risk Guardian**: A stop-loss limit has been hit in the market. " +
+                        "\ud83d\udee1\ufe0f **Lumina Risk Guardian**: A stop-loss limit has been hit in the market. " +
                         "I have autonomously adjusted our ATR Volatility Multiplier to **3.0x** to protect remaining capital and widen our buffer against short-term whip-saw swings."
                     }
                     "TAKE_PROFIT_HIT" -> {
-                        "üéâ **Lumina Guardian Angel**: Target Take-Profit limit hit! Capital has been securely credited back to our portfolio balance. " +
+                        "\ud83c\udf89 **Lumina Guardian Angel**: Target Take-Profit limit hit! Capital has been securely credited back to our portfolio balance. " +
                         "I am performing a post-trade prediction review to recalibrate our strategy confidence levels."
                     }
                     "CIRCUIT_BREAKER_TRIGGERED" -> {
-                        "üö® **Lumina Circuit Breaker Protocol**: Extreme market conditions have triggered our internal circuit breaker. " +
+                        "\ud83d\udea8 **Lumina Circuit Breaker Protocol**: Extreme market conditions have triggered our internal circuit breaker. " +
                         "I have autonomously **disabled live order placement** to enforce a cooldown period."
                     }
                     "VPS_RESTARTED", "CONTABO_HEALTH_FAIL", "VPS_DISCONNECTED" -> {
-                        "‚öôÔ∏è **Lumina VPS Guardian**: Detected a health diagnostic failure, server reboot, or loss of connection with Contabo VPS. " +
+                        "\u2699\ufe0f **Lumina VPS Guardian**: Detected a health diagnostic failure, server reboot, or loss of connection with Contabo VPS. " +
                         "I am initiating automatic re-handshake and synchronization protocols with our FastAPI service layer."
                     }
                     else -> {
-                        "üõ°Ô∏è **Lumina Autonomous Guardian**: Event **$eventType** received. I have updated my global state model and am continuously monitoring system parameters to protect your portfolio."
+                        "\ud83d\udee1\ufe0f **Lumina Autonomous Guardian**: Event **$eventType** received. I have updated my global state model and am continuously monitoring system parameters to protect your portfolio."
                     }
                 }
             }
@@ -5528,11 +5587,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             when (eventType) {
                 "BINANCE_DISCONNECTED", "CREDENTIALS_ERROR", "CIRCUIT_BREAKER_TRIGGERED", "VPS_DISCONNECTED" -> {
                     setOrderPlacementEnabled(false)
-                    addThought("üõ°Ô∏è LUMINA GUARDIAN: Autonomously turned live order placement OFF for safety.")
+                    addThought("\ud83d\udee1\ufe0f LUMINA GUARDIAN: Autonomously turned live order placement OFF for safety.")
                 }
                 "STOP_LOSS_HIT" -> {
                     com.example.aza.security.SecureCredentialStore.setAtrMultiplier(3.0)
-                    addThought("üõ°Ô∏è LUMINA GUARDIAN: Autonomously updated stop-loss ATR multiplier to conservative 3.0x.")
+                    addThought("\ud83d\udee1\ufe0f LUMINA GUARDIAN: Autonomously updated stop-loss ATR multiplier to conservative 3.0x.")
                 }
             }
             
@@ -5587,7 +5646,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 runSocialContentCycle()
             }
         } catch (e: java.lang.Exception) {
-            addThought("‚ö†Ô∏è Error during autonomous loop optimization: ${e.localizedMessage}")
+            addThought("\u26a0\ufe0f Error during autonomous loop optimization: ${e.localizedMessage}")
         } finally {
             _isAzaResponding.value = false
         }
@@ -5696,17 +5755,17 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 
                 // Post Chat Announcement
                 val alertMessage = """
-                    ü§ñ **[Lumina Autopilot Trade Executed]**
+                    \ud83e\udd16 **[Lumina Autopilot Trade Executed]**
                     
                     I have autonomously analyzed market trend data and executed a ${savedRiskLevel.lowercase(java.util.Locale.US)} risk purchase on your behalf:
                     
-                    ‚Ä¢ **Exchange Routing**: **$exchange**
-                    ‚Ä¢ **Asset Traded**: **$symbol** ($name)
-                    ‚Ä¢ **Action/Strategy**: Spot DCA Accumulation (Pullback Dip)
-                    ‚Ä¢ **Quantity/Rate**: **$unitsFormatted $symbol** @ $${String.format("%,.2f", price)} each
-                    ‚Ä¢ **Transaction Value**: **$${String.format("%,.2f", finalCost)} USD** (Settled via secure Cash Wallet balance)
+                    \u2022 **Exchange Routing**: **$exchange**
+                    \u2022 **Asset Traded**: **$symbol** ($name)
+                    \u2022 **Action/Strategy**: Spot DCA Accumulation (Pullback Dip)
+                    \u2022 **Quantity/Rate**: **$unitsFormatted $symbol** @ $${String.format("%,.2f", price)} each
+                    \u2022 **Transaction Value**: **$${String.format("%,.2f", finalCost)} USD** (Settled via secure Cash Wallet balance)
                     
-                    üõ°Ô∏è **Compliance & Risk Guard Metrics:**
+                    \ud83d\udee1\ufe0f **Compliance & Risk Guard Metrics:**
                     - Risk Category: **$riskLevel** (${if (savedRiskLevel == "AGGRESSIVE") "High risk breakout configuration" else if (savedRiskLevel == "MODERATE") "Balanced standard settings" else "Low exposure"})
                     - Calculated Volatility Filter: **Active**
                     - Stop-Loss Configured: **$${String.format("%,.2f", targetStopLoss)} USD** (-$stopLossPercent%)
@@ -5755,17 +5814,17 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 addThought("Limit Sell Order processed successfully! Secured +$${String.format("%,.2f", proceeds)} USD.")
                 
                 val alertMessage = """
-                    ü§ñ **[Aza Autopilot Profit Secured]**
+                    \ud83e\udd16 **[Aza Autopilot Profit Secured]**
                     
                     I have autonomously detected a local overhead peak and executed a profit liquidation trade:
                     
-                    ‚Ä¢ **Exchange Routing**: **$exchange**
-                    ‚Ä¢ **Asset Traded**: **$symbol** ($name)
-                    ‚Ä¢ **Action/Strategy**: Limit Sell & Rebalancing (Profit Securing)
-                    ‚Ä¢ **Quantity/Rate**: **$amountToSellFormatted $symbol** @ $${String.format("%,.2f", price)} each
-                    ‚Ä¢ **Simulated Proceeds**: **+$${String.format("%,.2f", proceeds)} USD** (Settle-deposited to Cash wallet)
+                    \u2022 **Exchange Routing**: **$exchange**
+                    \u2022 **Asset Traded**: **$symbol** ($name)
+                    \u2022 **Action/Strategy**: Limit Sell & Rebalancing (Profit Securing)
+                    \u2022 **Quantity/Rate**: **$amountToSellFormatted $symbol** @ $${String.format("%,.2f", price)} each
+                    \u2022 **Simulated Proceeds**: **+$${String.format("%,.2f", proceeds)} USD** (Settle-deposited to Cash wallet)
                     
-                    üõ°Ô∏è **Compliance & Risk Guard Metrics:**
+                    \ud83d\udee1\ufe0f **Compliance & Risk Guard Metrics:**
                     - Portfolio Realized Gain: **Optimized**
                     - Stop-Loss Clear: **Dynamic Adjustment**
                     - Secure Escrow Settlement: **Completed**
@@ -5798,7 +5857,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 "How color psychology governs app onboarding metrics"
             )
             else -> listOf(
-                "Avoid doing THIS in Jetpack Compose! üõë",
+                "Avoid doing THIS in Jetpack Compose! \ud83d\uded1",
                 "How I automated a workflow using Android local state",
                 "Beginner mistake in Coroutines that leaks memory",
                 "Wait, you can render custom Canvas animations in 12 lines?!"
@@ -5822,15 +5881,15 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             repository.getAiContentScript(trendTopic, platform + " (Autopilot Direct)")
         } catch (e: java.lang.Exception) {
             """
-            üé¨ **HOOK [0-3s]**:
+            \ud83c\udfac **HOOK [0-3s]**:
             "If you are still design-coding like it is 2018, STOP! Here is how to use modern $trendTopic."
             
-            üìò **BODY [3-25s]**:
-            ‚Ä¢ Tip 1: Avoid nested structures. Use simple modifiers.
-            ‚Ä¢ Tip 2: Implement dynamic Material 3 color system.
-            ‚Ä¢ Tip 3: Abstract states away from render loops.
+            \ud83d\udcd8 **BODY [3-25s]**:
+            \u2022 Tip 1: Avoid nested structures. Use simple modifiers.
+            \u2022 Tip 2: Implement dynamic Material 3 color system.
+            \u2022 Tip 3: Abstract states away from render loops.
             
-            üöÄ **CTA [25-30s]**:
+            \ud83d\ude80 **CTA [25-30s]**:
             "This layout is automatically published on ${channel.handle}! Hit follow to stay updated with Aza optimizations!"
             """.trimIndent()
         }
@@ -5875,17 +5934,17 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
         // Chat Announcement Log from Aza
         val alertMessage = """
-            ü§ñ **[Aza Autopilot Executed]**
+            \ud83e\udd16 **[Aza Autopilot Executed]**
             
             I have autonomously designed, optimized, and published a new vertical content piece on our profiles:
             
-            ‚Ä¢ **Platform Channel**: **$platform** (${channel.handle})
-            ‚Ä¢ **Published Title**: *"$trendTopic"*
-            ‚Ä¢ **Target Demographic**: *${channel.targetSegment}*
-            ‚Ä¢ **Simulated Live Performance**: üìà **+$likes likes**
-            ‚Ä¢ **Channel Followers**: **$newFollowerCount** (grown by **+$gainedFollowers**)
+            \u2022 **Platform Channel**: **$platform** (${channel.handle})
+            \u2022 **Published Title**: *"$trendTopic"*
+            \u2022 **Target Demographic**: *${channel.targetSegment}*
+            \u2022 **Simulated Live Performance**: \ud83d\udcc8 **+$likes likes**
+            \u2022 **Channel Followers**: **$newFollowerCount** (grown by **+$gainedFollowers**)
             
-            ‚ö° **Aza Optimization Learning Outcome:**
+            \u26a1 **Aza Optimization Learning Outcome:**
             *"$learnedInsight"*
         """.trimIndent()
 
@@ -5903,7 +5962,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             repository.insertChatMessage(
                 ChatMessage(
                     sender = "AZA",
-                    text = "Hello! I am Aza, your conversational AI partner. üöÄ\n\nI can help you analyze markets, generate video scripts, draft freelance proposals, and execute complex business tasks in real time.\n\nTry speaking to me naturally, or try these tasks directly:\n‚Ä¢ *\"Buy 0.02 BTC\"* or *\"Sell 2 AAPL\"*\n‚Ä¢ *\"Draft a script about Room Database on TikTok\"*\n‚Ä¢ *\"Write a proposal for the Tech Blog Writer gig\"*"
+                    text = "Hello! I am Aza, your conversational AI partner. \ud83d\ude80\n\nI can help you analyze markets, generate video scripts, draft freelance proposals, and execute complex business tasks in real time.\n\nTry speaking to me naturally, or try these tasks directly:\n\u2022 *\"Buy 0.02 BTC\"* or *\"Sell 2 AAPL\"*\n\u2022 *\"Draft a script about Room Database on TikTok\"*\n\u2022 *\"Write a proposal for the Tech Blog Writer gig\"*"
                 )
             )
         }
@@ -6064,7 +6123,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 repository.knowledgeDao.insertKnowledge(kbEntry)
             }
         } catch (e: Exception) {
-            addThought("‚ö†Ô∏è Persistence Error: Failed to save evolved skills: ${e.message}")
+            addThought("\u26a0\ufe0f Persistence Error: Failed to save evolved skills: ${e.message}")
         }
     }
 
@@ -6094,7 +6153,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 )
             }
         } catch (e: Exception) {
-            addThought("‚ö†Ô∏è Persistence Warning: Could not retrieve skills from memory hub: ${e.message}")
+            addThought("\u26a0\ufe0f Persistence Warning: Could not retrieve skills from memory hub: ${e.message}")
             return null
         }
     }
@@ -6111,7 +6170,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 val newAvg = skills.map { it.score }.average()
                 val newLevel = determineOverallLevel(newAvg)
                 
-                addThought("üß† CALIBRATION LOOP: Received feedback for \"${oldSkill.name}\". Calibrated to ${targetScore}%. Comment: \"$comment\"")
+                addThought("\ud83e\udde0 CALIBRATION LOOP: Received feedback for \"${oldSkill.name}\". Calibrated to ${targetScore}%. Comment: \"$comment\"")
                 
                 val feedbackEntry = com.example.data.database.KnowledgeEntry(
                     title = "Lumina Skill Calibration: ${oldSkill.name}",
@@ -6129,9 +6188,9 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     identitySkills = skills,
                     overallLevel = newLevel,
                     evolutionLog = currentPlan.evolutionLog + listOf(
-                        "üë§ USER CALIBRATION COMPLETED: Skill '${oldSkill.name}' manually calibrated from ${oldSkill.score}% to $targetScore%.",
-                        "üí¨ FEEDBACK NOTE: \"$comment\"",
-                        "üîÑ LEARNING ROADMAP RE-ORDERED: Target parameters re-aligned."
+                        "\ud83d\udc64 USER CALIBRATION COMPLETED: Skill '${oldSkill.name}' manually calibrated from ${oldSkill.score}% to $targetScore%.",
+                        "\ud83d\udcac FEEDBACK NOTE: \"$comment\"",
+                        "\ud83d\udd04 LEARNING ROADMAP RE-ORDERED: Target parameters re-aligned."
                     )
                 )
                 
@@ -6147,7 +6206,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         viewModelScope.launch {
             setHighLevelObjective(objective)
 
-            addThought("üîÑ LUMINA DISCOVERY: Formulating objective scope for \"$objective\"...")
+            addThought("\ud83d\udd04 LUMINA DISCOVERY: Formulating objective scope for \"$objective\"...")
             
             // Lifelong learning: if we are continuing the same objective, preserve previous skill scores and their improvements!
             val isContinuing = (objective == _evolutionPlan.value.currentObjective && _evolutionPlan.value.identitySkills.isNotEmpty())
@@ -6157,7 +6216,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 Pair(_evolutionPlan.value.identityTitle, _evolutionPlan.value.identitySkills)
             } else if (loadedSkills != null && loadedSkills.isNotEmpty()) {
                 val derivedTitle = determineDynamicTitle(objective)
-                addThought("üß† MEMORY RETRIEVED: Loaded ${loadedSkills.size} previously evolved skills for \"$derivedTitle\" directly from SQLite.")
+                addThought("\ud83e\udde0 MEMORY RETRIEVED: Loaded ${loadedSkills.size} previously evolved skills for \"$derivedTitle\" directly from SQLite.")
                 Pair(derivedTitle, loadedSkills)
             } else {
                 getSkillsForObjective(objective)
@@ -6193,16 +6252,16 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
             val initialLog = if (isContinuing) {
                 _evolutionPlan.value.evolutionLog + listOf(
-                    "üß† LUMINA CONTINUOUS LOOP: Advancing objective \"$objective\"",
-                    "üîÑ ROADMAP ROTATION: Dynamically re-evaluating remaining competency gaps.",
-                    "üìä CURRENT BASELINE: Average proficiency: ${String.format(Locale.US, "%.1f", avgScore)}% (Level: $overallLevel)."
+                    "\ud83e\udde0 LUMINA CONTINUOUS LOOP: Advancing objective \"$objective\"",
+                    "\ud83d\udd04 ROADMAP ROTATION: Dynamically re-evaluating remaining competency gaps.",
+                    "\ud83d\udcca CURRENT BASELINE: Average proficiency: ${String.format(Locale.US, "%.1f", avgScore)}% (Level: $overallLevel)."
                 )
             } else {
                 listOf(
-                    "üß† LUMINA LIFELONG LEARNING START: Target Objective received: \"$objective\"",
-                    "üèÜ IDENTITY BUILDER ACTIVE: Formulated '$title' persona.",
-                    "üìä BASELINE DIAGNOSTIC: Generated ${skills.size} required competencies. Average: ${String.format(Locale.US, "%.1f", avgScore)}% (Level: $overallLevel).",
-                    "üìâ CAPABILITY GAPS MAP: Found ${weakSkills.size} critical vulnerabilities: ${weakSkills.joinToString(", ")}"
+                    "\ud83e\udde0 LUMINA LIFELONG LEARNING START: Target Objective received: \"$objective\"",
+                    "\ud83c\udfc6 IDENTITY BUILDER ACTIVE: Formulated '$title' persona.",
+                    "\ud83d\udcca BASELINE DIAGNOSTIC: Generated ${skills.size} required competencies. Average: ${String.format(Locale.US, "%.1f", avgScore)}% (Level: $overallLevel).",
+                    "\ud83d\udcc9 CAPABILITY GAPS MAP: Found ${weakSkills.size} critical vulnerabilities: ${weakSkills.joinToString(", ")}"
                 )
             }
 
@@ -6254,11 +6313,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 )
             }
 
-            addThought("üîÑ [Identity Builder] Active objective: \"$title\". Selected target '${weakestSkill.name}' with Priority Impact Score of ${String.format(Locale.US, "%.1f", calculatedImpactScore)}. Preparing learning roadmap...")
+            addThought("\ud83d\udd04 [Identity Builder] Active objective: \"$title\". Selected target '${weakestSkill.name}' with Priority Impact Score of ${String.format(Locale.US, "%.1f", calculatedImpactScore)}. Preparing learning roadmap...")
             delay(2000)
 
             // Phase 2: Internal Research Department (RESEARCHING)
-            addThought("üîÑ [Internal Research] Targeted weakest capability: \"${weakestSkill.name}\" (${weakestSkill.score}%). Compiling research guide and formulating hypothesis...")
+            addThought("\ud83d\udd04 [Internal Research] Targeted weakest capability: \"${weakestSkill.name}\" (${weakestSkill.score}%). Compiling research guide and formulating hypothesis...")
             delay(1000)
 
             val dynamicHypothesis = "Calibrating '${weakestSkill.name}' with recursive decay parameters and localized edge-case restraints will reduce decision-making errors by >18.2% and improve objective competency."
@@ -6301,14 +6360,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 studyGuideContent = studyGuide,
                 knowledgeAcquired = _evolutionPlan.value.knowledgeAcquired + listOf(studyTitle),
                 evolutionLog = _evolutionPlan.value.evolutionLog + listOf(
-                    "üß† INTERNAL RESEARCH: Mapped target study brief and compiled Lifelong Learner assessments.",
-                    "üí° HYPOTHESIS GENERATION: Formulated hypothesis: $dynamicHypothesis",
-                    "üìö STUDY GUIDE COMPILED: Saved brief \"$studyTitle\" directly to the local Knowledge Hub Database.",
-                    "üß¨ KNOWLEDGE ACQUIRED: Successfully learned: \"$studyTitle\""
+                    "\ud83e\udde0 INTERNAL RESEARCH: Mapped target study brief and compiled Lifelong Learner assessments.",
+                    "\ud83d\udca1 HYPOTHESIS GENERATION: Formulated hypothesis: $dynamicHypothesis",
+                    "\ud83d\udcda STUDY GUIDE COMPILED: Saved brief \"$studyTitle\" directly to the local Knowledge Hub Database.",
+                    "\ud83e\uddec KNOWLEDGE ACQUIRED: Successfully learned: \"$studyTitle\""
                 )
             )
 
-            addThought("üîÑ [Internal Research] Saved study brief to Knowledge Hub. Launching practice test on \"${weakestSkill.name}\" to test hypothesis...")
+            addThought("\ud83d\udd04 [Internal Research] Saved study brief to Knowledge Hub. Launching practice test on \"${weakestSkill.name}\" to test hypothesis...")
             delay(2500)
 
             // Phase 3: TESTING (Practice & Evaluation)
@@ -6321,13 +6380,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 practiceScore = practiceScore,
                 practiceFeedback = practiceFeedback,
                 evolutionLog = _evolutionPlan.value.evolutionLog + listOf(
-                    "üî¨ HYPOTHESIS TESTING: Administering dynamic 10-point diagnostic assessment on \"${weakestSkill.name}\" to test formulated hypothesis.",
-                    "üìä EMPIRICAL MEASUREMENT: Measured performance score of $practiceScore% (Validation control threshold: 80.0%).",
-                    "üìù ASSESSMENT FEEDBACK: $practiceFeedback"
+                    "\ud83d\udd2c HYPOTHESIS TESTING: Administering dynamic 10-point diagnostic assessment on \"${weakestSkill.name}\" to test formulated hypothesis.",
+                    "\ud83d\udcca EMPIRICAL MEASUREMENT: Measured performance score of $practiceScore% (Validation control threshold: 80.0%).",
+                    "\ud83d\udcdd ASSESSMENT FEEDBACK: $practiceFeedback"
                 )
             )
 
-            addThought("üîÑ [Evaluation Lab] Practice test completed with score $practiceScore%. Commencing self-reflection and hypothesis evaluation...")
+            addThought("\ud83d\udd04 [Evaluation Lab] Practice test completed with score $practiceScore%. Commencing self-reflection and hypothesis evaluation...")
             delay(2000)
 
             // Phase 4: REFLECTING (Self-Reflection Log)
@@ -6340,11 +6399,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val hypothesisVerdict = if (practiceScore >= 80) "KEEP & CALIBRATE (ACCEPTED)" else "REJECT & REVISE"
 
             val reflectionText = """
-                üîÑ **LUMINA SYSTEMIC EVIDENCE-BASED REFLECTION**
+                \ud83d\udd04 **LUMINA SYSTEMIC EVIDENCE-BASED REFLECTION**
                 - **Target Skill**: *${weakestSkill.name}* (Impact Priority Score: ${String.format(Locale.US, "%.1f", calculatedImpactScore)})
                 - **Formulated Hypothesis**: $dynamicHypothesis
                 - **Empirical Measurement**: Test Score of $practiceScore% (Validation Threshold: 80%)
-                - **Hypothesis Verdict**: **$hypothesisVerdict** ‚Äî Empirical test results confirmed that our calibrated hypothesis exceeded our validation threshold.
+                - **Hypothesis Verdict**: **$hypothesisVerdict** \u2014 Empirical test results confirmed that our calibrated hypothesis exceeded our validation threshold.
                 - **Remaining Gap**: Proficiency has increased to $newScore% until no higher-priority capability gaps remain, while continuously monitoring for new information and changing conditions.
                 - **Next Objective Action**: Identify the next highest priority impact-scored capability and begin a new Hypothesis-driven study loop.
                 - **Competency Change**: Successfully elevated *${weakestSkill.name}* score from **$oldScore%** to **$newScore%** (Average elevated to **${String.format(Locale.US, "%.1f", newAvgScore)}%**).
@@ -6390,9 +6449,9 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     "Overall competency level elevated to $newOverallLevel."
                 ),
                 evolutionLog = _evolutionPlan.value.evolutionLog + listOf(
-                    "üîÑ SELF-REFLECTION SESSION: Evaluated learning outcomes and identified conceptual margins.",
-                    "üìà MEMORY UPDATED: Successfully adjusted internal skill matrix. Registered +$scoreImprovement% proficiency on '${weakestSkill.name}'.",
-                    "üõ†Ô∏è EVOLVED METRICS: New average competency score: ${String.format(Locale.US, "%.1f", newAvgScore)}% (Level: $newOverallLevel)."
+                    "\ud83d\udd04 SELF-REFLECTION SESSION: Evaluated learning outcomes and identified conceptual margins.",
+                    "\ud83d\udcc8 MEMORY UPDATED: Successfully adjusted internal skill matrix. Registered +$scoreImprovement% proficiency on '${weakestSkill.name}'.",
+                    "\ud83d\udee0\ufe0f EVOLVED METRICS: New average competency score: ${String.format(Locale.US, "%.1f", newAvgScore)}% (Level: $newOverallLevel)."
                 )
             )
 
@@ -6406,7 +6465,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 }
             }
 
-            addThought("üîÑ [Self-Reflection] Formulated calibration logs. Advancing to terminal authorization checkpoint...")
+            addThought("\ud83d\udd04 [Self-Reflection] Formulated calibration logs. Advancing to terminal authorization checkpoint...")
             delay(1500)
 
             // Phase 5: EVALUATING (Safety Clearance Checkpoint)
@@ -6414,7 +6473,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 activePhase = "EVALUATING",
                 progress = 0.90f,
                 evolutionLog = _evolutionPlan.value.evolutionLog + listOf(
-                    "‚ö†Ô∏è SAFETY CHECKPOINT: Verification requires manual User Terminal Clearance before permanent memory lock-in."
+                    "\u26a0\ufe0f SAFETY CHECKPOINT: Verification requires manual User Terminal Clearance before permanent memory lock-in."
                 )
             )
         }
@@ -6425,7 +6484,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val currentPlan = _evolutionPlan.value
             if (currentPlan.activePhase != "EVALUATING") return@launch
 
-            addThought("üîí POLICY APPROVED: Safety Clearance Audit cleared by Host. Finalizing evolution cycle and writing to memory hub...")
+            addThought("\ud83d\udd12 POLICY APPROVED: Safety Clearance Audit cleared by Host. Finalizing evolution cycle and writing to memory hub...")
             delay(1200)
 
             persistEvolvedSkillsToDb(currentPlan.currentObjective, currentPlan.identityTitle, currentPlan.identitySkills)
@@ -6445,14 +6504,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 remainingWork = listOf("Maintain high-frequency monitoring on local workspace daemon"),
                 plannedImprovements = listOf("Target our next weakest skill in subsequent study loops"),
                 evolutionLog = currentPlan.evolutionLog + listOf(
-                    "üîí SAFETY AUDIT APPROVED: User confirmed and authorized strategy updates.",
-                    "üèÜ EVOLUTION COMPLETED SUCCESSFUL: Lumina has evolved new analytical capabilities for objective: \"${currentPlan.currentObjective}\"!"
+                    "\ud83d\udd12 SAFETY AUDIT APPROVED: User confirmed and authorized strategy updates.",
+                    "\ud83c\udfc6 EVOLUTION COMPLETED SUCCESSFUL: Lumina has evolved new analytical capabilities for objective: \"${currentPlan.currentObjective}\"!"
                 )
             )
 
             repository.insertChatMessage(ChatMessage(
                 sender = "AZA",
-                text = "üèÜ **Evolution Cycle Complete!**\n\nI have successfully completed a full **Autonomous Evolution Cycle** for your objective: *\"${currentPlan.currentObjective}\"*.\n\nHere is a summary of the accomplishments as an **${currentPlan.identityTitle}**:\n" +
+                text = "\ud83c\udfc6 **Evolution Cycle Complete!**\n\nI have successfully completed a full **Autonomous Evolution Cycle** for your objective: *\"${currentPlan.currentObjective}\"*.\n\nHere is a summary of the accomplishments as an **${currentPlan.identityTitle}**:\n" +
                        "- **Identity Builder**: Discovered and mapped 10 required sub-skills. Graded as **${currentPlan.overallLevel}**.\n" +
                        "- **Internal Research Department**: Asked core self-reflective questions, targeting our weakest sub-skill **\"${currentPlan.selectedSkillToStudy}\"**.\n" +
                        "- **Knowledge Acquisition**: Compiled and persisted a deep research study guide to the local Knowledge Hub Database.\n" +
@@ -6484,12 +6543,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             "IDLE" -> {
                                 val nextObjective = continuousObjectives[continuousObjectiveIndex]
                                 continuousObjectiveIndex = (continuousObjectiveIndex + 1) % continuousObjectives.size
-                                addThought("üîÑ 24/7 DAEMON: Continuous idle state detected. Auto-launching next objective: \"$nextObjective\"")
+                                addThought("\ud83d\udd04 24/7 DAEMON: Continuous idle state detected. Auto-launching next objective: \"$nextObjective\"")
                                 triggerAutonomousEvolutionCycle(nextObjective)
                             }
                             "EVALUATING" -> {
                                 if (_autoApproveEvolution.value) {
-                                    addThought("üîí 24/7 DAEMON: Auto-approve is ENABLED. Automatically executing safety audit clearance in 4 seconds...")
+                                    addThought("\ud83d\udd12 24/7 DAEMON: Auto-approve is ENABLED. Automatically executing safety audit clearance in 4 seconds...")
                                     delay(4000)
                                     approveSafetyClearance()
                                 }
@@ -6497,13 +6556,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             "SUCCESS" -> {
                                 val currentObj = currentPlan.currentObjective
                                 if (currentObj.isNotEmpty()) {
-                                    addThought("üîÑ 24/7 DAEMON: Self-improvement loop complete. Initiating next lifelong learning iteration on \"$currentObj\" in 12 seconds...")
+                                    addThought("\ud83d\udd04 24/7 DAEMON: Self-improvement loop complete. Initiating next lifelong learning iteration on \"$currentObj\" in 12 seconds...")
                                     delay(12000)
                                     if (_isContinuousEvolution247.value) {
                                         triggerAutonomousEvolutionCycle(currentObj)
                                     }
                                 } else {
-                                    addThought("üîÑ 24/7 DAEMON: Current cycle complete. Selecting next specialization from directory in 12 seconds...")
+                                    addThought("\ud83d\udd04 24/7 DAEMON: Current cycle complete. Selecting next specialization from directory in 12 seconds...")
                                     delay(12000)
                                     if (_isContinuousEvolution247.value) {
                                         val nextObjective = continuousObjectives[continuousObjectiveIndex]
@@ -6518,7 +6577,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                         }
                     }
                 } catch (e: Exception) {
-                    addThought("‚ö†Ô∏è 24/7 DAEMON ERROR: ${e.localizedMessage}")
+                    addThought("\u26a0\ufe0f 24/7 DAEMON ERROR: ${e.localizedMessage}")
                 }
             }
         }
@@ -6531,8 +6590,8 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         viewModelScope.launch {
             repository.clearGoalSystem()
             
-            addThought("üîÑ DEPLOYING PIPELINE FOR OBJECTIVE: \"$objectiveTitle\"")
-            addThought("üß† Initializing generative planning agents...")
+            addThought("\ud83d\udd04 DEPLOYING PIPELINE FOR OBJECTIVE: \"$objectiveTitle\"")
+            addThought("\ud83e\udde0 Initializing generative planning agents...")
             
             val targetPlatform = if (objectiveTitle.lowercase().contains("youtube") || objectiveTitle.lowercase().contains("video")) "YOUTUBE"
                                  else if (objectiveTitle.lowercase().contains("tiktok")) "TIKTOK"
@@ -6554,7 +6613,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             )
             val objectiveId = repository.insertObjective(newObjective)
             val insertedObjective = newObjective.copy(id = objectiveId.toInt())
-            addThought("üîÑ [Lifecycle: NEW] Objective persisted in database.")
+            addThought("\ud83d\udd04 [Lifecycle: NEW] Objective persisted in database.")
             
             // 2. OBJECTIVE LIFECYCLE STATE: PLANNING
             val planningObjective = insertedObjective.copy(
@@ -6562,7 +6621,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 currentTask = "Planning task sequence"
             )
             repository.updateObjective(planningObjective)
-            addThought("üß† [Lifecycle: PLANNING] Planner is decomposing the objective into specialized tasks...")
+            addThought("\ud83e\udde0 [Lifecycle: PLANNING] Planner is decomposing the objective into specialized tasks...")
             
             // Planner decomposes into tasks
             val tasks = planningEngine.planner.planObjective(planningObjective)
@@ -6596,12 +6655,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     updatedAt = System.currentTimeMillis()
                 )
                 repository.updateObjective(readyObjective)
-                addThought("‚ö° [Lifecycle: READY] Autonomous Mode Active: Decomposed into ${tasks.size} tasks. Executing sequentially...")
+                addThought("\u26a1 [Lifecycle: READY] Autonomous Mode Active: Decomposed into ${tasks.size} tasks. Executing sequentially...")
                 
                 repository.insertChatMessage(
                     ChatMessage(
                         sender = "AZA",
-                        text = "‚ö° **Autonomous Pipeline Execution Active!**\n\nI have configured your objective: *\"$objectiveTitle\"*.\n\nSince **Autonomous Mode** is enabled, Aza will automatically run all ${tasks.size} specialized tasks without requiring approvals, conforming to security parameters:\n\n*${_safetyRules.value}*"
+                        text = "\u26a1 **Autonomous Pipeline Execution Active!**\n\nI have configured your objective: *\"$objectiveTitle\"*.\n\nSince **Autonomous Mode** is enabled, Aza will automatically run all ${tasks.size} specialized tasks without requiring approvals, conforming to security parameters:\n\n*${_safetyRules.value}*"
                     )
                 )
 
@@ -6609,7 +6668,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 viewModelScope.launch {
                     val freshTasks = repository.getTasksForObjectiveDirect(insertedObjective.id)
                     for (task in freshTasks) {
-                        addThought("ü§ñ Auto-executing task run: '${task.title}'")
+                        addThought("\ud83e\udd16 Auto-executing task run: '${task.title}'")
                         planningEngine.executeTask(task) { thought ->
                             addThought(thought)
                         }
@@ -6627,13 +6686,13 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 )
                 repository.updateObjective(waitingObjective)
                 
-                addThought("üë§ [Lifecycle: WAITING_APPROVAL] Objective awaiting manual approval validation...")
-                addThought("üë§ Approval Mode active. Standby for user authorizations.")
+                addThought("\ud83d\udc64 [Lifecycle: WAITING_APPROVAL] Objective awaiting manual approval validation...")
+                addThought("\ud83d\udc64 Approval Mode active. Standby for user authorizations.")
                 
                 repository.insertChatMessage(
                     ChatMessage(
                         sender = "AZA",
-                        text = "üéØ **Global Objective Established & Orchestrated!**\n\nI have configured your objective: *\"$objectiveTitle\"*.\n\nUsing the Aza decentralized planning system, I created **${tasks.size} specialized tasks** tailored for different agent profiles.\n\nSince you are of **Approval Mode**, those tasks are locked in **'PENDING APPROVAL'** states. Please review them in the **Autopilot Pilot** screen and tap **APPROVE** to securely unleash the agents!"
+                        text = "\ud83c\udfaf **Global Objective Established & Orchestrated!**\n\nI have configured your objective: *\"$objectiveTitle\"*.\n\nUsing the Aza decentralized planning system, I created **${tasks.size} specialized tasks** tailored for different agent profiles.\n\nSince you are of **Approval Mode**, those tasks are locked in **'PENDING APPROVAL'** states. Please review them in the **Autopilot Pilot** screen and tap **APPROVE** to securely unleash the agents!"
                     )
                 )
             }
@@ -6652,7 +6711,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         viewModelScope.launch {
             val rejectedTask = task.copy(status = "REJECTED")
             repository.updateTask(rejectedTask)
-            addThought("üõë AGENT REJECTED: '${task.assignedAgent}' action was halted by user host.")
+            addThought("\ud83d\uded1 AGENT REJECTED: '${task.assignedAgent}' action was halted by user host.")
             
             val currentObj = repository.getActiveObjectiveDirect()
             if (currentObj != null) {
@@ -6663,7 +6722,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     val nextStatus = if (anyFailed) "FAILED" else "COMPLETED"
                     val finishedObj = currentObj.copy(status = nextStatus)
                     repository.updateObjective(finishedObj)
-                    addThought("üèÅ Objective execution thread closed.")
+                    addThought("\ud83c\udfc1 Objective execution thread closed.")
                 }
             }
         }
@@ -6680,7 +6739,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     updatedAt = System.currentTimeMillis()
                 )
                 repository.updateObjective(cancelledObj)
-                addThought("üö´ [Lifecycle: CANCELLED] Active Objective cancelled.")
+                addThought("\ud83d\udeab [Lifecycle: CANCELLED] Active Objective cancelled.")
             }
         }
     }
@@ -6715,7 +6774,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             )
             val missionId = repository.insertMission(newMission)
             
-            addThought("üìÇ MISSION CREATED: \"$title\" [Priority: $priority] registered with ID $missionId")
+            addThought("\ud83d\udcc2 MISSION CREATED: \"$title\" [Priority: $priority] registered with ID $missionId")
             
             // 2. Executive Decomposer & Planner integration
             if (objectiveText.isNotBlank()) {
@@ -6779,7 +6838,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 )
                 repository.updateMission(updatedMission)
 
-                addThought("üß† EXECUTIVE PLANNER INTEGRATION: High-level goal decomposed into ${objectives.size} sequential objectives. Assigned specialized agents: [$assignedAgents] based on reliability scoring.")
+                addThought("\ud83e\udde0 EXECUTIVE PLANNER INTEGRATION: High-level goal decomposed into ${objectives.size} sequential objectives. Assigned specialized agents: [$assignedAgents] based on reliability scoring.")
                 addSchedulerThought("Decomposed mission #$missionId to ${objectives.size} objectives ($totalTasksCount tasks).")
             }
         }
@@ -6795,7 +6854,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     currentTask = "Paused by User"
                 )
                 repository.updateMission(updated)
-                addThought("‚è∏Ô∏è MISSION PAUSED: \"${mission.title}\" has been suspended. All associated scheduler tasks are frozen.")
+                addThought("\u23f8\ufe0f MISSION PAUSED: \"${mission.title}\" has been suspended. All associated scheduler tasks are frozen.")
                 addSchedulerThought("Mission #$missionId paused.")
             }
         }
@@ -6811,7 +6870,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     currentTask = "Resumed"
                 )
                 repository.updateMission(updated)
-                addThought("‚ñ∂Ô∏è MISSION RESUMED: \"${mission.title}\" is now active. Dispatching scheduler threads.")
+                addThought("\u25b6\ufe0f MISSION RESUMED: \"${mission.title}\" is now active. Dispatching scheduler threads.")
                 addSchedulerThought("Mission #$missionId resumed.")
             }
         }
@@ -6827,7 +6886,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     currentTask = "Cancelled"
                 )
                 repository.updateMission(updated)
-                addThought("üõë MISSION CANCELLED: \"${mission.title}\" marked as failed. Terminated all queued pipeline steps.")
+                addThought("\ud83d\uded1 MISSION CANCELLED: \"${mission.title}\" marked as failed. Terminated all queued pipeline steps.")
                 addSchedulerThought("Mission #$missionId cancelled.")
             }
         }
@@ -6836,14 +6895,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun clearAllMissions() {
         viewModelScope.launch {
             repository.clearAllMissions()
-            addThought("üìÇ System cleaned: All Missions flushed from historical memory registers.")
+            addThought("\ud83d\udcc2 System cleaned: All Missions flushed from historical memory registers.")
         }
     }
 
     fun clearActiveObjective() {
         viewModelScope.launch {
             repository.clearGoalSystem()
-            addThought("üßπ Active Objective and all subtasks purged from memory.")
+            addThought("\ud83e\uddf9 Active Objective and all subtasks purged from memory.")
         }
     }
 
@@ -6862,7 +6921,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             _isEngineValidating.value = true
             val sym = _validationSymbol.value
             val tf = _validationTimeframe.value
-            addThought("‚öôÔ∏è ENGINE VALIDATION: Fetching Binance historical spot data for $sym ($tf) and initiating Walk-Forward historical replay...")
+            addThought("\u2699\ufe0f ENGINE VALIDATION: Fetching Binance historical spot data for $sym ($tf) and initiating Walk-Forward historical replay...")
             try {
                 val report = withContext(Dispatchers.Default) {
                     com.example.aza.strategy.EngineValidationSuite.runValidationSuite(symbol = sym, timeframe = tf)
@@ -6877,14 +6936,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                         if (isPassed != entity.isActive) {
                             val updated = entity.copy(isActive = isPassed)
                             repository.updateStrategy(updated)
-                            addThought("‚öôÔ∏è STRATEGY REGISTRY: Updated status of [${res.strategyName}] to: ${if (isPassed) "‚úÖ ACTIVE" else "‚ùå SUSPENDED"} based on walk-forward criteria.")
+                            addThought("\u2699\ufe0f STRATEGY REGISTRY: Updated status of [${res.strategyName}] to: ${if (isPassed) "\u2705 ACTIVE" else "\u274c SUSPENDED"} based on walk-forward criteria.")
                         }
                     }
                 }
                 
-                addThought("üìä ENGINE VALIDATION: Walk-forward replay complete for $sym ($tf)! Evaluated ${report.totalStrategiesEvaluated} strategies. Passed: ${report.passedStrategiesCount}, Failed/Suspended: ${report.failedStrategiesCount}.")
+                addThought("\ud83d\udcca ENGINE VALIDATION: Walk-forward replay complete for $sym ($tf)! Evaluated ${report.totalStrategiesEvaluated} strategies. Passed: ${report.passedStrategiesCount}, Failed/Suspended: ${report.failedStrategiesCount}.")
             } catch (e: Exception) {
-                addThought("‚ö†Ô∏è ENGINE VALIDATION ERROR: Failed to execute stress test: ${e.localizedMessage}")
+                addThought("\u26a0\ufe0f ENGINE VALIDATION ERROR: Failed to execute stress test: ${e.localizedMessage}")
             } finally {
                 _isEngineValidating.value = false
             }
@@ -6939,16 +6998,16 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             dailyLossPercent = 0.85,
             maxDailyLossLimitPercent = 3.0,
             scalingFactor = 1.0,
-            statusSummary = "‚úÖ NORMAL RISK CONTROLS: Daily Loss 0.85% < 3.0% Limit. Adaptive Position Scale: 1.00x."
+            statusSummary = "\u2705 NORMAL RISK CONTROLS: Daily Loss 0.85% < 3.0% Limit. Adaptive Position Scale: 1.00x."
         )
     )
     val circuitBreakerState = _circuitBreakerState.asStateFlow()
 
     private val _dualSpeedResponseLoop = MutableStateFlow(
         com.example.aza.strategy.DualSpeedResponseLoop(
-            fastLoopAction = "‚ö° FAST LOOP STATUS: Latency 12ms | Volatility Normal | No emergency circuit breaker cut required.",
+            fastLoopAction = "\u26a1 FAST LOOP STATUS: Latency 12ms | Volatility Normal | No emergency circuit breaker cut required.",
             fastLoopLatencyMs = 12,
-            slowLoopAction = "üê¢ SLOW LOOP ADJUSTMENT: 14-day rolling window lookback Sharpe=1.85, WinRate=62.5% -> Base Scale: 1.00x",
+            slowLoopAction = "\ud83d\udc22 SLOW LOOP ADJUSTMENT: 14-day rolling window lookback Sharpe=1.85, WinRate=62.5% -> Base Scale: 1.00x",
             slowLoopLookbackDays = 14
         )
     )
@@ -6957,7 +7016,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun clearPersistedBacktestReports() {
         viewModelScope.launch {
             repository.clearAllBacktests()
-            addThought("üßπ ROOM DB: Cleared all persisted backtest reports.")
+            addThought("\ud83e\uddf9 ROOM DB: Cleared all persisted backtest reports.")
         }
     }
 
@@ -7083,7 +7142,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun selectScenarioAnalysis(scenarioId: String) {
         _portfolioTradeInteractionState.value = com.example.aza.strategy.PortfolioTradeInteractionEngine.getPortfolioTradeInteractionSummary(scenarioId)
-        addThought("üìä SCENARIO ANALYSIS UPDATED: Lumina evaluated [$scenarioId] scenario across portfolio positions.")
+        addThought("\ud83d\udcca SCENARIO ANALYSIS UPDATED: Lumina evaluated [$scenarioId] scenario across portfolio positions.")
     }
 
     private val _secondBrainSummaryState = MutableStateFlow(
@@ -7094,7 +7153,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun performSecondBrainMemorySweep() {
         val sweepLog = com.example.aza.intelligence.LuminaSecondBrainMetaLearningEngine.performForgettingAndConsolidationSweep()
         _secondBrainSummaryState.value = com.example.aza.intelligence.LuminaSecondBrainMetaLearningEngine.getSummaryState()
-        addThought("üß† SECOND BRAIN FORGETTING SWEEP: $sweepLog")
+        addThought("\ud83e\udde0 SECOND BRAIN FORGETTING SWEEP: $sweepLog")
     }
 
     fun injectSyntheticSecondBrainEpisode(isWin: Boolean = true) {
@@ -7119,7 +7178,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             environmentName = if (isWin) "USER_INJECTED_WINNING_PULSE" else "USER_INJECTED_FAILING_CHOP"
         )
         _secondBrainSummaryState.value = com.example.aza.intelligence.LuminaSecondBrainMetaLearningEngine.getSummaryState()
-        addThought("üß† SECOND BRAIN EPISODE INJECTED: Recorded ${if (isWin) "WINNING (+2.8R)" else "FAILING (-1.4R)"} experience episode into STM memory. Reinforcement Q-Table updated.")
+        addThought("\ud83e\udde0 SECOND BRAIN EPISODE INJECTED: Recorded ${if (isWin) "WINNING (+2.8R)" else "FAILING (-1.4R)"} experience episode into STM memory. Reinforcement Q-Table updated.")
     }
 
     fun evaluateSecondBrainDecisionTest(rawConfidencePct: Double = 82.0, volPct: Double = 2.4, atr: Double = 30.0) {
@@ -7139,7 +7198,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             askBidSpreadBps = 0.8
         )
         _secondBrainSummaryState.value = com.example.aza.intelligence.LuminaSecondBrainMetaLearningEngine.getSummaryState()
-        addThought("üß† SECOND BRAIN EVALUATION TEST: Raw ${rawConfidencePct}% -> Calibrated ${String.format(Locale.US, "%.1f", assessment.calibratedConfidencePct)}% (Delta: ${String.format(Locale.US, "%+.1f", assessment.confidenceDeltaPct)}%). Rationale: ${assessment.decisionRationale}")
+        addThought("\ud83e\udde0 SECOND BRAIN EVALUATION TEST: Raw ${rawConfidencePct}% -> Calibrated ${String.format(Locale.US, "%.1f", assessment.calibratedConfidencePct)}% (Delta: ${String.format(Locale.US, "%+.1f", assessment.confidenceDeltaPct)}%). Rationale: ${assessment.decisionRationale}")
     }
 
     fun runComprehensiveSecondBrainMetaLearningSimulation() {
@@ -7150,7 +7209,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         runExitIntelligenceSimulation()
         runShadowDecisionSimulation()
         runPreTradeMetaReasoningGate(2500.0)
-        addThought("üß™ COMPREHENSIVE SECOND BRAIN SIMULATION COMPLETE: Evaluated pattern recognition, dual-decay forgetting curves, RL Q-Policy updates, 7-factor adaptive exits, and shadow counterfactuals across live trading scenarios.")
+        addThought("\ud83e\uddea COMPREHENSIVE SECOND BRAIN SIMULATION COMPLETE: Evaluated pattern recognition, dual-decay forgetting curves, RL Q-Policy updates, 7-factor adaptive exits, and shadow counterfactuals across live trading scenarios.")
     }
 
     private val _metaReasoningValidation = MutableStateFlow(
@@ -7184,12 +7243,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             selectedRocPct = rocPct,
             lookbackBars = lookbackBars
         )
-        addThought("üí• BREAKOUT MOMENTUM FILTER CALIBRATED: Rate of change set to ${String.format(java.util.Locale.US, "%.1f", rocPct)}% over $lookbackBars bars. Sweet spot Profit Factor: ${String.format(java.util.Locale.US, "%.2f", _breakoutExperimentReport.value.activeConfiguration.profitFactor)}.")
+        addThought("\ud83d\udca5 BREAKOUT MOMENTUM FILTER CALIBRATED: Rate of change set to ${String.format(java.util.Locale.US, "%.1f", rocPct)}% over $lookbackBars bars. Sweet spot Profit Factor: ${String.format(java.util.Locale.US, "%.2f", _breakoutExperimentReport.value.activeConfiguration.profitFactor)}.")
     }
 
     fun applyBreakoutSweetSpotPreset(symbol: String = "BTC") {
         updateBreakoutMomentumFilter(1.2, 4, symbol)
-        addThought("‚ú® BREAKOUT SWEET SPOT APPLIED: Configured optimal Rate of Change filter (1.2% over 4 bars) for high-conviction breakout entry.")
+        addThought("\u2728 BREAKOUT SWEET SPOT APPLIED: Configured optimal Rate of Change filter (1.2% over 4 bars) for high-conviction breakout entry.")
     }
 
     fun calibrateMtfGuardThresholds(
@@ -7206,7 +7265,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         )
         _mtfGuardCalibrationState.value = newState
         _strategyMissedOpportunityMetrics.value = com.example.aza.strategy.LuminaMissedOpportunityEngine.calculateStrategyAttribution()
-        addThought("üõ°Ô∏è MTF GUARD & DIVERGENCE TUNED: Threshold set to ${adaptiveThresholdPct}%, divergence cutoff ${severeDivergenceCutoff}%, macro conflict gate ${macroGateConfidence}. False positive blocks reduced by ${String.format(java.util.Locale.US, "%.1f", newState.falseNegativeReductionPct)}%.")
+        addThought("\ud83d\udee1\ufe0f MTF GUARD & DIVERGENCE TUNED: Threshold set to ${adaptiveThresholdPct}%, divergence cutoff ${severeDivergenceCutoff}%, macro conflict gate ${macroGateConfidence}. False positive blocks reduced by ${String.format(java.util.Locale.US, "%.1f", newState.falseNegativeReductionPct)}%.")
     }
 
     fun applyBalancedGuardPreset() {
@@ -7216,7 +7275,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             macroGateConfidence = 0.70,
             breakoutLeadEnabled = true
         )
-        addThought("‚ö° BALANCED PRESET APPLIED: Balanced protection vs opportunity capture enabled across all strategies.")
+        addThought("\u26a1 BALANCED PRESET APPLIED: Balanced protection vs opportunity capture enabled across all strategies.")
     }
 
     fun refreshStrategyMissedOpportunities() {
@@ -7241,16 +7300,16 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     fun runTradeLifecycleAudit() {
         val current = _tradeLifecycleValidatorState.value
         val updatedLogs = listOf(
-            "‚úÖ Audit Executed: 100% of ${current.totalTradesValidated} active & historic records verified across all 14 schema rules.",
-            "‚úÖ Open Positions Gate: ${current.openPositionsVerifiedCount} open positions verified (realized PnL strictly null).",
-            "üîß Auto-Repair System: ${current.autoRepairedCount} missing R-Multiples / duration fields calculated.",
-            "üõ°Ô∏è Quarantine Isolation: ${current.quarantinedCount} corrupted trades isolated from learning DB."
+            "\u2705 Audit Executed: 100% of ${current.totalTradesValidated} active & historic records verified across all 14 schema rules.",
+            "\u2705 Open Positions Gate: ${current.openPositionsVerifiedCount} open positions verified (realized PnL strictly null).",
+            "\ud83d\udd27 Auto-Repair System: ${current.autoRepairedCount} missing R-Multiples / duration fields calculated.",
+            "\ud83d\udee1\ufe0f Quarantine Isolation: ${current.quarantinedCount} corrupted trades isolated from learning DB."
         ) + current.recentValidationLogs.take(3)
         _tradeLifecycleValidatorState.value = current.copy(
             overallIntegrityScore = 99,
             recentValidationLogs = updatedLogs
         )
-        addThought("üõ°Ô∏è TRADE LIFECYCLE AUDIT COMPLETE: Verified ${current.totalTradesValidated} records across 14 integrity rules. Overall Trade Integrity Score: 99/100.")
+        addThought("\ud83d\udee1\ufe0f TRADE LIFECYCLE AUDIT COMPLETE: Verified ${current.totalTradesValidated} records across 14 integrity rules. Overall Trade Integrity Score: 99/100.")
     }
 
     fun runParallelPriorityQueueValidation() {
@@ -7277,7 +7336,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             priorityJobs = updatedJobs,
             alerts = listOf(newAlert) + current.alerts
         )
-        addThought("‚ö° MULTI-THREADED PRIORITY QUEUE VALIDATION: Dispatched high-priority validation queue across 4 worker threads. Average processing latency reduced to 0.8ms.")
+        addThought("\u26a1 MULTI-THREADED PRIORITY QUEUE VALIDATION: Dispatched high-priority validation queue across 4 worker threads. Average processing latency reduced to 0.8ms.")
     }
 
     fun updateEwmaThresholdSmoothingFactor(alpha: Double, profileName: String = "CUSTOM") {
@@ -7288,11 +7347,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         val newScore = 84.0
         val updatedEwma = (alpha * newScore) + ((1.0 - alpha) * lastEwma)
         val metricText = when (alpha) {
-            0.15 -> "Optimal Œ± = 0.15 (Conservative): High threshold stability (lag ~3.2 candles, noise < 1.2%)."
-            0.25 -> "Œ± = 0.25 (Balanced): Medium responsiveness (lag ~2.0 candles, noise ~2.4%)."
-            0.35 -> "Œ± = 0.35 (Fast Regime): Ultra-responsive (lag ~1.1 candles, noise ~4.1%)."
-            0.50 -> "Œ± = 0.50 (Volatility Adaptive): Instantaneous tracking (lag ~0.5 candles, noise ~6.8%)."
-            else -> "Custom Œ± = $alpha: Adjusted EWMA responsiveness."
+            0.15 -> "Optimal \u03b1 = 0.15 (Conservative): High threshold stability (lag ~3.2 candles, noise < 1.2%)."
+            0.25 -> "\u03b1 = 0.25 (Balanced): Medium responsiveness (lag ~2.0 candles, noise ~2.4%)."
+            0.35 -> "\u03b1 = 0.35 (Fast Regime): Ultra-responsive (lag ~1.1 candles, noise ~4.1%)."
+            0.50 -> "\u03b1 = 0.50 (Volatility Adaptive): Instantaneous tracking (lag ~0.5 candles, noise ~6.8%)."
+            else -> "Custom \u03b1 = $alpha: Adjusted EWMA responsiveness."
         }
         val newConfig = cfg.copy(
             alphaSmoothingFactor = alpha,
@@ -7304,7 +7363,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         _tradeLifecycleValidatorState.value = current.copy(
             thresholdConfig = newConfig
         )
-        addThought("üìà EXPONENTIAL SMOOTHING THRESHOLD RECALIBRATED: Updated alpha factor to $alpha ($profileName). New dynamic threshold: ${Math.round(updatedEwma * 10.0) / 10.0}.")
+        addThought("\ud83d\udcc8 EXPONENTIAL SMOOTHING THRESHOLD RECALIBRATED: Updated alpha factor to $alpha ($profileName). New dynamic threshold: ${Math.round(updatedEwma * 10.0) / 10.0}.")
     }
 
     fun updatePriorityQueueScoringScheme(schemeName: String) {
@@ -7343,14 +7402,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             logAnalytics = newAnalytics
         )
 
-        addThought("‚ö° PRIORITY QUEUE WEIGHTED SCHEME RECALIBRATED: Applied '$schemeName' scheme. Job priority queue re-sorted according to new weighted scoring matrix.")
+        addThought("\u26a1 PRIORITY QUEUE WEIGHTED SCHEME RECALIBRATED: Applied '$schemeName' scheme. Job priority queue re-sorted according to new weighted scoring matrix.")
     }
 
     fun runDynamicProgrammingEwmaOptimization() {
         val current = _tradeLifecycleValidatorState.value
         val cfg = current.thresholdConfig
-        // DP optimization algorithm: minimizes Cost(Œ±) = Œª * ResponseLag(Œ±) + (1-Œª) * FalseAlarmNoise(Œ±)
-        // Solved optimal Œ± = 0.18 with Min Cost = 0.038
+        // DP optimization algorithm: minimizes Cost(\u03b1) = \u03bb * ResponseLag(\u03b1) + (1-\u03bb) * FalseAlarmNoise(\u03b1)
+        // Solved optimal \u03b1 = 0.18 with Min Cost = 0.038
         val dpOptimalAlpha = 0.18
         val lastEwma = cfg.currentDynamicThreshold
         val newScore = 85.0
@@ -7361,7 +7420,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             alphaSmoothingFactor = dpOptimalAlpha,
             currentDynamicThreshold = roundedEwma,
             ewmaHistory = cfg.ewmaHistory + roundedEwma,
-            optimizationMetric = "DP-Optimized Œ± = 0.18: Cost function minimized via Dynamic Programming (Min Cost = 0.038, Lag ~2.8 candles, Noise < 0.9%).",
+            optimizationMetric = "DP-Optimized \u03b1 = 0.18: Cost function minimized via Dynamic Programming (Min Cost = 0.038, Lag ~2.8 candles, Noise < 0.9%).",
             calibrationProfile = "DP_OPTIMIZED_GLOBAL"
         )
 
@@ -7370,7 +7429,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             dpStateTransitionsCount = current.selfLearningState.dpStateTransitionsCount + 1,
             dpMinCostValue = 0.038,
             learnedRules = listOf(
-                "DP Solution: Œ± = 0.18 globally minimizes lag-vs-noise loss function",
+                "DP Solution: \u03b1 = 0.18 globally minimizes lag-vs-noise loss function",
                 "Auto-boost Volatility Weight (+15%) during Squeeze Regimes",
                 "Enforce Strict Null PnL Guard on Open Trades prior to WS Exits",
                 "Scale position sizing down by 25% when Drawdown > 5.0%"
@@ -7382,7 +7441,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             selfLearningState = updatedMlState
         )
 
-        addThought("üß† DYNAMIC PROGRAMMING EWMA OPTIMIZATION COMPLETE: Solved optimal Œ± = 0.18 over 124 historical state transitions. Dynamic threshold updated to $roundedEwma.")
+        addThought("\ud83e\udde0 DYNAMIC PROGRAMMING EWMA OPTIMIZATION COMPLETE: Solved optimal \u03b1 = 0.18 over 124 historical state transitions. Dynamic threshold updated to $roundedEwma.")
     }
 
     fun triggerSelfLearningMechanism() {
@@ -7410,7 +7469,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             alerts = listOf(newAlert) + current.alerts
         )
 
-        addThought("ü§ñ SELF-LEARNING ENGINE RETRAINED: Updated online model parameters. Training accuracy improved to ${Math.round(newAccuracy * 10.0) / 10.0}%.")
+        addThought("\ud83e\udd16 SELF-LEARNING ENGINE RETRAINED: Updated online model parameters. Training accuracy improved to ${Math.round(newAccuracy * 10.0) / 10.0}%.")
     }
 
     fun updateAdaptiveMaxDrawdownProtection(drawdownPct: Double) {
@@ -7428,14 +7487,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             currentDrawdownPct = drawdownPct,
             adaptivePositionScaleFactor = scaleFactor,
             maxAllowedContractsUSD = allowedContracts,
-            statusSummary = "üõ°Ô∏è MAX DRAWDOWN PROTECTION: Current drawdown at ${drawdownPct}% (Max Limit: ${prot.maxDrawdownLimitPct}%). Position scale factor dynamically set to ${(scaleFactor * 100).toInt()}% ($${allowedContracts.toInt()} max exposure)."
+            statusSummary = "\ud83d\udee1\ufe0f MAX DRAWDOWN PROTECTION: Current drawdown at ${drawdownPct}% (Max Limit: ${prot.maxDrawdownLimitPct}%). Position scale factor dynamically set to ${(scaleFactor * 100).toInt()}% ($${allowedContracts.toInt()} max exposure)."
         )
 
         _tradeLifecycleValidatorState.value = current.copy(
             maxDrawdownProtection = updatedProt
         )
 
-        addThought("üõ°Ô∏è ADAPTIVE MAX DRAWDOWN PROTECTION UPDATED: Drawdown evaluated at ${drawdownPct}%. Position sizing scaled to ${(scaleFactor * 100).toInt()}% ($${allowedContracts.toInt()} USD max).")
+        addThought("\ud83d\udee1\ufe0f ADAPTIVE MAX DRAWDOWN PROTECTION UPDATED: Drawdown evaluated at ${drawdownPct}%. Position sizing scaled to ${(scaleFactor * 100).toInt()}% ($${allowedContracts.toInt()} USD max).")
     }
 
     fun optimizeGeminiApiParallelism() {
@@ -7447,14 +7506,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             averageLatencyMs = Math.round(newLatency * 10.0) / 10.0,
             tokenThroughputRps = Math.round(newRps * 10.0) / 10.0,
             responseCacheHitRatePct = (gemini.responseCacheHitRatePct + 3.0).coerceAtMost(88.0),
-            statusSummary = "‚ö° GEMINI API LATENCY OPTIMIZER: HTTP/2 multiplexed streaming active across 4 channels. Avg response latency reduced to ${Math.round(newLatency * 10.0) / 10.0}ms at ${Math.round(newRps * 10.0) / 10.0} req/sec."
+            statusSummary = "\u26a1 GEMINI API LATENCY OPTIMIZER: HTTP/2 multiplexed streaming active across 4 channels. Avg response latency reduced to ${Math.round(newLatency * 10.0) / 10.0}ms at ${Math.round(newRps * 10.0) / 10.0} req/sec."
         )
 
         _tradeLifecycleValidatorState.value = current.copy(
             geminiApiOptimization = updatedGemini
         )
 
-        addThought("‚ö° GEMINI API PARALLELISM OPTIMIZED: Configured HTTP/2 multiplexing. Response latency decreased to ${Math.round(newLatency * 10.0) / 10.0}ms.")
+        addThought("\u26a1 GEMINI API PARALLELISM OPTIMIZED: Configured HTTP/2 multiplexing. Response latency decreased to ${Math.round(newLatency * 10.0) / 10.0}ms.")
     }
 
     fun runSimulatedTradingStressTest(scenarioId: String) {
@@ -7462,7 +7521,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         val sim = current.simulatedEnvironmentState
         val targetScenario = sim.scenarios.find { it.scenarioId == scenarioId } ?: sim.scenarios.first()
 
-        val updatedSummary = "üéÆ SIMULATED ENVIRONMENT [${targetScenario.scenarioName}]: Executed 1,250 trades under ${targetScenario.regime} on ${targetScenario.assetClass}. Sharpe: ${targetScenario.sharpeRatio}, Sortino: ${targetScenario.sortinoRatio}, Max Drawdown: ${targetScenario.maxDrawdownPct}%, Integrity Score: ${targetScenario.validatorIntegrityScore}/100. Status: ${targetScenario.status}."
+        val updatedSummary = "\ud83c\udfae SIMULATED ENVIRONMENT [${targetScenario.scenarioName}]: Executed 1,250 trades under ${targetScenario.regime} on ${targetScenario.assetClass}. Sharpe: ${targetScenario.sharpeRatio}, Sortino: ${targetScenario.sortinoRatio}, Max Drawdown: ${targetScenario.maxDrawdownPct}%, Integrity Score: ${targetScenario.validatorIntegrityScore}/100. Status: ${targetScenario.status}."
 
         val updatedSim = sim.copy(
             selectedStressScenario = "${targetScenario.scenarioId}: ${targetScenario.scenarioName}",
@@ -7492,7 +7551,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             alerts = listOf(newAlert) + current.alerts
         )
 
-        addThought("üéÆ SIMULATION STRESS TEST COMPLETED [${targetScenario.scenarioName}]: Verified ML self-learning, EWMA dynamic thresholding & adaptive sizing under ${targetScenario.regime}. Sharpe: ${targetScenario.sharpeRatio}, Sortino: ${targetScenario.sortinoRatio}, Max DD: ${targetScenario.maxDrawdownPct}%.")
+        addThought("\ud83c\udfae SIMULATION STRESS TEST COMPLETED [${targetScenario.scenarioName}]: Verified ML self-learning, EWMA dynamic thresholding & adaptive sizing under ${targetScenario.regime}. Sharpe: ${targetScenario.sharpeRatio}, Sortino: ${targetScenario.sortinoRatio}, Max DD: ${targetScenario.maxDrawdownPct}%.")
     }
 
     fun selectSimulatedMarketRegime(regime: String) {
@@ -7501,7 +7560,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         _tradeLifecycleValidatorState.value = current.copy(
             simulatedEnvironmentState = sim.copy(activeRegime = regime)
         )
-        addThought("üîÑ SIMULATED MARKET REGIME SWITCHED: Active regime set to '$regime'. Self-learning ML rules adjusted weights.")
+        addThought("\ud83d\udd04 SIMULATED MARKET REGIME SWITCHED: Active regime set to '$regime'. Self-learning ML rules adjusted weights.")
     }
 
     fun selectSimulatedAssetClass(assetClass: String) {
@@ -7510,7 +7569,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         _tradeLifecycleValidatorState.value = current.copy(
             simulatedEnvironmentState = sim.copy(activeAssetClass = assetClass)
         )
-        addThought("üìà SIMULATED ASSET CLASS SWITCHED: Selected '$assetClass'. Trade Lifecycle Validator rules adapted for asset liquidity parameters.")
+        addThought("\ud83d\udcc8 SIMULATED ASSET CLASS SWITCHED: Selected '$assetClass'. Trade Lifecycle Validator rules adapted for asset liquidity parameters.")
     }
 
     private fun <A, B, C, D, E> quintuple(a: A, b: B, c: C, d: D, e: E) = Quintuple(a, b, c, d, e)
@@ -7520,19 +7579,19 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         val newState = com.example.aza.strategy.BacktestEngine.evaluateInstitutionalRecoveryState(drawdownPct)
         _institutionalRecoveryState.value = newState
         _executionIntelligenceRouting.value = com.example.aza.strategy.BacktestEngine.generateExecutionIntelligenceRouting(drawdownPct)
-        addThought("üõ°Ô∏è RECOVERY STATE & SOR CIRCUIT BREAKER: Drawdown ${drawdownPct}%. Risk Multiplier: ${newState.RiskScaleMultiplier}x. Route: ${newState.currentPhase}.")
+        addThought("\ud83d\udee1\ufe0f RECOVERY STATE & SOR CIRCUIT BREAKER: Drawdown ${drawdownPct}%. Risk Multiplier: ${newState.RiskScaleMultiplier}x. Route: ${newState.currentPhase}.")
     }
 
     fun triggerClosedLoopFeedbackCoupling(dqScore: Double = 92.5, latencyMs: Double = 12.0, slippageBps: Double = 2.4) {
         val newState = com.example.aza.strategy.BacktestEngine.evaluateBayesianAdaptation(dqScore, latencyMs, slippageBps)
         _bayesianAdaptationState.value = newState
-        addThought("üîÑ CLOSED-LOOP FEEDBACK: Score ($dqScore) fed into Bayesian Engine. MACD weight updated to ${newState.dynamicFeatureWeights["MACD_Divergence"]}, OrderBook Imbalance to ${newState.dynamicFeatureWeights["OrderBook_Imbalance"]}.")
+        addThought("\ud83d\udd04 CLOSED-LOOP FEEDBACK: Score ($dqScore) fed into Bayesian Engine. MACD weight updated to ${newState.dynamicFeatureWeights["MACD_Divergence"]}, OrderBook Imbalance to ${newState.dynamicFeatureWeights["OrderBook_Imbalance"]}.")
     }
 
     fun runExitIntelligenceSimulation() {
         val newSummary = com.example.aza.strategy.BacktestEngine.runExitIntelligenceTestProtocol()
         _adaptiveExitSummaryState.value = newSummary
-        addThought("üéØ ADAPTIVE EXIT INTELLIGENCE: Simulated 25 trade exits. Exit Quality Score: ${String.format(Locale.US, "%.1f", newSummary.averageExitQualityScore)}% | Expectancy Boost: +${String.format(Locale.US, "%.2f", newSummary.expectancyBoostR)}R | False Exit Avoidance: ${String.format(Locale.US, "%.1f", newSummary.falseExitAvoidanceRatePct)}%.")
+        addThought("\ud83c\udfaf ADAPTIVE EXIT INTELLIGENCE: Simulated 25 trade exits. Exit Quality Score: ${String.format(Locale.US, "%.1f", newSummary.averageExitQualityScore)}% | Expectancy Boost: +${String.format(Locale.US, "%.2f", newSummary.expectancyBoostR)}R | False Exit Avoidance: ${String.format(Locale.US, "%.1f", newSummary.falseExitAvoidanceRatePct)}%.")
     }
 
     fun refreshAdaptiveExitSummary() {
@@ -7548,21 +7607,21 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         val summary = com.example.aza.strategy.BacktestEngine.runShadowDecisionSimulationProtocol()
         _shadowDecisionSummaryState.value = summary
         _missedOpportunityAnalysis.value = com.example.aza.strategy.BacktestEngine.analyzeMissedOpportunities()
-        addThought("üëÅÔ∏è SHADOW DECISION ENGINE: Simulated rejected trade signals across 4 assets. Counterfactual Win Rate: ${String.format(Locale.US, "%.1f", summary.counterfactualWinRatePct)}% | Avg R: +${String.format(Locale.US, "%.2f", summary.averageExpectedR)}R | Discrepancy Alert: ${summary.discrepancyAlertActive}.")
+        addThought("\ud83d\udc41\ufe0f SHADOW DECISION ENGINE: Simulated rejected trade signals across 4 assets. Counterfactual Win Rate: ${String.format(Locale.US, "%.1f", summary.counterfactualWinRatePct)}% | Avg R: +${String.format(Locale.US, "%.2f", summary.averageExpectedR)}R | Discrepancy Alert: ${summary.discrepancyAlertActive}.")
     }
 
     fun runDailyShadowReview() {
         val summary = com.example.aza.strategy.BacktestEngine.runDailyShadowReview()
         _shadowDecisionSummaryState.value = summary
         _missedOpportunityAnalysis.value = com.example.aza.strategy.BacktestEngine.analyzeMissedOpportunities()
-        addThought("üìÖ DAILY SHADOW REVIEW: Evaluated 24h rejected trades. Discrepancy Alert: ${summary.discrepancyAlertActive}. Zero live parameters modified without threshold review approval.")
+        addThought("\ud83d\udcc5 DAILY SHADOW REVIEW: Evaluated 24h rejected trades. Discrepancy Alert: ${summary.discrepancyAlertActive}. Zero live parameters modified without threshold review approval.")
     }
 
     fun runWeeklyShadowReview() {
         val summary = com.example.aza.strategy.BacktestEngine.runWeeklyShadowReview()
         _shadowDecisionSummaryState.value = summary
         _missedOpportunityAnalysis.value = com.example.aza.strategy.BacktestEngine.analyzeMissedOpportunities()
-        addThought("üìÜ WEEKLY SHADOW REVIEW: Completed 7-day macro aggregation over rejected trades. Win Rate: ${String.format(Locale.US, "%.1f", summary.counterfactualWinRatePct)}%.")
+        addThought("\ud83d\udcc6 WEEKLY SHADOW REVIEW: Completed 7-day macro aggregation over rejected trades. Win Rate: ${String.format(Locale.US, "%.1f", summary.counterfactualWinRatePct)}%.")
         runWeeklyAutonomousReview()
     }
 
@@ -7580,7 +7639,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
             repository.insertWeeklyReview(newReview)
             
-            addThought("üìÜ WEEKLY AUTONOMOUS REVIEW COMPLETED & PERSISTED: Review Period \"${newReview.reviewPeriodLabel}\". Expectancy: +${String.format(Locale.US, "%.2f", newReview.overallExpectancy)}R | Sharpe: ${String.format(Locale.US, "%.2f", newReview.sharpeRatio)} | Max DD: ${String.format(Locale.US, "%.1f", newReview.maxDrawdownPct)}% | Execution Quality: ${String.format(Locale.US, "%.1f", newReview.executionQualityPct)}%. Saved permanently to Room DB for month-over-month evaluation.")
+            addThought("\ud83d\udcc6 WEEKLY AUTONOMOUS REVIEW COMPLETED & PERSISTED: Review Period \"${newReview.reviewPeriodLabel}\". Expectancy: +${String.format(Locale.US, "%.2f", newReview.overallExpectancy)}R | Sharpe: ${String.format(Locale.US, "%.2f", newReview.sharpeRatio)} | Max DD: ${String.format(Locale.US, "%.1f", newReview.maxDrawdownPct)}% | Execution Quality: ${String.format(Locale.US, "%.1f", newReview.executionQualityPct)}%. Saved permanently to Room DB for month-over-month evaluation.")
         }
     }
 
@@ -7588,20 +7647,20 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         val currentLogs = _autonomousExperimentState.value.institutionalMemoryLogCount
         val newState = com.example.aza.strategy.BacktestEngine.triggerShadowPhaseTickSimulation(currentLogs)
         _autonomousExperimentState.value = newState
-        addThought("üß™ AUTONOMOUS EXPERIMENT SHADOW TICK: Processed live tick feeds across 6 variants. Total Memory Logs: ${newState.institutionalMemoryLogCount}.")
+        addThought("\ud83e\uddea AUTONOMOUS EXPERIMENT SHADOW TICK: Processed live tick feeds across 6 variants. Total Memory Logs: ${newState.institutionalMemoryLogCount}.")
     }
 
     fun promoteVariantAAndExploreParameters() {
         val currentLogs = _autonomousExperimentState.value.institutionalMemoryLogCount
         val newState = com.example.aza.strategy.BacktestEngine.promoteVariantAAndExploreParameters(currentLogs)
         _autonomousExperimentState.value = newState
-        addThought("üöÄ PROMOTED VARIANT A: Dynamic 1.8x ATR stop with 20% position sizing is now the Active Core Champion (Sharpe 2.75). Launched parameter sweep across sub-variants A1-A4.")
+        addThought("\ud83d\ude80 PROMOTED VARIANT A: Dynamic 1.8x ATR stop with 20% position sizing is now the Active Core Champion (Sharpe 2.75). Launched parameter sweep across sub-variants A1-A4.")
     }
 
     fun runPreTradeMetaReasoningGate(orderSizeUSD: Double) {
         val newState = com.example.aza.strategy.BacktestEngine.evaluateMetaReasoningHypothesis(orderSizeUSD)
         _metaReasoningValidation.value = newState
-        addThought("üõë PRE-TRADE GATE CHECK ($${orderSizeUSD}): ${newState.tradeApprovalStatus}.")
+        addThought("\ud83d\uded1 PRE-TRADE GATE CHECK ($${orderSizeUSD}): ${newState.tradeApprovalStatus}.")
     }
 
     private val _selectedReportTemplateId = MutableStateFlow("EXECUTIVE_SUMMARY")
@@ -7614,25 +7673,25 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         val currentEth = _ethBnbHybridLiveState.value.ethWeightPct
         val currentBnb = _ethBnbHybridLiveState.value.bnbWeightPct
         _ethBnbHybridLiveState.value = com.example.aza.strategy.BacktestEngine.getEthBnbHybridLiveState(isLive, currentEth, currentBnb)
-        addThought("‚ö° LIVE HYBRID MODE TOGGLED: Active = $isLive.")
+        addThought("\u26a1 LIVE HYBRID MODE TOGGLED: Active = $isLive.")
     }
 
     fun rebalanceEthBnbWeights(ethWeight: Int, bnbWeight: Int) {
         val isLive = _ethBnbHybridLiveState.value.isLiveModeActive
         _ethBnbHybridLiveState.value = com.example.aza.strategy.BacktestEngine.getEthBnbHybridLiveState(isLive, ethWeight, bnbWeight)
-        addThought("‚öñÔ∏è AUTO-REBALANCE TRIGGERED: Weights adjusted to $ethWeight% ETH / $bnbWeight% BNB.")
+        addThought("\u2696\ufe0f AUTO-REBALANCE TRIGGERED: Weights adjusted to $ethWeight% ETH / $bnbWeight% BNB.")
     }
 
     fun runEthBnbHybridSimulation(days: Int) {
         val simResult = com.example.aza.strategy.BacktestEngine.runEthBnbHybridMultiRegimeSimulation(days)
         _ethBnbHybridSimulation.value = simResult
-        addThought("üß™ ETH-BNB HYBRID MULTI-REGIME SIMULATION ($days DAYS): Sharpe ${simResult.hybridSharpe}, Max Drawdown ${simResult.maxDrawdownPct}%.")
+        addThought("\ud83e\uddea ETH-BNB HYBRID MULTI-REGIME SIMULATION ($days DAYS): Sharpe ${simResult.hybridSharpe}, Max Drawdown ${simResult.maxDrawdownPct}%.")
     }
 
     fun evaluateHysteresisGuardrails(outperformancePct: Double) {
         val newState = com.example.aza.strategy.BacktestEngine.evaluateChampionChallengerHysteresis(outperformancePct, _backtestPattern.value)
         _championChallengerHysteresisState.value = newState
-        addThought("üõ°Ô∏è HYSTERESIS EVALUATION: Outperformance ${outperformancePct}%. Net after microstructure drag: ${newState.netAdjustedOutperformancePct}%. Promotion Approved: ${newState.isPromotionTriggered}.")
+        addThought("\ud83d\udee1\ufe0f HYSTERESIS EVALUATION: Outperformance ${outperformancePct}%. Net after microstructure drag: ${newState.netAdjustedOutperformancePct}%. Promotion Approved: ${newState.isPromotionTriggered}.")
     }
 
     fun toggleEngineLiveDeployment(engineName: String) {
@@ -7641,30 +7700,30 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 val newStatus = !item.isLiveModeDeployed
                 item.copy(
                     isLiveModeDeployed = newStatus,
-                    livePerformanceStatus = if (newStatus) "üü¢ DEPLOYED IN LIVE MODE: Actively trading live order-book." else "üü° PAUSED / SHADOW MODE: Engine paused for calibration."
+                    livePerformanceStatus = if (newStatus) "\ud83d\udfe2 DEPLOYED IN LIVE MODE: Actively trading live order-book." else "\ud83d\udfe1 PAUSED / SHADOW MODE: Engine paused for calibration."
                 )
             } else item
         }
         _recalibratedEngines.value = currentList
-        addThought("‚ö° ENGINE LIVE DEPLOYMENT TOGGLED: $engineName status updated.")
+        addThought("\u26a1 ENGINE LIVE DEPLOYMENT TOGGLED: $engineName status updated.")
     }
 
     fun runGeminiMetaStrategyFusion() {
         val fusion = com.example.aza.strategy.BacktestEngine.generateMetaStrategyFusion()
         _metaStrategyFusion.value = fusion
-        addThought("‚ôä GEMINI VIBE CODE FUSION COMPLETE: Fused ${fusion.primaryStrategy} and ${fusion.secondaryStrategy} into MetaStrategy Matrix. Combined Sharpe: ${fusion.projectedCombinedSharpe}.")
+        addThought("\u264a GEMINI VIBE CODE FUSION COMPLETE: Fused ${fusion.primaryStrategy} and ${fusion.secondaryStrategy} into MetaStrategy Matrix. Combined Sharpe: ${fusion.projectedCombinedSharpe}.")
     }
 
     fun setCompositeEvaluationProfile(profileName: String) {
         val profile = com.example.aza.strategy.BacktestEngine.getCompositeProfile(profileName)
         _compositeEvaluationProfile.value = profile
-        addThought("üéØ COMPOSITE EVALUATION PROFILE CHANGED: Set to ${profile.profileName} (${profile.promotionShadowWindowDays}-Day Shadow Window). Sharpe Weight: ${profile.sharpeWeightPct}%, VaR Weight: ${profile.varDrawdownWeightPct}%, Out-of-Sample Degradation: ${profile.outOfSampleDegradationPct}%.")
+        addThought("\ud83c\udfaf COMPOSITE EVALUATION PROFILE CHANGED: Set to ${profile.profileName} (${profile.promotionShadowWindowDays}-Day Shadow Window). Sharpe Weight: ${profile.sharpeWeightPct}%, VaR Weight: ${profile.varDrawdownWeightPct}%, Out-of-Sample Degradation: ${profile.outOfSampleDegradationPct}%.")
     }
 
     fun simulateMultiDayVolLockout(consecutiveDays: Int) {
         val state = com.example.aza.strategy.BacktestEngine.simulateMultiDayVolatility(consecutiveDays)
         _multiDayVolLockoutState.value = state
-        addThought("üõë PROLONGED VOLATILITY SIMULATION: $consecutiveDays Consecutive 3% Daily Loss Triggers -> Status: ${state.lockoutStatus}, Cooldown: ${state.cooldownHoursRemaining}h, Delta Neutral Hedge: ${state.deltaNeutralHedgeActive}.")
+        addThought("\ud83d\uded1 PROLONGED VOLATILITY SIMULATION: $consecutiveDays Consecutive 3% Daily Loss Triggers -> Status: ${state.lockoutStatus}, Cooldown: ${state.cooldownHoursRemaining}h, Delta Neutral Hedge: ${state.deltaNeutralHedgeActive}.")
     }
 
     fun testCircuitBreakerDrawdown(simulatedLossPct: Double) {
@@ -7673,14 +7732,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         )
         _circuitBreakerState.value = cbState
         _dualSpeedResponseLoop.value = dualSpeed
-        addThought("üõ°Ô∏è CIRCUIT BREAKER SIMULATION: Simulated Daily Loss ${String.format(Locale.US, "%.2f", simulatedLossPct)}%. Breached 3.0% Cap: ${cbState.isTriggered}. Scaling Factor: ${cbState.scalingFactor}x.")
+        addThought("\ud83d\udee1\ufe0f CIRCUIT BREAKER SIMULATION: Simulated Daily Loss ${String.format(Locale.US, "%.2f", simulatedLossPct)}%. Breached 3.0% Cap: ${cbState.isTriggered}. Scaling Factor: ${cbState.scalingFactor}x.")
     }
 
     fun runResourceArbitrageEngine() {
         val regime = _backtestPattern.value
         val res = com.example.aza.strategy.BacktestEngine.evaluateResourceArbitrage(regime)
         _resourceArbitrageResult.value = res
-        addThought("‚öñÔ∏è DYNAMIC ARBITRAGE REBALANCE: Allocated ${res.tradingCapitalAllocatedPct.toInt()}% Capital to Trading, ${res.freelanceCapitalAllocatedPct.toInt()}% to Freelance Agent Services based on $regime market regime.")
+        addThought("\u2696\ufe0f DYNAMIC ARBITRAGE REBALANCE: Allocated ${res.tradingCapitalAllocatedPct.toInt()}% Capital to Trading, ${res.freelanceCapitalAllocatedPct.toInt()}% to Freelance Agent Services based on $regime market regime.")
     }
 
     fun updateVolatilitySensitivity(calmBaseline: Double, crashThreshold: Double, tradeFreqMult: Double) {
@@ -7692,7 +7751,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             positionSizingMultiplier = 1.0,
             drawdownControlWeight = 0.85
         )
-        addThought("üéõÔ∏è VOLATILITY CALIBRATION: Updated Calm Baseline to ${calmBaseline}%, Crash Threshold to ${crashThreshold}%, Trade Frequency Multiplier to ${tradeFreqMult}x.")
+        addThought("\ud83c\udf9b\ufe0f VOLATILITY CALIBRATION: Updated Calm Baseline to ${calmBaseline}%, Crash Threshold to ${crashThreshold}%, Trade Frequency Multiplier to ${tradeFreqMult}x.")
     }
 
     fun selectBacktestStrategy(name: String) {
@@ -7738,7 +7797,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val mcResult = com.example.aza.strategy.BacktestEngine.runMonteCarloSimulation(trades, 10000.0, iterations)
             _monteCarloReport.value = mcResult
 
-            addThought("üé≤ MONTE CARLO SIMULATION: Executed $iterations random trade reshuffle iterations for ${strategy.name} on $market. Ruin Probability: ${String.format(Locale.US, "%.1f", mcResult.ruinProbabilityPercent)}%, 95% VaR Profit: $${String.format(Locale.US, "%.2f", mcResult.profit5thPercentile)} USD.")
+            addThought("\ud83c\udfb2 MONTE CARLO SIMULATION: Executed $iterations random trade reshuffle iterations for ${strategy.name} on $market. Ruin Probability: ${String.format(Locale.US, "%.1f", mcResult.ruinProbabilityPercent)}%, 95% VaR Profit: $${String.format(Locale.US, "%.2f", mcResult.profit5thPercentile)} USD.")
             _isBacktesting.value = false
         }
     }
@@ -7757,7 +7816,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val metrics = com.example.aza.strategy.BacktestEngine.evaluateAgentPipelinePerformance(trades)
             _agentPerformanceMetrics.value = metrics
 
-            addThought("ü§ñ 6-AGENT CONSENSUS ATTRIBUTION: Evaluated signal accuracy, confidence calibration, and PnL contributions across all 6 agents.")
+            addThought("\ud83e\udd16 6-AGENT CONSENSUS ATTRIBUTION: Evaluated signal accuracy, confidence calibration, and PnL contributions across all 6 agents.")
             _isBacktesting.value = false
         }
     }
@@ -7766,14 +7825,14 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         viewModelScope.launch {
             _assetCorrelationMatrix.value = com.example.aza.strategy.BacktestEngine.calculateAssetCorrelationMatrix()
             _strategyCorrelationMatrix.value = com.example.aza.strategy.BacktestEngine.calculateStrategyCorrelationMatrix()
-            addThought("üìä CORRELATION MATRICES: Computed Pearson correlation matrices for asset diversification and strategy overlap analysis.")
+            addThought("\ud83d\udcca CORRELATION MATRICES: Computed Pearson correlation matrices for asset diversification and strategy overlap analysis.")
         }
     }
 
     fun changeActiveStrategy(name: String) {
         viewModelScope.launch {
             repository.setActiveStrategy(name)
-            addThought("üéØ STRATEGY: Active execution trading model updated to: $name")
+            addThought("\ud83c\udfaf STRATEGY: Active execution trading model updated to: $name")
         }
     }
 
@@ -7803,10 +7862,10 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 repository.insertBacktestReport(report)
                 _lastBacktestReport.value = report
 
-                addThought("üß† BAYESIAN 3.0 MAIN LOOP: Executed trading loop with Smoothed Posterior Confidence ${String.format(Locale.US, "%.1f", updatedBayesianState.smoothedPosteriorConfidenceScorePct)}% (False Positive Reduction: -${String.format(Locale.US, "%.1f", updatedBayesianState.falsePositiveReductionRatePct)}%).")
-                addThought("üìä BACKTEST: Completed simulation of ${strategy.name} on $market ($pattern, $count candles). Net profit: $${String.format(Locale.US, "%.2f", report.netProfit)} USD. Win rate: ${String.format(Locale.US, "%.1f", report.winRate)}%")
+                addThought("\ud83e\udde0 BAYESIAN 3.0 MAIN LOOP: Executed trading loop with Smoothed Posterior Confidence ${String.format(Locale.US, "%.1f", updatedBayesianState.smoothedPosteriorConfidenceScorePct)}% (False Positive Reduction: -${String.format(Locale.US, "%.1f", updatedBayesianState.falsePositiveReductionRatePct)}%).")
+                addThought("\ud83d\udcca BACKTEST: Completed simulation of ${strategy.name} on $market ($pattern, $count candles). Net profit: $${String.format(Locale.US, "%.2f", report.netProfit)} USD. Win rate: ${String.format(Locale.US, "%.1f", report.winRate)}%")
             } else {
-                addThought("‚ö†Ô∏è BACKTEST: Strategy $stratName not found in registry.")
+                addThought("\u26a0\ufe0f BACKTEST: Strategy $stratName not found in registry.")
             }
             _isBacktesting.value = false
         }
@@ -7837,7 +7896,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 repository.insertBacktestReport(topStratReport)
             }
 
-            addThought("üìä MULTI-STRATEGY EVALUATION: Side-by-side comparison completed for $market. Top performing strategy: **${comparisonReport.topPerformingStrategy}**.")
+            addThought("\ud83d\udcca MULTI-STRATEGY EVALUATION: Side-by-side comparison completed for $market. Top performing strategy: **${comparisonReport.topPerformingStrategy}**.")
             _isBacktesting.value = false
         }
     }
@@ -7866,7 +7925,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 repository.insertBacktestReport(report)
                 _lastBacktestReport.value = report
 
-                addThought("‚ö†Ô∏è SCENARIO STRESS TEST: Replayed extreme scenario [$scenario] on ${strategy.name} ($market). Net profit: $${String.format(Locale.US, "%.2f", report.netProfit)} USD, Max DD: ${String.format(Locale.US, "%.2f", report.maxDrawdown)}%")
+                addThought("\u26a0\ufe0f SCENARIO STRESS TEST: Replayed extreme scenario [$scenario] on ${strategy.name} ($market). Net profit: $${String.format(Locale.US, "%.2f", report.netProfit)} USD, Max DD: ${String.format(Locale.US, "%.2f", report.maxDrawdown)}%")
             }
             _isBacktesting.value = false
         }
@@ -7879,7 +7938,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             val report = com.example.aza.strategy.BacktestEngine.runAllScenarioBasedSuite(market, 10000.0)
             _scenarioSuiteReport.value = report
             generateCustomizedReport()
-            addThought("üß™ SCENARIO SUITE COMPLETE: Evaluated ${report.totalScenariosTested} scenario/strategy combinations. Resilience Pass Rate: ${report.passedScenariosCount}/${report.totalScenariosTested}. Aggregate Sharpe: ${String.format(Locale.US, "%.2f", report.aggregateSharpe)}, Sortino: ${String.format(Locale.US, "%.2f", report.aggregateSortino)}, Calmar: ${String.format(Locale.US, "%.2f", report.aggregateCalmar)}.")
+            addThought("\ud83e\uddea SCENARIO SUITE COMPLETE: Evaluated ${report.totalScenariosTested} scenario/strategy combinations. Resilience Pass Rate: ${report.passedScenariosCount}/${report.totalScenariosTested}. Aggregate Sharpe: ${String.format(Locale.US, "%.2f", report.aggregateSharpe)}, Sortino: ${String.format(Locale.US, "%.2f", report.aggregateSortino)}, Calmar: ${String.format(Locale.US, "%.2f", report.aggregateCalmar)}.")
             _isBacktesting.value = false
         }
     }
@@ -7907,7 +7966,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
             generateCustomizedReport()
 
-            addThought("üîÑ WALK-FORWARD OPTIMIZATION COMPLETE: Strategy [${strategy.name}] evaluated over ${wfReport.totalWindowsTested} rolling windows. Out-of-Sample Net Profit: $${String.format(Locale.US, "%.2f", wfReport.aggregateOutOfSampleProfit)}, WFE: ${String.format(Locale.US, "%.1f", wfReport.aggregateWalkForwardEfficiencyPct)}%, Rating: ${wfReport.robustnessRating}.")
+            addThought("\ud83d\udd04 WALK-FORWARD OPTIMIZATION COMPLETE: Strategy [${strategy.name}] evaluated over ${wfReport.totalWindowsTested} rolling windows. Out-of-Sample Net Profit: $${String.format(Locale.US, "%.2f", wfReport.aggregateOutOfSampleProfit)}, WFE: ${String.format(Locale.US, "%.1f", wfReport.aggregateWalkForwardEfficiencyPct)}%, Rating: ${wfReport.robustnessRating}.")
             _isBacktesting.value = false
         }
     }
@@ -8009,7 +8068,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             }
 
             if (lastProcessed != null && (now - lastProcessed) < 30000) {
-                addThought("‚ö†Ô∏è DUPLICATE DETECTED: Signal [$signalKey] received twice within 30 seconds. Suppressing duplicate execution to protect portfolio safety.")
+                addThought("\u26a0\ufe0f DUPLICATE DETECTED: Signal [$signalKey] received twice within 30 seconds. Suppressing duplicate execution to protect portfolio safety.")
                 addReasoningLog("Duplicate signal detected for $market via $currentStrategyName. Execution blocked.", "RISK")
                 recordShadowMissedTrade("DUPLICATE_SIGNAL_SUPPRESSION")
                 return@launch
@@ -8019,7 +8078,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
             // Bayesian Posterior Confidence Filter Check
             if (bayesianState.smoothedPosteriorConfidenceScorePct < 50.0) {
-                addThought("‚ö†Ô∏è BAYESIAN CONFIDENCE EVOLUTION: Flagged false positive risk (Posterior: ${String.format(Locale.US, "%.1f", bayesianState.smoothedPosteriorConfidenceScorePct)}% < 50% threshold). Suppressing signal.")
+                addThought("\u26a0\ufe0f BAYESIAN CONFIDENCE EVOLUTION: Flagged false positive risk (Posterior: ${String.format(Locale.US, "%.1f", bayesianState.smoothedPosteriorConfidenceScorePct)}% < 50% threshold). Suppressing signal.")
                 addReasoningLog("Bayesian filter suppressed signal for $market.", "RISK")
                 recordShadowMissedTrade("BAYESIAN_POSTERIOR_BELOW_THRESHOLD")
                 return@launch
@@ -8049,7 +8108,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             _secondBrainSummaryState.value = com.example.aza.intelligence.LuminaSecondBrainMetaLearningEngine.getSummaryState()
 
             if (!secondBrainEval.isApprovedBySecondBrain) {
-                addThought("‚ö†Ô∏è SECOND BRAIN REJECTION: Calibrated confidence ${String.format(Locale.US, "%.1f", secondBrainEval.calibratedConfidencePct)}% fell below threshold. Suppressing signal. Rationale: ${secondBrainEval.decisionRationale}")
+                addThought("\u26a0\ufe0f SECOND BRAIN REJECTION: Calibrated confidence ${String.format(Locale.US, "%.1f", secondBrainEval.calibratedConfidencePct)}% fell below threshold. Suppressing signal. Rationale: ${secondBrainEval.decisionRationale}")
                 addReasoningLog("Second Brain suppressed signal for $market.", "RISK")
                 recordShadowMissedTrade("SECOND_BRAIN_META_LEARNING_THRESHOLD_REJECTION")
                 return@launch
@@ -8074,7 +8133,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             if (execAdjustment.isPoorExecutionEnvironment) {
                 adjustedPositionSize *= execAdjustment.positionSizeMultiplier
                 adjustedConfidence *= execAdjustment.confidenceMultiplier
-                addThought("‚ö†Ô∏è ML EXECUTION ADAPTATION: [$market | $currentStrategyName | ${marketRegimeEnum.displayName}] flagged with poor execution quality (${String.format(Locale.US, "%.1f", execAdjustment.executionQualityScore)}/100). Scaled position size down to ${String.format(Locale.US, "%.0f", execAdjustment.positionSizeMultiplier * 100)}%, confidence reduced by ${String.format(Locale.US, "%.0f", (1.0 - execAdjustment.confidenceMultiplier) * 100)}%.")
+                addThought("\u26a0\ufe0f ML EXECUTION ADAPTATION: [$market | $currentStrategyName | ${marketRegimeEnum.displayName}] flagged with poor execution quality (${String.format(Locale.US, "%.1f", execAdjustment.executionQualityScore)}/100). Scaled position size down to ${String.format(Locale.US, "%.0f", execAdjustment.positionSizeMultiplier * 100)}%, confidence reduced by ${String.format(Locale.US, "%.0f", (1.0 - execAdjustment.confidenceMultiplier) * 100)}%.")
                 addReasoningLog("Execution Intelligence: ${execAdjustment.rationale}", "RISK")
             }
 
@@ -8139,10 +8198,10 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     )
                     repository.insertTradeAuditLog(auditLog)
 
-                    addThought("‚úÖ LIFECYCLE VERIFIED (100% INTEGRITY): Executed BUY $market @ $${String.format(Locale.US, "%.2f", simResult.averageExecutionPrice)} with size ${String.format(Locale.US, "%.4f", simResult.filledSize)}. (Latency: ${simResult.latencyMs}ms, Fees: $${String.format(Locale.US, "%.2f", simResult.feesPaid)})")
+                    addThought("\u2705 LIFECYCLE VERIFIED (100% INTEGRITY): Executed BUY $market @ $${String.format(Locale.US, "%.2f", simResult.averageExecutionPrice)} with size ${String.format(Locale.US, "%.4f", simResult.filledSize)}. (Latency: ${simResult.latencyMs}ms, Fees: $${String.format(Locale.US, "%.2f", simResult.feesPaid)})")
                     addReasoningLog("Stage 6 (SETTLEMENT_AUDITED): Paper Trade executed and audited into database.", "ACTION")
                 } else {
-                    addThought("‚ö†Ô∏è PAPER TRADE: Active strategy signaled BUY for $market, but cash balance is insufficient.")
+                    addThought("\u26a0\ufe0f PAPER TRADE: Active strategy signaled BUY for $market, but cash balance is insufficient.")
                     addReasoningLog("Trade execution blocked: Insufficient portfolio cash to satisfy $currentStrategyName rules.", "RISK")
                     recordShadowMissedTrade("INSUFFICIENT_CASH_RESERVE")
                 }
@@ -8230,15 +8289,15 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     )
                     repository.insertTradeAuditLog(auditLog)
 
-                    addThought("‚úÖ LIFECYCLE VERIFIED (100% INTEGRITY): Executed SELL $market. Realized profit: $${String.format(Locale.US, "%.2f", actualProfit)} USD. Exit Quality score updated.")
+                    addThought("\u2705 LIFECYCLE VERIFIED (100% INTEGRITY): Executed SELL $market. Realized profit: $${String.format(Locale.US, "%.2f", actualProfit)} USD. Exit Quality score updated.")
                     addReasoningLog("Stage 6 (SETTLEMENT_AUDITED): Paper Trade SELL executed & logged.", "ACTION")
                 } else {
-                    addThought("‚ö†Ô∏è PAPER TRADE: Active strategy signaled SELL for $market, but no active position to liquidate.")
+                    addThought("\u26a0\ufe0f PAPER TRADE: Active strategy signaled SELL for $market, but no active position to liquidate.")
                     addReasoningLog("Trade execution blocked: No active position in $market to satisfy SELL rules.", "RISK")
                     recordShadowMissedTrade("NO_ACTIVE_POSITION_TO_LIQUIDATE")
                 }
             } else {
-                addThought("‚ÑπÔ∏è PAPER TRADE: Active strategy evaluated $market. Current signal is HOLD. Indicators: ${strategy.analyzeMarket(market, prices)}")
+                addThought("\u2139\ufe0f PAPER TRADE: Active strategy evaluated $market. Current signal is HOLD. Indicators: ${strategy.analyzeMarket(market, prices)}")
                 addReasoningLog("$currentStrategyName rules recommend HOLD for $market.", "STRATEGY")
                 recordShadowMissedTrade("STRATEGY_HOLD_SIGNAL")
             }
@@ -8268,7 +8327,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun runReinforcementSelfTraining() {
         viewModelScope.launch {
-            addThought("üîÑ Initiating on-demand Reinforcement Self-Training session...")
+            addThought("\ud83d\udd04 Initiating on-demand Reinforcement Self-Training session...")
             val result = withContext(Dispatchers.IO) {
                 com.example.aza.strategy.StrategyEvaluationEngine.runSelfTrainingAndLearning(
                     repository = repository,
@@ -8477,7 +8536,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     activeSL = breakevenPrice
                     val bePosition = pos.copy(stopLossPrice = breakevenPrice)
                     repository.updatePosition(bePosition)
-                    triggerPositionAlert("BREAKEVEN_PROTECTION", symbol, "üõ°Ô∏è BREAK-EVEN ACTIVATED: $symbol reached +1.0R profit threshold ($currentPrice). Stop Loss moved to Break-Even (${String.format(Locale.US, "%.2f", breakevenPrice)}) to guarantee zero capital risk.")
+                    triggerPositionAlert("BREAKEVEN_PROTECTION", symbol, "\ud83d\udee1\ufe0f BREAK-EVEN ACTIVATED: $symbol reached +1.0R profit threshold ($currentPrice). Stop Loss moved to Break-Even (${String.format(Locale.US, "%.2f", breakevenPrice)}) to guarantee zero capital risk.")
                 }
             }
 
@@ -8491,7 +8550,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     activeSL = proposedTrailingSL
                     val trailedPosition = pos.copy(stopLossPrice = proposedTrailingSL)
                     repository.updatePosition(trailedPosition)
-                    triggerPositionAlert("TSL_TRAILED", symbol, "üìà DYNAMIC TRAILING STOP: Adjusted SL to ${String.format(Locale.US, "%.2f", proposedTrailingSL)} (using ${String.format(Locale.US, "%.2f", trailBuffer)} volatility buffer) to lock in profits on $symbol (Current: $currentPrice, Entry: ${pos.entryPrice})")
+                    triggerPositionAlert("TSL_TRAILED", symbol, "\ud83d\udcc8 DYNAMIC TRAILING STOP: Adjusted SL to ${String.format(Locale.US, "%.2f", proposedTrailingSL)} (using ${String.format(Locale.US, "%.2f", trailBuffer)} volatility buffer) to lock in profits on $symbol (Current: $currentPrice, Entry: ${pos.entryPrice})")
                 }
             }
 
@@ -8511,19 +8570,19 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             // PHASE 2: DYNAMIC EXIT ENGINE - TIME-BASED / STAGNATION EXIT
             // 3. Stagnation exit for trades open > 3 hours with minimal movement (< 0.3% PnL)
             if (durationMins >= 180.0 && kotlin.math.abs(pnlPercent) <= 0.3) {
-                triggerPositionAlert("STAGNATION_EXIT", symbol, "‚è≥ STAGNATION TIMEOUT: Closing position on $symbol after ${durationMins.toInt()} minutes of sideways consolidation to release locked portfolio capital.")
+                triggerPositionAlert("STAGNATION_EXIT", symbol, "\u23f3 STAGNATION TIMEOUT: Closing position on $symbol after ${durationMins.toInt()} minutes of sideways consolidation to release locked portfolio capital.")
                 executeExitTradeWithFullLifecycle(symbol, isOperatorInitiated = false, operatorAction = "STAGNATION_TIMEOUT")
             }
             else if (activeSL > 0.0 && currentPrice <= effectiveSL) {
-                triggerPositionAlert("SL_HIT", symbol, "üõë STOP LOSS HIT: Price ($$currentPrice) dropped to/below active stop ($$activeSL). Executing protective market sell on Binance Spot.")
+                triggerPositionAlert("SL_HIT", symbol, "\ud83d\uded1 STOP LOSS HIT: Price ($$currentPrice) dropped to/below active stop ($$activeSL). Executing protective market sell on Binance Spot.")
                 executeExitTradeWithFullLifecycle(symbol, isOperatorInitiated = false, operatorAction = "STOP_LOSS_HIT")
             } else if (activeSL > 0.0 && currentPrice <= activeSL && isThinLiquidity) {
                 // Price breached SL but is protected by the liquidity shield buffer
-                triggerPositionAlert("LIQUIDITY_SHIELD", symbol, "üõ°Ô∏è LIQUIDITY PACKET SHIELD ACTIVE: Price ($currentPrice) breached stop loss ($activeSL) on thin liquidity (${String.format(Locale.US, "%.2f", dynamicExponentialEstimator.currentLiquidity)}). Holding position to avoid premature sweep exit.")
+                triggerPositionAlert("LIQUIDITY_SHIELD", symbol, "\ud83d\udee1\ufe0f LIQUIDITY PACKET SHIELD ACTIVE: Price ($currentPrice) breached stop loss ($activeSL) on thin liquidity (${String.format(Locale.US, "%.2f", dynamicExponentialEstimator.currentLiquidity)}). Holding position to avoid premature sweep exit.")
             }
             // TP Hit check: Execute immediate Binance Spot market sell to lock in full target profits!
             else if (pos.takeProfitPrice > 0.0 && currentPrice >= pos.takeProfitPrice) {
-                triggerPositionAlert("TP_HIT", symbol, "üéØ TAKE PROFIT HIT: Price ($$currentPrice) hit or exceeded Take Profit ($${pos.takeProfitPrice})! Executing live market sell on Binance Spot to lock in profits.")
+                triggerPositionAlert("TP_HIT", symbol, "\ud83c\udfaf TAKE PROFIT HIT: Price ($$currentPrice) hit or exceeded Take Profit ($${pos.takeProfitPrice})! Executing live market sell on Binance Spot to lock in profits.")
                 executeExitTradeWithFullLifecycle(symbol, isOperatorInitiated = false, operatorAction = "TAKE_PROFIT_HIT")
             }
             // Fast Micro-Profit Harvester: Auto-sell when any net positive profit or micro-target is reached!
@@ -8531,7 +8590,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 val grossPnl = (currentPrice - pos.entryPrice) * pos.amountOwned
                 val feeEst = (pos.amountOwned * pos.entryPrice) * 0.002
                 val netPnl = grossPnl - feeEst
-                triggerPositionAlert("FAST_PROFIT_HARVEST", symbol, "üí∞ FAST PROFIT HARVEST: $symbol reached net profit of +$${String.format(Locale.US, "%.3f", netPnl)} (+${String.format(Locale.US, "%.2f", pnlPercent)}% after fees). Executing immediate Binance Spot market sell!")
+                triggerPositionAlert("FAST_PROFIT_HARVEST", symbol, "\ud83d\udcb0 FAST PROFIT HARVEST: $symbol reached net profit of +$${String.format(Locale.US, "%.3f", netPnl)} (+${String.format(Locale.US, "%.2f", pnlPercent)}% after fees). Executing immediate Binance Spot market sell!")
                 executeExitTradeWithFullLifecycle(symbol, isOperatorInitiated = false, operatorAction = "FAST_PROFIT_HARVEST_BINANCE_SELL")
             }
             else {
@@ -8592,24 +8651,24 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         val isWin = finalPnL >= 0.0
         val dynamicLessons = buildString {
             if (isOperatorInitiated) {
-                append("üë§ **OPERATOR MANUAL OVERRIDE LOG [${position.symbol}]**\n")
-                append("‚Ä¢ **Intervention Action**: ${operatorAction ?: "Manual exit"}\n")
-                append("‚Ä¢ **Autonomous Baseline Preserved**: AI strategy confidence & Elo ratings are insulated from manual intervention.\n")
-                append("‚Ä¢ **Realized P&L**: $${String.format(Locale.US, "%.2f", finalPnL)} (Holding: ${String.format(Locale.US, "%.1f", holdingDurationMinutes)}m)\n")
+                append("\ud83d\udc64 **OPERATOR MANUAL OVERRIDE LOG [${position.symbol}]**\n")
+                append("\u2022 **Intervention Action**: ${operatorAction ?: "Manual exit"}\n")
+                append("\u2022 **Autonomous Baseline Preserved**: AI strategy confidence & Elo ratings are insulated from manual intervention.\n")
+                append("\u2022 **Realized P&L**: $${String.format(Locale.US, "%.2f", finalPnL)} (Holding: ${String.format(Locale.US, "%.1f", holdingDurationMinutes)}m)\n")
             } else {
-                append("üìä **POST-TRADE PREDICTION EVIDENCE REFLECTION** for ${position.symbol} (${position.strategyName}):\n")
+                append("\ud83d\udcca **POST-TRADE PREDICTION EVIDENCE REFLECTION** for ${position.symbol} (${position.strategyName}):\n")
                 if (isWin) {
-                    append("‚Ä¢ **Prediction Outcome**: SUCCESSFUL prediction. Spot rate aligned with our bullish trend hypothesis.\n")
-                    append("‚Ä¢ **Which assumption was verified?**: Bullish trend continuation along EMA support levels.\n")
-                    append("‚Ä¢ **Which evidence supported this?**: Moving averages and positive order volume delta supported the entry.\n")
-                    append("‚Ä¢ **Should confidence in this strategy increase?**: Yes, confidence in '${position.strategyName}' has been increased by +2.5%.\n")
+                    append("\u2022 **Prediction Outcome**: SUCCESSFUL prediction. Spot rate aligned with our bullish trend hypothesis.\n")
+                    append("\u2022 **Which assumption was verified?**: Bullish trend continuation along EMA support levels.\n")
+                    append("\u2022 **Which evidence supported this?**: Moving averages and positive order volume delta supported the entry.\n")
+                    append("\u2022 **Should confidence in this strategy increase?**: Yes, confidence in '${position.strategyName}' has been increased by +2.5%.\n")
                 } else {
-                    append("‚Ä¢ **Prediction Outcome**: FAILED prediction. Spot rate went counter to our trend hypothesis.\n")
-                    append("‚Ä¢ **Which assumption was wrong?**: Assumed local support would hold, but market sellers broke through support with elevated volume.\n")
-                    append("‚Ä¢ **Which evidence was ignored?**: Short-term ATR volatility spikes and order book sell imbalances were discounted.\n")
-                    append("‚Ä¢ **Should confidence in this strategy decrease?**: Yes, confidence in '${position.strategyName}' has been decreased by -5.0% due to regime mismatch.\n")
+                    append("\u2022 **Prediction Outcome**: FAILED prediction. Spot rate went counter to our trend hypothesis.\n")
+                    append("\u2022 **Which assumption was wrong?**: Assumed local support would hold, but market sellers broke through support with elevated volume.\n")
+                    append("\u2022 **Which evidence was ignored?**: Short-term ATR volatility spikes and order book sell imbalances were discounted.\n")
+                    append("\u2022 **Should confidence in this strategy decrease?**: Yes, confidence in '${position.strategyName}' has been decreased by -5.0% due to regime mismatch.\n")
                 }
-                append("‚Ä¢ **Actionable Feedback**: $isEntryOptimal entry. ")
+                append("\u2022 **Actionable Feedback**: $isEntryOptimal entry. ")
                 if (isStopTooTight == "YES") append("Stop-loss was too narrow, causing premature exit. ")
                 if (isTargetTooAmbitious == "YES") append("Target was too ambitious as price stalled near resistance levels. ")
                 append("Slippage impact was $slippageImpact. Market regime shifted: $conditionsChanged.")
@@ -8835,7 +8894,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
             when (validation.status) {
                 com.example.aza.strategy.FilterValidationStatus.ZERO_EXCHANGE_HOLDING -> {
-                    addThought("üßπ GHOST RECORD PRUNED: Zero $symbol held on Binance Spot. Pruned local position safely.")
+                    addThought("\ud83e\uddf9 GHOST RECORD PRUNED: Zero $symbol held on Binance Spot. Pruned local position safely.")
                     closePositionWithReview(
                         position = position,
                         exitPrice = currentPrice,
@@ -8845,11 +8904,11 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     )
                 }
                 com.example.aza.strategy.FilterValidationStatus.LOCKED_IN_OPEN_ORDERS -> {
-                    addThought("‚ö†Ô∏è EXIT BLOCKED: $symbol is locked in open Binance orders (${validation.lockedSpot} held). Cancel open limit order before submitting market exit.")
+                    addThought("\u26a0\ufe0f EXIT BLOCKED: $symbol is locked in open Binance orders (${validation.lockedSpot} held). Cancel open limit order before submitting market exit.")
                     triggerPositionAlert("SYNC_FAILURE", symbol, "Sell blocked: $symbol is locked in active Binance limit orders. Cancel open orders first.")
                 }
                 com.example.aza.strategy.FilterValidationStatus.DUST_POSITION -> {
-                    addThought("ü™ô DUST POSITION DETECTED: $symbol value ($${String.format(Locale.US, "%.2f", validation.notionalValueUsd)}) < Binance MIN_NOTIONAL ($${validation.minNotionalRequired}). Market sell rejected by exchange rules. Safely archived locally.")
+                    addThought("\ud83e\ude99 DUST POSITION DETECTED: $symbol value ($${String.format(Locale.US, "%.2f", validation.notionalValueUsd)}) < Binance MIN_NOTIONAL ($${validation.minNotionalRequired}). Market sell rejected by exchange rules. Safely archived locally.")
                     closePositionWithReview(
                         position = position,
                         exitPrice = currentPrice,
@@ -8859,7 +8918,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     )
                 }
                 com.example.aza.strategy.FilterValidationStatus.BELOW_MIN_QTY -> {
-                    addThought("‚ö†Ô∏è BELOW MIN QTY: $symbol size (${validation.requestedQty}) < LOT_SIZE min (${validation.executableQty}). Archived safely.")
+                    addThought("\u26a0\ufe0f BELOW MIN QTY: $symbol size (${validation.requestedQty}) < LOT_SIZE min (${validation.executableQty}). Archived safely.")
                     closePositionWithReview(
                         position = position,
                         exitPrice = currentPrice,
@@ -8869,7 +8928,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     )
                 }
                 com.example.aza.strategy.FilterValidationStatus.INSUFFICIENT_FREE_BALANCE -> {
-                    addThought("‚ö†Ô∏è PARTIAL BALANCE: Free balance (${validation.availableFreeSpot}) < requested ($requestedQty). Executing with free quantity ${validation.executableQty}.")
+                    addThought("\u26a0\ufe0f PARTIAL BALANCE: Free balance (${validation.availableFreeSpot}) < requested ($requestedQty). Executing with free quantity ${validation.executableQty}.")
                     executeExchangeSellOrder(
                         position = position,
                         sellQty = validation.executableQty,
@@ -8899,7 +8958,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         operatorAction: String
     ) {
         val symbol = position.symbol
-        addThought("üì§ DISPATCHING EXIT ORDER: Sell $sellQty $symbol at $$exitPrice on Binance Spot...")
+        addThought("\ud83d\udce4 DISPATCHING EXIT ORDER: Sell $sellQty $symbol at $$exitPrice on Binance Spot...")
 
         // Retry logic for recoverable failures (up to 3 attempts with exponential backoff)
         var attempts = 0
@@ -8919,7 +8978,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                 if (connectorRes.isSuccess) {
                     isSuccess = true
                     val orderInfo = connectorRes.getOrNull()
-                    addThought("‚úÖ BINANCE EXIT ORDER ACCEPTED: Order #${orderInfo?.orderId ?: "SPOT-EXIT"} confirmed executed on Binance.")
+                    addThought("\u2705 BINANCE EXIT ORDER ACCEPTED: Order #${orderInfo?.orderId ?: "SPOT-EXIT"} confirmed executed on Binance.")
                 } else {
                     lastError = connectorRes.exceptionOrNull()?.message ?: "Exchange timeout"
                     if (attempts < 3) delay(1000L * attempts)
@@ -8941,7 +9000,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             fetchContaboData()
             performLiveReconciliation()
         } else {
-            addThought("‚ùå BINANCE EXIT FAILED after $attempts attempts: $lastError. Position kept open for operator review.")
+            addThought("\u274c BINANCE EXIT FAILED after $attempts attempts: $lastError. Position kept open for operator review.")
             triggerPositionAlert("SYNC_FAILURE", symbol, "Exit sell failed: $lastError")
         }
     }
@@ -8966,17 +9025,17 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     fun executeOperatorCancelOrder(symbol: String, orderId: String) {
         viewModelScope.launch {
-            addThought("üõë OPERATOR MANUAL OVERRIDE: Cancelling open Binance order #$orderId ($symbol)...")
+            addThought("\ud83d\uded1 OPERATOR MANUAL OVERRIDE: Cancelling open Binance order #$orderId ($symbol)...")
             try {
                 val cancelRes = com.example.aza.connector.BinanceConnector.cancelOrder(symbol, orderId)
                 if (cancelRes.isSuccess) {
-                    addThought("‚úÖ ORDER CANCELLED: Order #$orderId successfully cancelled on Binance.")
+                    addThought("\u2705 ORDER CANCELLED: Order #$orderId successfully cancelled on Binance.")
                 } else {
-                    addThought("‚ö†Ô∏è CANCEL NOTICE: ${cancelRes.exceptionOrNull()?.message}")
+                    addThought("\u26a0\ufe0f CANCEL NOTICE: ${cancelRes.exceptionOrNull()?.message}")
                 }
                 performLiveReconciliation()
             } catch (e: Exception) {
-                addThought("‚ö†Ô∏è CANCEL ORDER NOTICE: Cancel requested for #$orderId ($symbol). Re-syncing open orders.")
+                addThought("\u26a0\ufe0f CANCEL ORDER NOTICE: Cancel requested for #$orderId ($symbol). Re-syncing open orders.")
                 performLiveReconciliation()
             }
         }
@@ -8992,7 +9051,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             currentOverrides[symbol] = "STOP_MOVED_TO_${String.format(Locale.US, "%.2f", newStopLoss)}"
             _operatorControlledPositions.value = currentOverrides
 
-            addThought("üõ°Ô∏è OPERATOR MANUAL OVERRIDE: Stop loss on $symbol manually moved to $$newStopLoss (Entry: $$${position.entryPrice}).")
+            addThought("\ud83d\udee1\ufe0f OPERATOR MANUAL OVERRIDE: Stop loss on $symbol manually moved to $$newStopLoss (Entry: $$${position.entryPrice}).")
             triggerPositionAlert("SL_APPROACHING", symbol, "Stop loss adjusted by operator to $$newStopLoss")
         }
     }
@@ -9005,7 +9064,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             currentOverrides[symbol] = "REDUCED_${reducePercentage.toInt()}%"
             _operatorControlledPositions.value = currentOverrides
 
-            addThought("üìâ OPERATOR MANUAL OVERRIDE: Reducing $symbol position size by ${reducePercentage.toInt()}%...")
+            addThought("\ud83d\udcc9 OPERATOR MANUAL OVERRIDE: Reducing $symbol position size by ${reducePercentage.toInt()}%...")
             executeExitTradeWithFullLifecycle(
                 symbol = symbol,
                 isOperatorInitiated = true,
@@ -9019,7 +9078,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         val currentOverrides = _operatorControlledPositions.value.toMutableMap()
         currentOverrides.remove(symbol)
         _operatorControlledPositions.value = currentOverrides
-        addThought("ü§ñ AI AUTONOMOUS CONTROL RESTORED: $symbol returned to autonomous AI lifecycle management.")
+        addThought("\ud83e\udd16 AI AUTONOMOUS CONTROL RESTORED: $symbol returned to autonomous AI lifecycle management.")
     }
 
     fun recomputeCapitalAllocation() {
@@ -9165,7 +9224,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             repository.insertChatMessage(
                 com.example.data.database.ChatMessage(
                     sender = "RESEARCH AGENT",
-                    text = "üîé **AUTO-RESEARCH SCANNED:** Discovered new intelligence under category **$category** with **${(confidence * 100).toInt()}%** confidence. Recorded to Knowledge Base."
+                    text = "\ud83d\udd0e **AUTO-RESEARCH SCANNED:** Discovered new intelligence under category **$category** with **${(confidence * 100).toInt()}%** confidence. Recorded to Knowledge Base."
                 )
             )
         }
@@ -9196,7 +9255,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             repository.insertChatMessage(
                 com.example.data.database.ChatMessage(
                     sender = "CONTENT AGENT",
-                    text = "üé¨ **PIPELINE STEP:** Advanced content **'${content.title}'** to stage **$nextStatus**. Spatially coordinated with **Video Editor Sub-Agent** to finalize deliverables."
+                    text = "\ud83c\udfac **PIPELINE STEP:** Advanced content **'${content.title}'** to stage **$nextStatus**. Spatially coordinated with **Video Editor Sub-Agent** to finalize deliverables."
                 )
             )
         }
@@ -9232,7 +9291,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             repository.insertChatMessage(
                 com.example.data.database.ChatMessage(
                     sender = "FREELANCE ENGINE",
-                    text = "üíº **CONTRACT ADVANCED:** Lead **'${gig.title}'** advanced to stage **$nextStatus**. Proposal prepared and checked by **Freelance Lead Generator Sub-Agent**."
+                    text = "\ud83d\udcbc **CONTRACT ADVANCED:** Lead **'${gig.title}'** advanced to stage **$nextStatus**. Proposal prepared and checked by **Freelance Lead Generator Sub-Agent**."
                 )
             )
         }
@@ -9254,7 +9313,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             repository.insertChatMessage(
                 com.example.data.database.ChatMessage(
                     sender = "MISSION CALENDAR",
-                    text = "üìÖ **PLANNER SCHEDULING:** Configured future recurrence of **'${mission.title}'** for **$nextOccurrenceDate** based on priority level **${mission.priority}** and budget limit of **$${mission.budget}**."
+                    text = "\ud83d\udcc5 **PLANNER SCHEDULING:** Configured future recurrence of **'${mission.title}'** for **$nextOccurrenceDate** based on priority level **${mission.priority}** and budget limit of **$${mission.budget}**."
                 )
             )
         }
@@ -9268,7 +9327,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
             repository.insertChatMessage(
                 com.example.data.database.ChatMessage(
                     sender = "AZA COLLABORATOR",
-                    text = "ü§ù **CROSS-AGENT DELEGATION:** Agent **$agentA** initiated high-fidelity negotiation with Agent **$agentB** on task **'$taskName'**. Consensus rating achieved; sub-agent spawned for target completion."
+                    text = "\ud83e\udd1d **CROSS-AGENT DELEGATION:** Agent **$agentA** initiated high-fidelity negotiation with Agent **$agentB** on task **'$taskName'**. Consensus rating achieved; sub-agent spawned for target completion."
                 )
             )
         }
@@ -9305,8 +9364,8 @@ class AppViewModel(private val repository: AppRepository, private val testContex
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            addThought("‚ö° BATCH SIMULATOR: Commencing continuous background execution of $sampleCount sample paper trades...")
-            addThought("üõ°Ô∏è AUTOPILOT DAEMON: Background execution thread engaged. App can be closed or minimized freely.")
+            addThought("\u26a1 BATCH SIMULATOR: Commencing continuous background execution of $sampleCount sample paper trades...")
+            addThought("\ud83d\udee1\ufe0f AUTOPILOT DAEMON: Background execution thread engaged. App can be closed or minimized freely.")
 
             var winCount = 0
             var lossCount = 0
@@ -9374,140 +9433,10 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     strategyUsed = strategy,
                     marketRegime = if (i % 2 == 0) "TRENDING" else "VOLATILE",
                     confidenceScore = 0.72 + (Math.random() * 0.22),
-                    entryReason = "Autonomous AI Confluence ($strategy)",
-                    indicators = "{\"rsi\": 58.4, \"atr\": 1.45}",
-                    atr = 1.45,
-                    riskAmount = tradeRisk,
-                    riskPct = 1.0,
-                    exitPrice = if (side == "BUY") basePrice * (1.0 + pnlPct) else basePrice * (1.0 - pnlPct),
-                    profitLoss = pnlAmount,
-                    entryTime = "2026-07-31T${(8 + (i/60)) % 24}:${i % 60}:00Z",
-                    exitTime = "2026-07-31T${(8 + (i/60)) % 24}:${(i + 5) % 60}:00Z",
-                    outcome = if (isWin) "WIN" else "LOSS"
-                )
-                newTradesList.add(tradeRecord)
-
-                val runningBal = currentBal + totalProfitLoss
-                if (runningBal > peakBalance) peakBalance = runningBal
-                val drawdown = if (peakBalance > 0) ((peakBalance - runningBal) / peakBalance) * 100.0 else 0.0
-                if (drawdown > maxDrawdown) maxDrawdown = drawdown
-
-                if (i % 25 == 0 || i == sampleCount) {
-                    val currentWr = String.format(java.util.Locale.US, "%.1f", (winCount.toDouble() / i) * 100.0)
-                    addThought("‚ö° BATCH ENGINE: $i/$sampleCount sample trades executed. Current WR: $currentWr%, Net PnL: $${String.format(java.util.Locale.US, "%+.2f", totalProfitLoss)}")
-                }
-                kotlinx.coroutines.delay(20)
-            }
-
-            val updatedTrades = (newTradesList + _contaboTrades.value).take(500)
-            _contaboTrades.value = updatedTrades
-
-            val winRate = String.format(java.util.Locale.US, "%.1f", (winCount.toDouble() / sampleCount) * 100.0)
-            val lossRate = String.format(java.util.Locale.US, "%.1f", (lossCount.toDouble() / sampleCount) * 100.0)
-            val grossProfit = newTradesList.filter { (it.profitLoss ?: 0.0) > 0 }.sumOf { it.profitLoss ?: 0.0 }
-            val grossLoss = Math.abs(newTradesList.filter { (it.profitLoss ?: 0.0) < 0 }.sumOf { it.profitLoss ?: 0.0 })
-            val profitFactor = if (grossLoss > 0) String.format(java.util.Locale.US, "%.2f", grossProfit / grossLoss) else "1.92"
-            val netPnlFormatted = String.format(java.util.Locale.US, "%,.2f", totalProfitLoss)
-
-            val topStratEntry = strategyWins.entries.maxByOrNull { entry ->
-                val total = strategyTotal[entry.key] ?: 1
-                (entry.value.toDouble() / total)
-            }
-            val topStrat = topStratEntry?.key ?: "Breakout Momentum"
-            val topStratWinCount = strategyWins[topStrat] ?: 0
-            val topStratTotalCount = strategyTotal[topStrat] ?: 1
-            val topStratWr = String.format(java.util.Locale.US, "%.1f", (topStratWinCount.toDouble() / topStratTotalCount) * 100.0)
-
-            val botMessage = buildString {
-                append("üìä **Autonomous Batch Trade Execution Complete ($sampleCount Trades)**\n\n")
-                append("‚Ä¢ **Total Sample Executions**: **$sampleCount Trades**\n")
-                append("‚Ä¢ **Winning Trades**: **$winCount** ($winRate% Win Rate)\n")
-                append("‚Ä¢ **Losing Trades**: **$lossCount** ($lossRate% Loss Rate)\n")
-                append("‚Ä¢ **Net Realized PnL**: **+$${netPnlFormatted} USD**\n")
-                append("‚Ä¢ **Profit Factor**: **$profitFactor**\n")
-                append("‚Ä¢ **Max Peak Drawdown**: **-${String.format(java.util.Locale.US, "%.1f", maxDrawdown)}%**\n")
-                append("‚Ä¢ **Top Strategy**: **$topStrat** ($topStratWr% WR)\n")
-                append("‚Ä¢ **Background Engine**: Autonomous Daemon (Active & Persistent)\n\n")
-                append("All $sampleCount trade records have been logged into the trade ledger.")
-            }
-
-            repository.insertChatMessage(
-                com.example.data.database.ChatMessage(
-                    sender = "AZA",
-                    text = botMessage
-                )
-            )
-
-            com.example.aza.execution.SystemNotificationHelper.showNotification(
-                title = "‚ö° Batch Execution Complete",
-                message = "Finished $sampleCount sample trades! Win Rate: $winRate%, Net PnL: +$$netPnlFormatted USD"
-            )
-        }
-    }
-
-}
-
-// Custom simple provider factory
-class AppViewModelFactory(private val repository: AppRepository) : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(AppViewModel::class.java)) {
-            return AppViewModel(repository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
-
-// --- Lumina Autonomous Evolution Structs (Phase 10) ---
-data class LifelongLearnerAssessment(
-    val question: String,
-    val answer: String
-)
-
-data class LuminaEvolutionPlan(
-    val currentObjective: String = "",
-    val activePhase: String = "IDLE", // IDLE, DISCOVERING, RESEARCHING, TESTING, REFLECTING, EVALUATING, SUCCESS
-    val progress: Float = 0f,
-    val requiredCapabilities: List<String> = emptyList(),
-    val skillGaps: List<String> = emptyList(),
-    val learningPlanSteps: List<String> = emptyList(),
-    val milestones: List<LuminaMilestone> = emptyList(),
-    val completedMilestones: List<String> = emptyList(),
-    val knowledgeAcquired: List<String> = emptyList(),
-    val performanceChanges: List<String> = emptyList(),
-    val remainingWork: List<String> = emptyList(),
-    val plannedImprovements: List<String> = emptyList(),
-    val evolutionLog: List<String> = emptyList(),
-    val predictionAccuracy: Float = 75.0f,
-    val sharpeRatio: Float = 1.20f,
-    val decisionQuality: Float = 70.0f,
-    val consistency: String = "STABLE",
-    val safetyApproved: Boolean = true,
-    
-    // --- Phase 10 Expanded Autonomous Identity & Research Fields ---
-    val identityTitle: String = "",
-    val identitySkills: List<LuminaSkillScore> = emptyList(),
-    val researchQuestions: List<String> = emptyList(),
-    val selectedSkillToStudy: String = "",
-    val studyGuideContent: String = "",
-    val practiceScore: Int = 0,
-    val practiceFeedback: String = "",
-    val reflectionLog: List<String> = emptyList(),
-    val overallLevel: String = "NOVICE", // NOVICE, APPRENTICE, COMPETENT, PROFICIENT, EXPERT, MASTER
-    val lifelongAssessment: List<LifelongLearnerAssessment> = emptyList()
-)
-
-data class LuminaSkillScore(
-    val name: String,
-    val category: String,
-    val score: Int, // 0 - 100
-    val weight: Float // importance (0.5 to 1.0)
-)
-
-data class LuminaMilestone(
-    val id: String,
-    val title: String,
-    val description: String,
-    val isCompleted: Boolean,
-    val metric: String = ""
-)
+                    entryReason = "Autonomous AI Conxú¨YˇS„6ˇùøBÁÅõ&–eªóŸ•ÇŸÕ\Ä4À]ÀMGÿJ¢‚HÆ$)Âø˜d;q‚§õÌ\ÜY~zﬂﬂÁ=ÖQí11‚Ój£®a„ôÁ4v»ö1è®ëJìèƒyπsîÊwNãúº˜ﬂ6»ùCç¬«#ˇÌ…Î@gëb˝{≈ıC{*3aÄ‘âŸ v6”ˆ#c˘5◊ì∞gn˙äÉu	WÛñ†¸ŸÕè‹SÕÚ◊˚ƒ&‰IE<=¬ÕÍÔ ˜Î≈•Jé∏ÈIç ‹í™	£fC>E’ú„ÊÒªÉÊ˜ﬂw_‹˜†áÀﬂ5=èÏë„∑Ø≠›´wÕ◊V≥˘”◊¢≠€Ûs9lûx_Â*3…iÈ?Æoπàs€Ωrr9ΩÎ0tjGΩ⁄é`OCåßÓqm|«n^I{;5˙Göï	¡≈¯ñIî)N√á7ƒHCì˛‹›µ”®lÂÙ)I}ÄÖL˜™¿xA∑VâX—ßX>â¬’≥ß§ÈwiÎ†¬Œ#áÀr˜…Q≥	id=ãµjœÂùí)}>/ûºÍ®RR’g„Ñq>¡Loí?˛ WöN”Ñu0#=Ú≤6ÿhn·Ê[¨”–(∞ƒI5•∆˝ï>R?3<Ò{2¢	Ûo¬qˆ¸£ë” Óñ∑o‰πÃÓÊ¢˘|nt=#y0ú»l<1Æsóø£G‰¨=Ï|&¡’ßÓU–"ª¸p∑¢yaErûEôa±O:π⁄‰v gÊ6Ï5»3§/z∞ª˚≤ï=o¸c4h%√ºWßn¡kmÁAöÑãgí*á¶˝ò%tÊØ8‡u9pË˘,ç~„ºJ¿˚ÓR…@“ˇIaËΩÃ7}8ì1œ7ÙÅπ'Õ˛ÎhÅÁíå∫
+ƒºˇøÑ~)ﬂ÷&JL¿∑A$˚À2«
+NÁ°±À¿4‚âaäº@øÇÁ?¥∞`=,yÚÍÎlz=¢u4+Y1X¥ÖKj&>Ω◊Ó∑…˝∞Ö‹∫•9—ç†i¯µ–≈¢◊vN∑Qu€·¬¶¢W:G˛?éùöÇôæH.,{Hºm√‹X_Ñıå52ql	∞ù˜rÜÅ>•}Ï±≤†Ûlv≠Æ≤$ÁŸŒKN◊¢ΩïX·3ƒÁüÌˇÅÕ˛ãŒ>™ùts[eÀi˘≠ñ˛&#pÊ©⁄ÛäDâŒôÇ>àB.°ìMÎû.Oﬁ’∏‚åüÀ˜÷ÑÊ∆„÷‡Uπñ8mV‡[[«™Ê´\U¨R⁄5%Ó•πdZ”1" }∆ì8◊dM«£i Då}'~ˇ]ø£àí˝˝vf§ê0πirFM4!∂JI`[óÇt$Çå±s•3Â≈ÏÌÔﬂâ;±¶Y,ƒ¡tvÇ¨A$Ã⁄úΩﬁﬂo¡À5¨ëÛ6|¡ç8ÄÃOYv%FÔ√$ª[¿¸RÇ+o;ŒPÉ5∆s$∂úK8ﬂ#bæÅ7ˆÈ£	ˇPvŒ˛tÌy%7·˘∂æ(‡*G¿B„*(nÀÁí>ì>î )G∞ú◊¡ñ3EûË’qÓuo[—Côí∞®√¬Ç≤$¨ÀeÒlÈÌ3= Çg"&Å√úÇú+ôNŸR›mGÜ?2Úw0.{⁄ ˆx_…Ô6ÄÏRˆ⁄Yç(;Ëk2°¿Ôû1≠<ÜXsa$1ìb¶#	ã«L˘ŒüéKä•êäøô–∆îÈLhY˜nM3∏¿¯ÏŸj‰√¯CÌ/º€˘z?LbàgN˚ßˆÜ+íaœàï‰˘ mhµ™⁄—ﬂ©œJ$√8|z%·Ω∂>≥$ÁËâ|™n◊u7‹$ˆ&X’…Í∂∆§È>ù.∏û@å6è‡õcLÿ%ÆT¶n(‡’  ◊YqHπ [#~a®◊FNâÊV ‘Ì#«hålÈŒv¢Ñ∆¥”ÙgOóÌº®gn™¯#ïˆ9œï“Êèië˘…~¡‹/X˝‚üañ¶
+<‚:7WùœAÁ_¡˘/ùv8,ÚS>2•KÖQ&»áaï„)â†iÊNÒ©É∫∂à˝ÛaxÍµ»∞“íp0[ê˘\∑µÊcA°^(9u´6∂Z÷n°∆[Ω…)f2%ñ|‚™ä≈Tì·ä∑m∫Lî|"›$acö¥’8√!#xéXj”ÀπÔùs¶ƒÍP8·µ◊¡¡ÈeS.hJÇGô‰I0ïEF∑?Å‚ÉÓ·ë¨∆úÈÒK§˜UÇ)∏u…3√˘[∆4rk#Fc˛Ü
+˝ƒTπøeVÂlıöÎ“á˘Çgq_ºæˇïYº+y`8ˆ•UæJ—=ÔÄÓ‡ \5»y7Ï\	›´O2¬†=Ë|∂√ ªΩ†ìØÉ/ÌﬁM;_á7ùNÜsâêÚcÃæπH§ùõ£Ö>ä˝ñq≈‚MÈ=O∏ÅY∑E:Ò!◊Ó∞ijf∏Ázãì˙Å'…'önIû`8Ä Ω∂Ì±)O VRÃµ ÉpYno<Ë_Ær¯äDÃR€@⁄QÓöÌé¶⁄˛-"Aå∑ßÿîrtÃ≠T[ä
+wßàfS{KY¨L›ûo)
+ÏÁiGê·4ö-“Ë˚øöIzBU ÿL4G˛qï&f◊¿Ï«Ü4SÂ’\‚¡k'î∑®ípÿ>√:Y»§#ffÄTË‘ôîêg¬~Ôõ±úŒ˛*ê•Ëb)ÖÆWA¶É'A+òTLC∫B∑ª‡,ÅÅ!¶î…≤!∂«U^“ÑX#Àôk∑Bòc6ßÆ*§ˇX¿‘∂…Ä[	Cö,ûm–O„ªO®Ÿë≤t©Bºäò’∑E∫ˆB◊¨øø`,æáqp≈F®⁄∑$6Eö$=ˆ›™¬ıÍ˙K∑S@eænêvø?ÆÜv›πæÏCxjê˛‡˙¢€È⁄uÔ~0Äøó–vÉ¡îä^±he¨65ëÖ◊vàEàÌA–)´∑õ'r;U¨æ—sè[SÒﬂp]ùø~b|<1e˝ å7R˚ı±€ÙO‡∆ãˇ—XØﬂ›J¬÷U0’Ø÷∞éO◊˜OÆÀ©pQç0g@-%	(¯?   ˇˇ gy∆Ù
