@@ -9354,88 +9354,23 @@ class AppViewModel(private val repository: AppRepository, private val testContex
     }
 
     fun runBatchTradeSampleExecution(requestedCount: Int) {
-        val sampleCount = requestedCount.coerceIn(10, 500)
         val ctx = testContext ?: com.example.aza.security.SecureCredentialStore.getContext()
-
         try {
             com.example.aza.execution.AzaBackgroundService.startService(ctx)
         } catch (e: Exception) {
             // Service fallback
         }
-
-        viewModelScope.launch(Dispatchers.IO) {
-            addThought("\u26a1 BATCH SIMULATOR: Commencing continuous background execution of $sampleCount sample paper trades...")
-            addThought("\ud83d\udee1\ufe0f AUTOPILOT DAEMON: Background execution thread engaged. App can be closed or minimized freely.")
-
-            var winCount = 0
-            var lossCount = 0
-            var totalProfitLoss = 0.0
+        viewModelScope.launch {
             val startAccount = repository.getAccountInfoDirect()
             val currentBal = startAccount?.totalBalance ?: 100000.0
-            var peakBalance = currentBal
-            var maxDrawdown = 0.0
-
-            val symbols = listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT")
-            val strategies = listOf(
-                "Breakout Momentum",
-                "Volatility Expansion Breakout",
-                "Mean Reversion",
-                "Liquidity Sweep"
+            BatchTradeExecutor.executeBatch(
+                sampleCount = requestedCount,
+                currentBal = currentBal,
+                existingTrades = _contaboTrades.value,
+                repository = repository,
+                onThought = { thought -> addThought(thought) },
+                onTradesUpdated = { updated -> _contaboTrades.value = updated }
             )
-            val strategyWins = mutableMapOf<String, Int>()
-            val strategyTotal = mutableMapOf<String, Int>()
-
-            val newTradesList = mutableListOf<com.example.data.api.ContaboTrade>()
-            val baseId = System.currentTimeMillis() % 100000
-
-            for (i in 1..sampleCount) {
-                val symbol = symbols[i % symbols.size]
-                val strategy = strategies[i % strategies.size]
-                val side = if (i % 3 == 0) "SELL" else "BUY"
-
-                val basePrice = when (symbol) {
-                    "BTCUSDT" -> 67200.0 + (i % 150) * 12.5
-                    "ETHUSDT" -> 3450.0 + (i % 100) * 1.8
-                    "SOLUSDT" -> 145.0 + (i % 80) * 0.4
-                    "BNBUSDT" -> 585.0 + (i % 60) * 0.3
-                    "XRPUSDT" -> 0.58 + (i % 50) * 0.002
-                    else -> 0.45 + (i % 40) * 0.001
-                }
-
-                val winProb = when (strategy) {
-                    "Breakout Momentum" -> 0.65
-                    "Liquidity Sweep" -> 0.62
-                    "Mean Reversion" -> 0.58
-                    else -> 0.55
-                }
-                val isWin = (Math.random() < winProb)
-                val pnlPct = if (isWin) (0.015 + Math.random() * 0.025) else -(0.01 + Math.random() * 0.012)
-                val tradeRisk = 100.0 + Math.random() * 50.0
-                val pnlAmount = tradeRisk * (pnlPct / 0.015)
-
-                if (isWin) {
-                    winCount++
-                    strategyWins[strategy] = (strategyWins[strategy] ?: 0) + 1
-                } else {
-                    lossCount++
-                }
-                strategyTotal[strategy] = (strategyTotal[strategy] ?: 0) + 1
-                totalProfitLoss += pnlAmount
-
-                val hour = (8 + (i / 60)) % 24
-                val minute = i % 60
-                val exitMin = (i + 5) % 60
-                val entryTimeStr = String.format(java.util.Locale.US, "2026-07-31T%02d:%02d:00Z", hour, minute)
-                val exitTimeStr = String.format(java.util.Locale.US, "2026-07-31T%02d:%02d:00Z", hour, exitMin)
-                val entryReasonStr = "Autonomous AI Confluence (" + strategy + ")"
-
-                val tradeRecord = com.example.data.api.ContaboTrade(
-                    id = (baseId + i).toInt(),
-                    symbol = symbol,
-                    side = side,
-                    entryPrice = basePrice,
-                    positionSize = (tradeRisk * 10.0) / basexœ¬WmsÚ8şŞ_±çInl’¨@›k›¹¤	m3Cä2wÍÍbĞa$Æ–›Ğ”ÿ~+ùc›†vŒ%kŸ}Ñî³ë~À]vø*~¡’‹®C8>;äƒÓS°Ú7ZÜÓõµ0Ô NŞ½=æ‡lc»AêãjlEgxL¹za^•ÁQç›mvT±Éò&d¢§ËêÃsÌ˜°	Ÿ³ÄûĞÔ¶Ô°FƒNïâ²÷ÑŠ-°ş¸î¶F—İUçJ1FO„Ë†®4b¼iÂØWTMI@…'ç¶cìo6j&T°0J ¹ÕPÕ\xÜ¥Jú²¬§;+ùuÇoÉëC¸³¨
-ô²A^¯¶XGPVŸ¨~ğpÖšËHèÃzl€;ÛÏö]eğê[||ä*¾ÊgïßFŒàBøˆé”3Á¼?JßW«[˜\K²OÆ|'ü£8²ç­¡×¤‡“Ç­ge¤\¹Î³ğ–L±ÛË^š]İëáĞ*‰:¥ÁFú
-Â.¡gÇ7Â0é<çEéüêC	ÁÅ¤§àFA€¾éÅ(©¨ßÏ"T’ÖÆæ¤Ï`ÁèŸ(¦¹“_ ğú\¥^@<ù ’äeÏt½Ù[G98^nêEb¨×ñæMäğ¡ÒìLßVúãE²rò4%=U\ÆÇ†àÛ7àú)¤ó…ÏÎu9ğTyÙÚİ$Ì·º´0+Ğ2–Áœ*û_ú…’HqŸt¥K}Fn†‡`í“ÆØ:ûƒM”¼Ñ½Ïlí>Ïœ.g„şaŒ¦2šL•mİEÍßhÚ­Ñù'èô>^ö:'°Ç_îå,O¼ˆ«9Äôen¤˜Gà<6n(“ù°=¦ /º¸»÷´“?¤©*d˜³²Ê¬J;3©|.	&5V,$óéÒn°Ú¼8ùhá!ë{q•`ôí’Á¤ÿ©ZÑ{o”‰˜Ct_²ëüª³ˆ¹¡£l^â ßÿ/W¿‘o•I 5úÛŸP©Å~Zç$@é¬•oÓ˜ûŠğ„5¤H‚ßŸè‚utÉÃŠ„ÑüzŒ‡ªÎ²"S˜0¹iªô>´Lïï;è-{ú@]ì³	­m1ìµ[ĞMEäÃöríSÒŞ¬y×´J¦úÂÿ`à•nvÒxX]„åŒÅo¨§¥îz¹Ñ	ûTHt+ä˜ıHíåuĞ‹|ƒg$U²½Ñ˜Ãéõg#Bflù·v£$iÇL•mf¤Á+–ş6'ô˜’÷ç½V©5Zí û2
-\a3*š—#JŞ&ÕXÆçô½q¡¾UÜ8\ˆ£°ĞØnÀ¶¢åÅË•vÉˆ{©®XÒ‰f”ûˆû^lIEÇ£‹î;ŞÛWş».…Z­))$[!´©r§`ª:¦ÕpœoÏ¥&¤,{£3ÅÅìÔjwâNT4‹µºf½ÙDEÆ!Æ-ƒkµ|Y­‘wÁÅ0ê$“2p)G×pøÜKh~ğ(è'g7d¬ÁpÆÄ9¥ó}0óØºOã'ƒÏ¿"K`Ãá°k(d7Ã‹]c‘ĞUÌ€‰ÅyRÜçŠ>BKÒ,Æ:Úq¦ˆ=?Î­öwU=’&u˜x–„	ùºìğ>;F»Mİ2x$<èˆ	Î)9—ù”Í1Õí–«ø¿¢óø}*äç™ün!Énd¯™Õ 0ƒ~SŠx÷Œ	lı“	Ş5J‚š&3øÌ›°€Xß—¶ÀTÄû[¤6¨ó)MëŞ.Y†0„=‹?ÔüéÏ1ò]1ıÑ%¦ùÌjıÕÚòªØ£æÊ5ó<ó5T`­¼uô+%,e2\bÀç=©øX*ãÖ'æ/08áT>ä·Ë¶+®|Í€ÙPm˜¬Ìa.Í3ú´>pÁÃ)ŞÑöü—ŒCpÂNy%7ucG ,_«ô)nxÙ«ÿ  ÿÿ `n
-K
+        }
+    }
+}
