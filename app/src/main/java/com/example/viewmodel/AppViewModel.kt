@@ -1025,6 +1025,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
     private fun fetchContaboData() {
         viewModelScope.launch {
+            // Automatically sync live balances from backend on startup / health check
+            try {
+                fetchLiveBinanceBalances()
+            } catch (e: Exception) {
+                // Ignore silently
+            }
             try {
                 val trades = repository.getContaboTrades()
                 _contaboTrades.value = trades
@@ -3587,7 +3593,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
      * Queries live balance \u2014 prioritizing the Backend VPS and falling back to direct Binance Spot REST.
      * Persists real balances into Room DB so that all UI components immediately display accurate figures.
      */
-    fun fetchLiveBinanceBalances(customApiKey: String? = null, customApiSecret: String? = null) {
+        fun fetchLiveBinanceBalances(customApiKey: String? = null, customApiSecret: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // If custom credentials provided, update SecureCredentialStore and connector
@@ -3601,22 +3607,44 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     com.example.aza.connector.BinanceConnector.updateCredentials(customApiKey, customApiSecret)
                 }
 
-                // 1. Fetch live balances directly from Binance GET /api/v3/account
-                com.example.aza.connector.BinanceConnector.syncServerTime()
-                val balanceResult = com.example.aza.connector.BinanceConnector.fetchAccountBalances()
-                if (balanceResult.isSuccess) {
-                    val balances = balanceResult.getOrThrow()
-                    val usdtBal = balances.find { it.asset == "USDT" }?.total ?: 0.0
-                    val usdcBal = balances.find { it.asset == "USDC" }?.total ?: 0.0
+                // 1. First priority: Fetch live balances directly from the Contabo VPS Backend
+                var balancesList: List<com.example.data.api.BinanceBalance> = emptyList()
+                var sourceName = "Contabo VPS Backend"
+                try {
+                    val backendBalances = repository.getBinanceBalances()
+                    if (backendBalances.isNotEmpty()) {
+                        balancesList = backendBalances
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("AppViewModel", "Contabo backend balance fetch failed, falling back to direct exchange API: " + e.message)
+                }
+
+                // If backend did not return balances, fallback to direct Binance connector
+                if (balancesList.isEmpty()) {
+                    sourceName = "Direct Binance API"
+                    com.example.aza.connector.BinanceConnector.syncServerTime()
+                    val directResult = com.example.aza.connector.BinanceConnector.fetchAccountBalances()
+                    if (directResult.isSuccess) {
+                        val directBalances = directResult.getOrThrow()
+                        balancesList = directBalances.map { 
+                            com.example.data.api.BinanceBalance(asset = it.asset, free = it.free, locked = it.locked) 
+                        }
+                    }
+                }
+
+                if (balancesList.isNotEmpty()) {
+                    val usdtBal = balancesList.find { it.asset == "USDT" }?.let { it.free + it.locked } ?: 0.0
+                    val usdcBal = balancesList.find { it.asset == "USDC" }?.let { it.free + it.locked } ?: 0.0
                     val totalLiquidCash = usdtBal + usdcBal
 
                     // Extract non-cash crypto holdings with positive balances
-                    val nonCashHoldings = balances.filter { 
-                        it.asset != "USDT" && it.asset != "USDC" && it.total > 0.000001 
+                    val nonCashHoldings = balancesList.filter { 
+                        it.asset != "USDT" && it.asset != "USDC" && (it.free + it.locked) > 0.000001 
                     }
 
                     val updatedAssets = mutableListOf<com.example.data.database.PortfolioAsset>()
                     for (holding in nonCashHoldings) {
+                        val totalHolding = holding.free + holding.locked
                         val symbol = holding.asset
                         val pairSymbol = "${symbol}USDT"
                         val priceResult = com.example.aza.connector.BinanceConnector.fetchMarketPrice(pairSymbol)
@@ -3642,7 +3670,7 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                             com.example.data.database.PortfolioAsset(
                                 symbol = symbol,
                                 displayName = displayName,
-                                amountOwned = holding.total,
+                                amountOwned = totalHolding,
                                 averageBuyPrice = price,
                                 assetType = "CRYPTO",
                                 currentPrice = price
@@ -3667,13 +3695,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
 
                     val cryptoTotalVal = updatedAssets.sumOf { it.amountOwned * it.currentPrice }
                     val netWorth = totalLiquidCash + cryptoTotalVal
-                    addSchedulerThought("\ud83d\udcb0 BINANCE SYNC: Live Account Balance: USDT=$$usdtBal, Crypto Assets Value=$$cryptoTotalVal. Total Net Worth: $$netWorth")
+                    addSchedulerThought("💰 BINANCE SYNC [" + sourceName + "]: Live Account Balance: USDT=$" + usdtBal + ", Crypto Assets Value=$" + cryptoTotalVal + ". Total Net Worth: $" + netWorth)
                 } else {
-                    val err = balanceResult.exceptionOrNull()?.message ?: "Direct API query failed"
-                    addSchedulerThought("\u26a0\ufe0f BINANCE SYNC: Notice: $err")
+                    addSchedulerThought("⚠️ BINANCE SYNC: No balances returned from backend or direct connector.")
                 }
 
-                // 2. Fetch backend VPS telemetry for engine status (without overwriting live balances)
+                // 2. Fetch backend VPS telemetry for engine status
                 try {
                     val status = repository.getLayeredVpsStatus()
                     _layeredVpsStatus.value = status
@@ -3684,12 +3711,12 @@ class AppViewModel(private val repository: AppRepository, private val testContex
                     // Ignore backend unreachable
                 }
             } catch (e: Exception) {
-                addSchedulerThought("\u26a0\ufe0f BINANCE SYNC ERROR: ${e.message}")
+                addSchedulerThought("⚠️ BINANCE SYNC ERROR: " + e.message)
             }
         }
     }
 
-    fun syncFromBinance(apiKey: String? = null, apiSecret: String? = null) {
+fun syncFromBinance(apiKey: String? = null, apiSecret: String? = null) {
         val targetKey = apiKey ?: com.example.aza.security.SecureCredentialStore.getBinanceApiKey()
         val targetSecret = apiSecret ?: com.example.aza.security.SecureCredentialStore.getBinanceApiSecret()
         fetchLiveBinanceBalances(targetKey, targetSecret)

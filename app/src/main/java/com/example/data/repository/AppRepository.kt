@@ -91,6 +91,14 @@ class AppRepository(private val db: AppDatabase) {
     }
 
     suspend fun getBinanceBalances(): List<com.example.data.api.BinanceBalance> = withContext(Dispatchers.IO) {
+        try {
+            val backendBalances = contaboService.getBinanceBalances()
+            if (backendBalances.isNotEmpty()) {
+                return@withContext backendBalances
+            }
+        } catch (e: Exception) {
+            // Backend endpoint fallback
+        }
         val directResult = com.example.aza.connector.BinanceConnector.fetchAccountBalances()
         if (directResult.isSuccess) {
             val list = directResult.getOrThrow()
