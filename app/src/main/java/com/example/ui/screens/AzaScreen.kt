@@ -8844,197 +8844,3 @@ fun ConflictResolutionLogCard(log: com.example.data.database.KnowledgeEntry) {
         }
     }
 }
-
-// --- Phase 19 Centralized Approval Inbox Composables ---
-
-@Composable
-fun ApprovalInboxHeader() {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.MarkAsUnread,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(36.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(
-                    text = "Centralized Approval Inbox",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Text(
-                    text = "Review and authorize real-time trading actions, capability overrides, content publications, and freelance submissions.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun EmptyApprovalInboxCard() {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = Icons.Default.CheckCircle,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(48.dp)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Autonomous Mode Active",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "No pending manual authorizations found. System is operating continuously with 100% policy alignment.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-        }
-    }
-}
-
-@Composable
-fun TradeApprovalCard(
-    proposal: com.example.data.database.TradeProposalEntity,
-    viewModel: AppViewModel
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Header / Badge Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "TRADING DECISION",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                if (proposal.side.uppercase() == "BUY") Color(0xFF2E7D32).copy(alpha = 0.1f) else Color(0xFFC62828).copy(alpha = 0.1f),
-                                RoundedCornerShape(4.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = proposal.side.uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (proposal.side.uppercase() == "BUY") Color(0xFF2E7D32) else Color(0xFFC62828)
-                        )
-                    }
-                }
-                Text(
-                    text = "ID: ${proposal.id}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(
-                text = "Execute Spot Order: ${proposal.side} ${proposal.symbol}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Structured Grid
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ApprovalDetailRow("Reason", "Trend analysis signal triggered ${proposal.side} signal at entry price $${proposal.entry} with matched rules: ${proposal.knowledgeRulesMatched}.")
-                ApprovalDetailRow("Expected Outcome", "Simulated position entry size $${proposal.positionSize} with stop-loss at $${proposal.stopLoss} and take-profit at $${proposal.takeProfit}.")
-                ApprovalDetailRow("Risk Assessment", "Capital Risk limit parameters checked. Expected risk-reward ratio: ${proposal.expectedRiskReward}.")
-                ApprovalDetailRow("Confidence", "${(proposal.confidence * 100).toInt()}% calculated via consensus engine.")
-                ApprovalDetailRow("Supporting Evidence", "Consensus check score: ${(proposal.confidence * 100).toInt()}%. Evidence: ${proposal.supportingEvidence}.")
-                ApprovalDetailRow("Alternative Actions", "1. Decline trade, 2. Paper Trade only, 3. Wait for standard breakout confirmation.")
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Buttons Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { viewModel.declineTradeProposal(proposal) },
-                    modifier = Modifier.weight(1f).testTag("decline_trade_btn_${proposal.id}"),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Decline", fontSize = 12.sp)
-                }
-                Button(
-                    onClick = { viewModel.approveTradeProposal(proposal, isLive = false) },
-                    modifier = Modifier.weight(1f).testTag("approve_trade_btn_${proposal.id}")
-                ) {
-                    Text("Approve (Paper)", fontSize = 12.sp)
-                }
-            }
-        }
-    }
-}xœì=isãÆ±ß÷WŒ™ØE¾HX‰:,oÅ[¡(jW‰®")9©TÊ5‡äD À€«å:[•ßò~Úû%¯{pÇ`pZim÷IÌ…î¾gôêÀ_ºÎ|á¸td±WÁ?P‘ÉÒ&ÅB8¨uÆ<Ê­¾óØ´èˆYoÈÀÜîx¶dá×ùåè:Örn7çÎ˜O8äGr|4&Ü²®èÇŸøØ›5[a„!ûè5£oü}åŒÆr±`Â¤.k¶v­\oe1œÖ,8µ†36g†·Z8SA³•!ûæÔ²’'íıÄøt†“œG_ŒSÇ'[šåˆÌò×)?ÎæT¬¢^­èÓ`AM&”¸˜Éùšmc¼hµŠñ Q]ñİGÎx¥xõârìÁRL`é÷Ø^êÍ>¿úœÏ4Cê>„ŒÓ¥bì¿¿¾™çûHç‹cêQùgd5:ŸhgÊl{û«ıÀÙ# Ù†»¿½
-¹†'0¯#¸·êoô8c6iâ\Fø(Î:q†k¼¿x÷¾AvßÙ¹¹÷ñüüì }Ş>_£qÕ;»¸»Jµ:?ú¾»··nÅ,—%[œœôº!®üMa"¢€ÆŸÏØ„.-Ï5Lø"q›&0$å6İBZ¹>¥bûbäˆ±äµSùv§óÀšûÀh;:š/=f(«&µ3
-íG“VlwFÈy}gi,ZÀRøcs_2ôºi±0t<ùÑüÀ„ÇM ëä‘cÄi¦‘,áû²g¼Š®ÄåV¶“é3ú„´±:BP{
-ˆ³qwÆ¾rÏŸ2ï‘1;;Bø’‹Oí°wøÙèÂ&îƒ6Ö*Ñ=ıVá›UR5
-Â©ó1‹#®rÛ"#j>L²G³Pn¦ym¿=ií¨xë0)+•‡Œ°¦Œy"y?Æ_‡¥!=Yáœ†@XK	D]hÀÆR®åk°4ÔÖhi(¯áÒP]ã¥AÛÏÊ_5:òQîÃ“|²?Ó&4ËÓ3èqšAÛ_€AU*ò«áÍ6æÃì/ù¨PØv#h?ùØä9¯k¥¥_¸†µ¦ÆB`‘„Pl¢îïùlè¦ÆOœ½<îY,ûN…øırRo* .©h«bè¸‚ÆÌ5_xÜQØ	›°Í†,“z>	Ljæz õ=6>]§Ì#oAî©ÄQ1ÂrDzñ¦ë…k ş"Ş?âô=PcâxØ¼t@ˆ2ãn°CßíIc‡¨^ GØ!ø'Dşş¾á.ò[©8qÀæ<_ŠÕ×¬›îáC‹~Q³ØÅ5OW8)´lo|håy­æ
-ÇîZÜ|€™~Yû‹†`ÿf¦¹“’y[ä³š"J³#ÀÙ¤exÀ3C:m6üAÆ±~yöÏ1¹ŸÃG‘“ç¿Aäæ9‰‹9|°Şbw	áˆìÎÉ³
-äjœ1§„}gî6Ğ$;RVV§ •ş?Û2	‚QÕ4¨ˆ?BÁd´¢ZÖß>«#"2|ö‰v©Í=şõudÔ-µ™ÕÌ	nÄc ªŒV	ŞÆ‘9,dwwàÓüÄ½Ù%Ÿ0seZ`ÎE£Í™Gï©ÅÇÕMrL|­oİ¨ÔÈ‚p·÷qAÑÆQğè|´ü…Ì—¢Bv¾™4'ÔrYK)²ÔS(ùLiPïg,êÃd\¢0“
-™UÇäÄQ&ëåW‰¨Ô
-†´7	†(wQEÒ¸ Æ?’obßÂàW]¹0ó$(¨ü)»‡½&yÛºFÀ“Æ­»2gÀ_ÓU¾ch³µA‰¶R$|H´»ùcx\¾Z¡e’?‚Š]ªÍı“|ovë!½Ú‘
-ÜïÈHÂİÎrÌ=¢Ê9ÁWlÌ—óüQêyÀu=šÊ¨ûí1=*ÄÿålR cæ	²‘rô>ü1î^;^o¾ğVÍŒP‹ƒ6(„P50„6FX§Ú½ïÏÚ­L	T>ÖB^¤©°sq‹ÃQr1ŠÃRáÖ¼ïõ/Î/zgš-BÌlû!×SKw¨wBw_†´ÚùOÕñP„Bxœ/ Õ£VQ@¸çÖšº•RHşï—ÌuıÔ—êé•#¡Ÿ”êÊ^ê‚†ùºå8i×¥¡P­FÏŠıÄ×íÇî¹ËGÜâ ±>àG©7â˜Íî›fç,ĞÂİSw!È Mè"ÀŒÅR³tì¸q¹œs›CJ…9ãpÏR0x=I_n/¥k­€rĞÊÁğ3° Ôöcîsây„Û|ÔÃO€p,ïRta(GÀKû:£@"”Ü„°…¸j9ûĞßùèãÑvI]¯yÔÄ®ËÆÍF³zÔœÖÙ}«}¥UŸ†:Š¡ŒÕŸé£Hëè÷jzëcè,ôò¶@!”ÓH!Óÿßÿ—”ĞH›)„Íp!Óª:*ş‰q`I>6şE¢_ Iy$•ß¬!TØ´åÄı÷>¤Õş,dC”æëtõ“¢\T©HSï#3—(Š;6µV°wÜ3êÎFã÷ìlÑŒŠ³Šâ.e‹3*DR*O¶î†=Tá“¢&1Y\L’d¤š†´PR›cIS*"¦*ÃSÚ‚ªï×çÚ\í¬?ŸüVh¾î·³ö«où(„w‰¬PÈÿäJÚ2ğL"üåÈí2‘Õı&ş{tÙXS8®»kÒõÍQh`ÁlÌ¹+2æ#>	X]`‹=ØÎ£ÅÆSFÀ÷}ôfèÆ@i-VN¬?AN;ù©¤”|'x sòşò¹oÈ%w½?k«¯ü¶oıúz6 ğ·x‡U0Š¹B&‡ä¦¿ğØ¼x Xãä(ç`{[Ô6Ù;>-&Şúm¢öú@spr‚7–1à#r	ğÂ=# É [Ğ¥Aşó|¶°ÕĞ‘|ì2	h‡ƒSé„+„QUWÌğÌĞ—Y:œÀëkĞyÙÎ
-å•OQëy8im±öR[Ñüc0ì]‘áûşÍİ»÷·wCrÕö/º…|Ù¨úhÛ•#*¼´“ò
--ø<9y…BWÅ&©hënA~|{{¨Tñr4;M³Ès.ËlmÀÁOM‡ò4•–ŞCmZCsæ»+ştèºee9xu¯ñI$ÑÑğK.èH.H»¯ª,·hkå±“‰ûæGfë şÎì_‚Ù#{‡œ‚¹ñY>m™=?ƒ_2
-“şÒb®É•ÒïL¿†—ÈômN^4e¿ Ó7„d|x¶6¹[Ïº:rä–/X¶f-OÚg²ê1~5çqÀ¬IOãÉœ„Ü0%ª¹Ü WŸ-á%ë¯ÜÄˆ~‹‚â«ßıšg÷k~½gÊŠÃJ»áÍõÍÕÍİ€z—ç»½ûÎå]gxqs]7ÔVtpä)BmåJ­r+Jª$Ôâ$ÅÅ!5mTÏ¡-™Í2dŠ÷½Îåğı?Hó‡ãğÛ–&YVºlc³"©reåK}jm@ |ÁÿcJdÚ¹»°èjè#ÓøAÏoü ¿ŠFSæzäİÄô™Šó»#øù–	<,!Ÿ£cÔö·Â™pY¢KúlÊç,ÑwMÖ-ü~gàC±»FseŸ>*¸Tà6/IŞ@=»»V‹„ÙSí a-Ğ¦Ë‘_àgÁ4°§ät$·‰K'Ì[­ãäÚ!¦à>ß›\˜KÚW0ú ÄƒÅ/\X#w0æÍp
-<à²oí¶#âÍsgÀsFCÃÚ@WŒ¬êØ”>h¾QŞ3™ã<Nç8×)cş2µ.©[ÖøÙN)ûWdóäo˜¼|¢lïï½îİğâ¾G‚hìåÍ»ßFüu/+«ËNùîJ\¾°(iÁî Ùg¢ñ:& QÇ¤¿Œ§)§o+N_®0ÍVW¯4*g¼%µËC’^ğQ¡epNçÜZìä1®Û‘Qí­ÔPW«GTˆÍ1îm8¥~%^ïÈÔ‘C:
-<û2R™…İn-š:”xTò„wÛ‡ßÎ{b0îv£zÀh©Ğ¶ä¸té9ái­Ä¸±Ñ°eTÈ%ı´
-$iE‚Ó#ÙSF	U"±ë·…Á§{¼¼Ç
-7ıË(Fç9sd‘ÔÁ¤È™«t’2. ¸Çæ)! ë=­·‚NÏflêyÿ9×‰(cƒÅ¦Cq:¬®:A[³Y'”Âæ!…6-èP—DáVÕÉíÃ×ß“ˆÛ™ƒà!‘ˆ(QÄ¹qaPt†¶³¾Î°RÖ¼	³NæüsOè“îò¹”¥’È–ã,ª¿(ÔØ!l±î¡ÎéŠ—q@È?e)ÍV¹C¾‰WÖ©}¾è8×p‰CİóEîc’ÓlS@dĞŞ8ëô®n®Iÿîúúâú]ÃÇpã¶s7xÉ‡ŠÙ§ˆUtŸ¥NÄ„Pó¦ŠUcên°A{.QsBêû<g:µ˜ÚŒn~“à‚œ;t8*Jã†w¡Å(~‘E	şMÙ”Fî·OÚ'…Œ\æ0D}é"Kµ3‹LÒ¦KX¡â88P+à!çqGS³]tºM/f‹­KÜJ&%hV2ú¯uFÙì¦@.‚c%<i^)b:)‘û¨ÌM/!äìÁ§S&Öæ^´AºÒókÄÁ+n
-g·KuÑ;YÕÜØpßlÆ[©ªXª`6û8¦1ôO$š+òƒú×šZãä¥*áf•?Û‰Ü·†[¢]„¹"Ó¢s™‰É;NÂ;†‰0xä9Óc &3ä-%±À’~í ^üNİÒ[©´;Š(U“{µNxetşuùh¨Ró""Išt*™Úê Óï ¯K4uïúıŞõôîo.ï°Ö„Üœşµ×ÅÄUDzA×–nûJ]„ò(¼Q7ÈÜ'Cü~ñŸ|\^¸ï
-÷§Ä—ş¢„-]Bœ¼ãSÕ¹Tf­ëT^ÅÏ	ŞŒğÌ ?uÁ¾q`¶ä;2X¹ ÅAs›¤…²®¢K->’%ºxhœØµ
-uô·a"lÿF#„z¹ß.AQQqN»°Ç ÛÀ(Ï'qt-€$İ¢G}_¢Œ!Î„x¿Ú¢©ĞtòzR(-„4×©j>TÕá[%œÆ7)—¡–…Ğ9Dúj{-0İ.l¯ÙÂäõ·d½å‚#(¥7Í!ñ-Ù¾URÉkÓ.#øä÷Vƒ`=ım[
-»¡¸p4HÎÈ)àµA2‰¾¾à‡´?g°æj‘x&®Ä¢#ÿlÆ—ÉãJjhÌì½üË]¢š[ÖE¨hØK²mpèCyÉf
-¯æÙÄĞGØ±°ƒ¡(ôU*õ‹ ¥ŠÜ†Mç,{Y¯şpJÉpü	@Ï³©ƒ·"<í‘„üüd´¨²9-©Óü7pMGÈª«× É*¦põ6^¼Çæé«§Šæ×ºS¯ØÄG¨l"$LÃ8‰^£©1©R›†‡ZÓ°]`"lÁ<DØ‰ˆ°ÍhVÆä™s‹¹à@±'2w‚r¸«hšß¦‘³F38Ñ·-93[‘qŒV!ëƒ£å%j0öNJ×`¨õ/fXmò–Å/ù¬³ÊÑÓ¤Íöl1Oı]¬ÙûXs(™ÌÊtD—ÓR&£ûtÌ?Ëzgù"•Pù¦V„àÎ±*XµX¥ºÚô¯.Ë/İ@Ğ¤
-¯4Ó”4®Ä:‘¼ÕJ§5êsşS2†õ³Û‚ÅA^„-VJ®q¦ıïLiø
-!·dB	6Á‚{øzéLŸÆŠ’·ò÷£yÈ_¥°©õÛ°¥*]Ãô\GÙø¯gÉ¼´ ËïkfxyßSİØ\â„ãËºg9¸;yã+D´·Ûdf•4Øğ”İâ~àç¿ş÷ÿ  ÿÿ tß
