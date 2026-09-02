@@ -220,14 +220,26 @@ object SecureCredentialStore {
     }
 
     // --- OpenAI / Gemini Credentials ---
-    fun saveOpenAICredentials(apiKey: String) {
+    fun saveGeminiApiKey(apiKey: String) {
+        encrypt("gemini_api_key", apiKey)
         encrypt("openai_gemini_api_key", apiKey)
     }
 
-    fun getOpenAICredentials(): String = decrypt("openai_gemini_api_key") ?: ""
+    fun getGeminiApiKey(): String = decrypt("gemini_api_key") ?: decrypt("openai_gemini_api_key") ?: ""
+
+    fun deleteGeminiApiKey() {
+        delete("gemini_api_key")
+        delete("openai_gemini_api_key")
+    }
+
+    fun saveOpenAICredentials(apiKey: String) {
+        saveGeminiApiKey(apiKey)
+    }
+
+    fun getOpenAICredentials(): String = getGeminiApiKey()
 
     fun deleteOpenAICredentials() {
-        delete("openai_gemini_api_key")
+        deleteGeminiApiKey()
     }
 
     // --- CCP Algérie Poste Credentials ---

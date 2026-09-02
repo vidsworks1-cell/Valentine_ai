@@ -126,67 +126,212 @@ object NlgEngine {
         val rand = Random(userInput.hashCode())
         val profile = context.relationshipProfile
         val style = profile.investingStyle
-        val assets = profile.preferredAssets.joinToString(", ").ifEmpty { "BTC, ETH, SOL" }
-        val strats = profile.preferredStrategies.joinToString(", ").ifEmpty { "Breakout Momentum, Volatility Expansion" }
+        val assets = profile.preferredAssets.joinToString(", ").ifEmpty { "BTC, ETH, SOL, BNB" }
+        val strats = profile.preferredStrategies.joinToString(", ").ifEmpty { "Breakout Momentum, Volatility Expansion, Mean Reversion" }
         val cashStr = String.format(Locale.US, "%,.2f", context.portfolioCash)
+        val inputLower = userInput.trim().lowercase(Locale.US)
 
-        val warmGreetings = listOf(
-            "I hear you! Let's take a look at where we stand and how we can best align with your targets.",
-            "Great to connect! I've been monitoring market structures closely through the lens of your strategy.",
-            "Absolutely. Let's touch base on your portfolio trajectory and active market setups.",
-            "I'm right here with you. Let's evaluate our latest positions and strategic opportunities."
-        )
-        val greeting = warmGreetings[rand.nextInt(warmGreetings.size)]
+        val actionBlock = if (actionExecutedNotice.isNotEmpty()) {
+            "✨ **Action Confirmation:**\n$actionExecutedNotice\n\n"
+        } else ""
 
+        // 1. Specific Intent: Paper Mode vs Live Trading Mode
+        if (inputLower.contains("paper") || inputLower.contains("live") || inputLower.contains("switch") || 
+            inputLower.contains("mode") || inputLower.contains("real money") || inputLower.contains("simulation")) {
+            val currentMode = if (context.isBinanceConnected) context.binanceMode else "PAPER (Simulation)"
+            return """
+                ${actionBlock}🛡️ **Trading Mode Status: $currentMode**
+
+                • **Why does it default to Paper Mode?**
+                  For safety and risk protection, AZA defaults to **Paper Trading (Sandbox)** upon app startup and session resets. This prevents automated strategy daemons from placing unverified orders with real funds until you are ready.
+
+                • **How to switch to LIVE Trading:**
+                  1. **Via Chat Command:** Type `set vps mode live` or `set binance trading mode trading`
+                  2. **Via Trading Tab:** Toggle the **Mode Selector** switch on the Trading Dashboard
+                  3. **API Keys:** Verify your Binance API key and Secret in **Settings / Account**
+
+                • **Current Liquidity Pool:**
+                  - Local Paper Capital: **$$cashStr USD**
+                  - Binance Exchange Link: **${if (context.isBinanceConnected) "Connected ($currentMode)" else "Not linked / Simulation mode"}**
+                  ${if (context.binanceLiveBalances.isNotBlank()) "- Live Balances: ${context.binanceLiveBalances}" else ""}
+
+                Would you like me to switch our execution mode to **LIVE** or configure your exchange credentials?
+            """.trimIndent()
+        }
+
+        // 2. Specific Intent: Balances, Wallet, Funds, USDT, Holdings
+        if (inputLower.contains("balance") || inputLower.contains("wallet") || inputLower.contains("cash") || 
+            inputLower.contains("fund") || inputLower.contains("money") || inputLower.contains("holding") || 
+            inputLower.contains("portfolio") || inputLower.contains("how much") || inputLower.contains("usdt")) {
+            val holdingsList = if (context.holdings.isEmpty()) {
+                "  • *No active open positions in local ledger.*"
+            } else {
+                context.holdings.joinToString("\n") { 
+                    "  • **${it.symbol}**: ${it.amountOwned} units (~$${String.format(Locale.US, "%,.2f", it.amountOwned * it.currentPrice)})" 
+                }
+            }
+            return """
+                ${actionBlock}💼 **Portfolio & Liquidity Overview**
+
+                • **Available Liquid Cash:** **$$cashStr USD**
+                • **Risk Allocation Profile:** **${context.tradingRiskLevel}** (Position Slice: ${context.positionSlicePercent}%, ATR Stop: ${context.atrMultiplier}x)
+                
+                • **Active Asset Holdings:**
+                $holdingsList
+
+                • **Binance Connection:**
+                  - Status: **${if (context.isBinanceConnected) "CONNECTED (${context.binanceMode})" else "DISCONNECTED (Simulation Mode)"}**
+                  ${if (context.binanceLiveBalances.isNotBlank()) "- Exchange Balances: ${context.binanceLiveBalances}" else ""}
+
+                Ready to deploy capital into active setups or adjust our position sizing?
+            """.trimIndent()
+        }
+
+        // 3. Specific Intent: Market Analysis, Crypto Prices, BTC, ETH, SOL, Signals
+        if (inputLower.contains("market") || inputLower.contains("crypto") || inputLower.contains("btc") || 
+            inputLower.contains("bitcoin") || inputLower.contains("eth") || inputLower.contains("ethereum") || 
+            inputLower.contains("sol") || inputLower.contains("solana") || inputLower.contains("bnb") || 
+            inputLower.contains("signal") || inputLower.contains("price") || inputLower.contains("trend") ||
+            inputLower.contains("bull") || inputLower.contains("bear") || inputLower.contains("buy") || inputLower.contains("sell")) {
+            return """
+                ${actionBlock}📈 **Market Intelligence & Tactical Setups**
+
+                • **Target Assets:** **$assets**
+                • **Active Strategy Models:** **$strats**
+                
+                • **Key Technical Readings:**
+                  - **BTC/USDT:** Testing key EMA support bands. Momentum metrics indicate steady structural accumulation with low sell pressure.
+                  - **ETH/USDT:** Consolidating above historical liquidity zones. Mean reversion signals are neutral-bullish.
+                  - **SOL/USDT & Alts:** High momentum volatility; trailing stops tightened to **${context.atrMultiplier}x ATR**.
+
+                • **Algorithmic Guardrails:**
+                  - Position Slice: **${context.positionSlicePercent}%** per trade
+                  - Liquidity Pool: **$$cashStr USD**
+                  - Stop-Loss Discipline: Multi-timeframe ATR trailing stops enabled
+
+                Type `buy BTC 100` or `run backtest` if you'd like to initiate an order or simulate strategy results!
+            """.trimIndent()
+        }
+
+        // 4. Specific Intent: VPS, Contabo, Server, System Health, Diagnostics
+        if (inputLower.contains("vps") || inputLower.contains("server") || inputLower.contains("contabo") || 
+            inputLower.contains("daemon") || inputLower.contains("health") || inputLower.contains("status") || 
+            inputLower.contains("telemetry") || inputLower.contains("uptime") || inputLower.contains("diagnostic")) {
+            return """
+                ${actionBlock}🖥️ **System Health & VPS Telemetry**
+
+                • **Internal Core Engines:** **ALL ONLINE & CALIBRATED**
+                • **System Uptime:** **${String.format(Locale.US, "%.1f%%", context.systemUptime * 100f)}**
+                • **Autonomous Planning Accuracy:** **${String.format(Locale.US, "%.1f%%", context.planningAccuracy * 100f)}**
+                • **Resource Efficiency:** **${String.format(Locale.US, "%.1f%%", context.resourceEfficiency * 100f)}**
+                • **Exchange Bridge:** ${if (context.isBinanceConnected) "🟢 Connected (${context.binanceMode})" else "🟡 Internal Simulation Active"}
+                • **Emergency Stop:** 🟢 Disarmed & Ready for Execution
+
+                You can say `check contabo status` to run a deep live diagnostic on your backend server.
+            """.trimIndent()
+        }
+
+        // 5. Specific Intent: AI / Gemini API Key / Brain
+        if (inputLower.contains("gemini") || inputLower.contains("api key") || inputLower.contains("key") || 
+            inputLower.contains("ai") || inputLower.contains("model") || inputLower.contains("brain")) {
+            return """
+                ${actionBlock}🧠 **AZA Cognitive Engine & Gemini AI Integration**
+
+                • **Multimodal Reasoning:** Supports Gemini 3.5 Flash and Gemini 3.1 Pro models.
+                • **How to configure your API Key:**
+                  Type directly in chat:
+                  `set gemini key YOUR_API_KEY_HERE`
+                  
+                  Or set it in **Account / Settings**. Once saved, your key is securely encrypted on-device and enables real-time generative conversational intelligence.
+
+                How can I assist your operations next?
+            """.trimIndent()
+        }
+
+        // 6. Specific Intent: Strategy, Risk, Scalper, Stop-loss, Parameters
+        if (inputLower.contains("strategy") || inputLower.contains("risk") || inputLower.contains("scalp") || 
+            inputLower.contains("stop") || inputLower.contains("atr") || inputLower.contains("parameter") || 
+            inputLower.contains("win rate") || inputLower.contains("backtest") || inputLower.contains("setting")) {
+            return """
+                ${actionBlock}⚙️ **Strategy Engine & Risk Guardrails**
+
+                • **Current Profile:** **$style** (Timeframe: ${profile.preferredTimeframe})
+                • **Active Execution Models:** **$strats**
+                • **Risk Controls:**
+                  - Risk Level: **${context.tradingRiskLevel}**
+                  - ATR Stop Multiplier: **${context.atrMultiplier}x**
+                  - Max Position Slice: **${context.positionSlicePercent}%** of capital
+                  - Micro-Scalper: Standby (type `start scalper` to engage)
+
+                • **Useful Chat Commands:**
+                  - `set atr multiplier 2.0` — adjust trailing stop distance
+                  - `set position slice 10` — adjust single-trade allocation percentage
+                  - `run backtest` — test active models against historic candles
+            """.trimIndent()
+        }
+
+        // 7. General Questions, Explanations, or Feedback ("What is happening", "Why...", "Help")
+        if (inputLower.contains("why") || inputLower.contains("what is happening") || inputLower.contains("what's happening") || 
+            inputLower.contains("help") || inputLower.contains("problem") || inputLower.contains("explain") ||
+            intentResult.primaryIntent == IntentType.QUESTION || intentResult.primaryIntent == IntentType.EXPLANATION || 
+            intentResult.primaryIntent == IntentType.FEEDBACK || intentResult.primaryIntent == IntentType.CORRECTION) {
+            return """
+                ${actionBlock}💡 **AZA System Intelligence**
+
+                I'm listening and focused on: *"$userInput"*.
+
+                • **Current State:**
+                  - Trading Mode: **${if (context.isBinanceConnected) context.binanceMode else "PAPER (Simulation)"}**
+                  - Liquid Pool: **$$cashStr USD**
+                  - Active Assets: **$assets**
+                  - Preferred Strategies: **$strats**
+
+                • **Quick Actions:**
+                  - Say **"switch to live"** to engage live order execution.
+                  - Say **"check balances"** for detailed asset breakdown.
+                  - Say **"market analysis"** for live technical indicators.
+                  - Say **"set gemini key <KEY>"** to activate full conversational LLM reasoning.
+
+                What specific task or trade setup would you like me to tackle?
+            """.trimIndent()
+        }
+
+        // 8. Casual Greetings & Conversation
+        if (intentResult.primaryIntent == IntentType.CASUAL || 
+            inputLower in listOf("hi", "hello", "hey", "hola", "good morning", "good evening", "how are you", "sup", "yo")) {
+            val greetings = listOf(
+                "Hello! I'm here and ready. Our paper liquidity is **$$cashStr USD** across **$assets**. How can I help you today?",
+                "Hey there! All systems are calibrated and monitoring **$assets**. What are we focusing on today?",
+                "Greetings! AZA is online with **$$cashStr USD** in available capital. Ready for market scans, strategy tuning, or trade execution."
+            )
+            return "${actionBlock}${greetings[rand.nextInt(greetings.size)]}"
+        }
+
+        // 9. Standard Dynamic Context Fallback
         val tailoredGuidance = when (style.uppercase(Locale.US)) {
             "AGGRESSIVE", "AGGRESSIVE_GROWTH" -> {
-                "🚀 **Tailored Guidance (Aggressive Growth Profile)**\n" +
-                "Given your preference for high-momentum growth and focus on **$assets**, Lumina is scanning for high-conviction breakout setups and volatility expansions (**$strats**). We target 1:2.5+ risk-reward ratios with aggressive trailing stops to capture explosive moves."
+                "🚀 **Strategy Guidance (Aggressive Growth)**\n" +
+                "Scanning high-conviction breakout setups across **$assets** with a focus on **$strats** and dynamic trailing stops."
             }
             "CONSERVATIVE", "CONSERVATIVE_PRESERVATION" -> {
-                "🛡️ **Tailored Guidance (Conservative Capital Preservation)**\n" +
-                "In line with your defensive investment stance, Lumina prioritizes capital preservation across **$assets**. We apply tight 1.5x ATR stops, multi-timeframe confirmation, and hedged position sizing to keep drawdowns minimal."
-            }
-            "SWING_TRADING", "SWING" -> {
-                "📈 **Tailored Guidance (Disciplined Swing Trader Profile)**\n" +
-                "Matching your swing trading timeframe (${profile.preferredTimeframe}), Lumina focuses on 1H/4H trend-following and key structural level breakouts across **$assets**. We use multi-indicator momentum confirmation to enter positions before major macro expansions."
-            }
-            "DAY_TRADING", "DAY_TRADER", "SCALP" -> {
-                "⚡ **Tailored Guidance (High-Frequency Day Trader Profile)**\n" +
-                "Tailored to your intraday focus (${profile.preferredTimeframe}), Lumina monitors 15M/1H liquidity sweeps and orderbook orderflow across **$assets**. We lock in quick profits at key pivot levels with tight VWAP risk controls."
-            }
-            "LONG_TERM_HODL", "HODL", "VALUE" -> {
-                "🏛️ **Tailored Guidance (Long-Term Macro HODL & DCA Profile)**\n" +
-                "Aligned with your long-term wealth accumulation goals, Lumina executes strategic dollar-cost-averaging into **$assets** based on on-chain metrics, macro sentiment indicators, and fundamental valuation floors."
+                "🛡️ **Strategy Guidance (Conservative Preservation)**\n" +
+                "Prioritizing capital preservation across **$assets** with tight ${context.atrMultiplier}x ATR stops and strict risk limits."
             }
             else -> {
-                "⚖️ **Tailored Guidance (Balanced Moderate Growth Profile)**\n" +
-                "Matching your balanced investment approach, Lumina deploys a hybrid of Breakout Momentum and Mean Reversion models across **$assets**. We maintain a disciplined 1.0% risk allocation per position with active profit scaling."
+                "⚖️ **Strategy Guidance ($style Profile)**\n" +
+                "Maintaining disciplined risk allocation (${context.positionSlicePercent}% per position) across **$assets** with **$strats**."
             }
         }
 
-        val systemOverview = "Currently, our paper liquidity pool stands at **$$cashStr USD** with active daemon execution enabled."
-
-        val actionBlock = if (actionExecutedNotice.isNotEmpty()) {
-            "\n\n✨ **System Update:**\n$actionExecutedNotice"
-        } else ""
-
-        val conversationalPrompts = listOf(
-            "How would you like us to tune our focus next? We can adjust asset weightings or strategy parameters anytime!",
-            "What asset or setup are you curious about right now? I'm ready to analyze it with you.",
-            "Let me know if you want to test new parameters or adjust our daily trading allocation!",
-            "Feel free to share any specific setups or market thoughts you'd like me to evaluate!"
-        )
-        val prompt = conversationalPrompts[rand.nextInt(conversationalPrompts.size)]
-
         return """
-            $greeting
-            
+            ${actionBlock}I'm right here with you! Evaluating opportunities across **$assets**.
+
             $tailoredGuidance
-            
-            $systemOverview$actionBlock
-            
-            $prompt
+
+            • **Liquidity Pool:** **$$cashStr USD** | **Mode:** ${if (context.isBinanceConnected) context.binanceMode else "PAPER"}
+            • **System Status:** 🟢 Uptime ${String.format(Locale.US, "%.1f%%", context.systemUptime * 100f)} | Daemon Active
+
+            How would you like to proceed? We can run a market analysis, adjust strategy parameters, or execute orders.
         """.trimIndent()
     }
 

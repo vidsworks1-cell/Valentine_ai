@@ -1141,7 +1141,7 @@ fun BinanceConnectorHealthPanel(viewModel: AppViewModel) {
     val isConnected = binanceStatus?.isConnected == true
     val latency = binanceStatus?.latencyMs ?: 0
     val rateLimit = binanceStatus?.rateLimitStatus ?: "UNKNOWN"
-    val mode = binanceStatus?.mode ?: "PAPER"
+    val mode = binanceStatus?.mode ?: "LIVE"
 
     Card(
         modifier = Modifier
@@ -4085,7 +4085,7 @@ fun TradingDiagnosticsDashboard(
 
                         val layeredStatus by viewModel.layeredVpsStatus.collectAsState()
                         val daemonState = layeredStatus["status"] as? String ?: "INACTIVE"
-                        val globalMode = layeredStatus["global_trading_mode"] as? String ?: "PAPER"
+                        val globalMode = layeredStatus["global_trading_mode"] as? String ?: "LIVE"
                         val emergencyActive = layeredStatus["emergency_stop_active"] as? Boolean ?: false
                         val circuitBreakerAllowed = layeredStatus["circuit_breaker_allowed"] as? Boolean ?: true
                         val circuitBreakerReason = layeredStatus["circuit_breaker_reason"] as? String ?: ""

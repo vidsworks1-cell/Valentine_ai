@@ -1,0 +1,414 @@
+Calculating task graph as configuration cache cannot be reused because the file system entry '.env' has been removed.
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:generateDebugBuildConfig
+> Task :app:processDebugNavigationResources
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/AzaScreen.kt:4608:44 'val' cannot be reassigned.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/AzaScreen.kt:4894:60 'val' cannot be reassigned.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/AzaScreen.kt:8375:57 Argument type mismatch: actual type is 'String', but 'Int' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/AzaScreen.kt:8375:88 Unresolved reference 'values'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/AzaVideoStudioDialog.kt:120:37 Argument type mismatch: actual type is 'Any', but 'String' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:49:31 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:49:31 Not enough information to infer type argument for 'T'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:50:9 Not enough information to infer type argument for 'K'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:51:26 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> Iterable<T>.filter)>', but 'K (of fun <K> WHEN_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:51:38 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:51:38 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T>
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:51:45 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:51:50 Unresolved reference 'bestAlternativeScenario'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:51:93 Unresolved reference 'skippedOutcome'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:52:26 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> Iterable<T>.filter)>', but 'K (of fun <K> WHEN_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:52:38 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:52:38 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T>
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:52:45 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:52:50 Unresolved reference 'bestAlternativeScenario'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:52:102 Unresolved reference 'delayed1CandleOutcome'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:53:29 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> Iterable<T>.filter)>', but 'K (of fun <K> WHEN_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:53:41 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:53:41 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T>
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:53:48 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:53:53 Unresolved reference 'bestAlternativeScenario'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:53:99 Unresolved reference 'lowerRiskOutcome'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:54:30 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> Iterable<T>.filter)>', but 'K (of fun <K> WHEN_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:54:42 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:54:42 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T>
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:54:49 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:54:54 Unresolved reference 'bestAlternativeScenario'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:54:101 Unresolved reference 'earlierTp1Outcome'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:55:27 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> Iterable<T>.filter)>', but 'K (of fun <K> WHEN_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:55:39 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:55:39 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T>
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:55:46 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:55:51 Unresolved reference 'bestAlternativeScenario'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:55:95 Unresolved reference 'widerSlOutcome'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:56:31 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> Iterable<T>.filter)>', but 'K (of fun <K> WHEN_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:56:43 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:56:43 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T>
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:56:50 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:56:55 Unresolved reference 'bestAlternativeScenario'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:56:103 Unresolved reference 'altStrategyOutcome'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:57:26 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> Iterable<T>.filter)>', but 'K (of fun <K> WHEN_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:57:38 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:57:38 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T> Iterable<T>.filter(predicate: (T) -> Boolean): List<T>
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:57:45 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:57:50 Unresolved reference 'wasExecutedOptimal'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:58:21 Argument type mismatch: actual type is 'List<ERROR CLASS: Symbol not found for CounterfactualEvaluation>', but 'K (of fun <K> WHEN_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:334:58 Unresolved reference 'tradeId'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:336:34 Argument type mismatch: actual type is 'Int', but 'CounterfactualEvaluationEntity' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/CounterfactualLearningSection.kt:339:74 Unresolved reference 'tradeId'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:32:23 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:32:26 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:32:26 Not enough information to infer type argument for 'T'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:32:50 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:32:50 Not enough information to infer type argument for 'T'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:67:29 'when' expression must be exhaustive. Add an 'else' branch.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:80:43 'when' expression must be exhaustive. Add an 'else' branch.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:87:36 'when' expression must be exhaustive. Add an 'else' branch.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:101:47 Unresolved reference 'displayName'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:339:70 Unresolved reference 'state'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:340:76 Unresolved reference 'state'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:341:89 Unresolved reference 'state'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:343:56 Unresolved reference 'state'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:357:70 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:378:48 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:383:69 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:385:53 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:387:48 Unresolved reference 'isLive'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:412:40 Unresolved reference 'userMessage'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:415:51 Unresolved reference 'userMessage'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:421:40 Unresolved reference 'orderId'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:421:66 Unresolved reference 'price'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:427:44 Unresolved reference 'orderId'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:427:53 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:427:57 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:430:44 Unresolved reference 'price'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:430:51 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:430:55 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:454:123 Unresolved reference 'state'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:463:79 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/ExecutionGateHeaderCard.kt:463:94 Unresolved reference 'tradingMode'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaAdvancedMlRiskCard.kt:29:22 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaAdvancedMlRiskCard.kt:29:25 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaAdvancedMlRiskCard.kt:29:25 Not enough information to infer type argument for 'T'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaAdvancedMlRiskCard.kt:29:54 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaAdvancedMlRiskCard.kt:29:54 Not enough information to infer type argument for 'T'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:32:22 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:32:25 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:32:35 Unresolved reference 'allPositions'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:32:48 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:33:25 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:33:72 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:338:71 Function invocation 'size(...)' expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:374:45 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:375:25 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/LuminaPreBuySellabilityProfitHarvesterCard.kt:375:117 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/MicroCompoundingStudyCard.kt:107:71 Argument type mismatch: actual type is 'MicroCompoundingMode', but 'String' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/MicroCompoundingStudyCard.kt:144:80 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'AdaptiveTradeStudySummary?'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/MicroCompoundingStudyCard.kt:153:78 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'AdaptiveTradeStudySummary?'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/MicroCompoundingStudyCard.kt:162:78 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'AdaptiveTradeStudySummary?'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/MicroCompoundingStudyCard.kt:171:78 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'AdaptiveTradeStudySummary?'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/MicroCompoundingStudyCard.kt:350:31 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'AdaptiveTradeStudySummary?'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/MicroCompoundingStudyCard.kt:365:35 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'AdaptiveTradeStudySummary?'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/MicroCompoundingStudyCard.kt:374:35 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type 'AdaptiveTradeStudySummary?'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:65:23 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:65:26 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:65:36 Unresolved reference 'binanceOrders'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:65:50 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:66:23 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:66:26 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:66:36 Unresolved reference 'binanceTrades'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:66:50 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:745:51 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:750:48 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:753:44 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:756:49 Unresolved reference 'type'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:756:70 Unresolved reference 'origQty'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:757:53 Unresolved reference 'orderId'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:760:78 Unresolved reference 'price'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:763:62 Unresolved reference 'status'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:768:60 Unresolved reference 'status'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:774:44 Unresolved reference 'status'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:821:64 Unresolved reference 'isBuyer'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:822:62 Unresolved reference 'isBuyer'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:824:52 Unresolved reference 'isBuyer'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:827:44 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:830:48 Unresolved reference 'qty'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:830:68 Unresolved reference 'commission'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:830:88 Unresolved reference 'commissionAsset'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:831:53 Unresolved reference 'id'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:834:78 Unresolved reference 'price'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:836:136 Unresolved reference 'timestamp'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1328:35 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1328:35 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T> Collection<T>.isNotEmpty(): Boolean
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1339:49 Overload resolution ambiguity between candidates:
+data class BinanceOpenOrder : Any
+data class BinanceOpenOrder : Any
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1340:25 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1341:51 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1342:64 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1345:73 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1357:58 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1364:63 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1368:62 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1371:67 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1378:64 Unresolved reference 'price'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1378:86 Unresolved reference 'origQty'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1385:90 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:1385:104 Unresolved reference 'orderId'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2109:23 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2109:26 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2109:36 Unresolved reference 'allPositions'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2109:49 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2110:17 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2110:20 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2110:30 Unresolved reference 'allReviews'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2110:41 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2111:16 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2111:19 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2111:29 Unresolved reference 'allAlerts'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2111:39 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2115:50 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2118:54 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2118:71 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2120:45 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2120:63 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2120:80 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2121:51 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2121:68 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2122:45 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2125:36 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2126:36 Function invocation 'size(...)' expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2191:49 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2193:54 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2252:65 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2287:104 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2288:50 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2288:67 Unresolved reference 'it'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2426:50 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2427:29 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2433:47 Unresolved reference 'type'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2433:62 Unresolved reference 'message'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2439:115 Unresolved reference 'timestamp'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2507:67 Function invocation 'size(...)' expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2532:37 Unresolved reference 'currentPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2532:61 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2532:84 Unresolved reference 'amountOwned'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2533:37 Unresolved reference 'amountOwned'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2533:60 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2534:58 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2534:75 Unresolved reference 'amountOwned'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2534:98 Unresolved reference 'currentPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2535:74 Unresolved reference 'openedAt'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2537:83 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2538:63 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2539:35 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2543:79 Unresolved reference 'stopLossPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2543:142 Unresolved reference 'stopLossPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2543:204 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2560:51 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2580:48 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2582:53 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2585:60 Unresolved reference 'currentPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2585:84 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2585:107 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2587:55 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2589:53 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2632:85 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2636:85 Unresolved reference 'currentPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2636:197 'operator' modifier is required on 'FirNamedFunctionSymbol kotlin/compareTo' in 'compareTo'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2640:51 Unresolved reference 'stopLossPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2640:119 Unresolved reference 'stopLossPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2644:51 Unresolved reference 'takeProfitPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2644:121 Unresolved reference 'takeProfitPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2665:91 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2699:93 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2715:68 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2718:100 Unresolved reference 'currentPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2718:169 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2723:88 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2723:105 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2733:66 Unresolved reference 'currentPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2734:88 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2758:84 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2778:74 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2790:98 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2816:67 Function invocation 'size(...)' expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2854:49 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2863:57 Unresolved reference 'strategyName'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2863:88 Unresolved reference 'exitQuality'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2870:51 Unresolved reference 'realizedPnL'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2870:127 Unresolved reference 'realizedPnL'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2872:56 Unresolved reference 'realizedPnL'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2876:80 Unresolved reference 'holdingDurationMinutes'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2891:45 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2891:144 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2895:83 Function invocation 'size(...)' expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2899:83 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2899:123 Unresolved reference 'entryTime'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2903:83 Unresolved reference 'exitPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2903:122 Unresolved reference 'timestamp'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2907:87 Unresolved reference 'stopLossPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2907:153 Unresolved reference 'takeProfitPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2911:83 Unresolved reference 'confidenceScore'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2915:45 Unresolved reference 'marketRegime'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2919:82 Unresolved reference 'slippage'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2919:138 Unresolved reference 'fees'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2923:41 Unresolved reference 'entryReason'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:2926:41 Unresolved reference 'lessonsLearned'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3956:35 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3956:38 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3956:48 Unresolved reference 'contaboTrades'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3956:62 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3957:33 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3957:36 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3957:46 Unresolved reference 'contaboAuditLogs'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3957:63 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3960:37 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3960:40 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3960:50 Unresolved reference 'contaboMarketStatus'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3960:70 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3962:37 Property delegate must have a 'getValue(Nothing?, KProperty0<ERROR CLASS: Cannot infer argument for type parameter T>)' method. None of the following functions is applicable:
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3962:40 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3962:50 Unresolved reference 'contaboClosedTrades'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:3962:70 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5423:76 Unresolved reference 'connectionStatus'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5432:73 Unresolved reference 'connectionStatus'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5439:62 Argument type mismatch: actual type is 'R? (of fun <T, R> T.let)', but 'K? (of fun <K> ELVIS_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5439:83 Unresolved reference 'lastUpdateTime'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5439:99 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5439:103 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5439:190 Argument type mismatch: actual type is 'String', but 'K (of fun <K> ELVIS_CALL)' was expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5455:72 Unresolved reference 'cachedSymbols'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5637:75 Function invocation 'size(...)' expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5652:67 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5653:33 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5655:59 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5655:101 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5664:82 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5666:70 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5667:75 Unresolved reference 'side'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5673:60 Unresolved reference 'symbol'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5675:69 Unresolved reference 'profitLoss'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5689:67 Unresolved reference 'entryPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5690:66 Unresolved reference 'exitPrice'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5691:68 Unresolved reference 'outcome'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5702:71 Function invocation 'size(...)' expected.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5723:71 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5724:41 @Composable invocations can only happen from the context of a @Composable function
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5725:60 Unresolved reference 'timestamp'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5725:87 Unresolved reference 'level'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5725:101 Unresolved reference 'message'.
+e: file:///app/applet/app/src/main/java/com/example/ui/screens/TradingScreen.kt:5728:63 Unresolved reference 'level'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:21:25 Unresolved reference 'model'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:23:20 Unresolved reference 'network'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:71:57 Argument type mismatch: actual type is 'AppRepository', but 'Context' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:71:57 No value passed for parameter 'repository'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:93:62 Unresolved reference 'getDialogueState'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:94:86 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:94:86 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> emptyList)>', but 'String' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:94:99 Argument type mismatch: actual type is 'Boolean', but 'List<String>' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:94:106 Argument type mismatch: actual type is 'String', but 'List<String>' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:119:81 Unresolved reference 'getSelectedExperimentTrades'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:137:70 Unresolved reference 'getRegisteredAgents'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:138:68 Unresolved reference 'getRegisteredSkills'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:145:82 Unresolved reference 'getResourceMetrics'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:146:122 Argument type mismatch: actual type is 'Int', but 'Boolean' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:156:61 No value passed for parameter 'scope'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:159:44 No value passed for parameter 'planningEngine'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:159:44 No value passed for parameter 'scope'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:159:44 No value passed for parameter 'capabilityRegistry'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:161:30 Unresolved reference 'ConversationEngine'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:163:30 Classifier 'class CapabilityRegistry : Any' does not have a companion object, so it cannot be used as an expression.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:238:60 Overload resolution ambiguity between candidates:
+data class BinanceOpenOrder : Any
+data class BinanceOpenOrder : Any
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:238:79 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:238:79 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> emptyList)>', but 'List<ERROR CLASS: Ambiguity: BinanceOpenOrder, [com/example/aza/connector/BinanceOpenOrder, com/example/data/api/BinanceOpenOrder]>' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:239:43 Overload resolution ambiguity between candidates:
+data class BinanceOpenOrder : Any
+data class BinanceOpenOrder : Any
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:286:68 Unresolved reference 'CounterfactualEvaluation'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:286:95 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:286:95 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> emptyList)>', but 'List<ERROR CLASS: Symbol not found for CounterfactualEvaluation>' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:289:89 Argument type mismatch: actual type is 'Int', but 'Double' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:289:102 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:289:102 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> emptyList)>', but 'Double' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:292:39 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:292:73 Unresolved reference 'TRENDING_BULL'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:293:50 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:293:50 Not enough information to infer type argument for 'T'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:317:34 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:317:71 Unresolved reference 'BALANCED'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:318:40 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:318:40 Not enough information to infer type argument for 'T'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:419:56 Unresolved reference 'SearchResult'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:419:71 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:419:71 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> emptyList)>', but 'List<ERROR CLASS: Symbol not found for SearchResult>' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:508:13 No parameter with name 'isEmergencyStopped' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:509:13 No parameter with name 'currentDailyLossPct' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:510:13 No parameter with name 'maxDailyLossLimitPct' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:511:13 No parameter with name 'dynamicPositionScale' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:512:13 No parameter with name 'statusDescription' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:513:13 No parameter with name 'consecutiveBreakerHits' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:520:13 No parameter with name 'fastLoopStatus' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:521:13 No parameter with name 'fastLoopAvgLatencyMs' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:522:13 No parameter with name 'slowLoopAdjustment' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:647:59 Unresolved reference 'TradeExecutionAudit'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:647:81 Cannot infer type for this parameter. Specify it explicitly.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:647:81 Argument type mismatch: actual type is 'List<uninferred T (of fun <T> emptyList)>', but 'List<ERROR CLASS: Symbol not found for TradeExecutionAudit>' was expected.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:654:24 Unresolved reference 'startBackgroundLoops'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:666:17 No parameter with name 'status' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:667:17 No parameter with name 'passedCount' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:668:17 No parameter with name 'totalCount' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:669:17 No value passed for parameter 'totalStrategiesEvaluated'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:669:17 No value passed for parameter 'passedStrategiesCount'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:669:17 No value passed for parameter 'failedStrategiesCount'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:669:17 No value passed for parameter 'strategyResults'.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:714:17 No parameter with name 'side' found.
+e: file:///app/applet/app/src/main/java/com/example/viewmodel/AppViewModel.kt:715:17 No value passed for parameter 'currentUsdtBalance'.
+
+> Task :app:compileDebugKotlin FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 31s
+8 actionable tasks: 4 executed, 4 up-to-date
+Configuration cache entry stored.

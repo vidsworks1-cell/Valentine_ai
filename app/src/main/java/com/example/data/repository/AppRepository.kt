@@ -599,6 +599,15 @@ class AppRepository(private val db: AppDatabase) {
 
     // --- AI/Gemini Methods ---
 
+    fun getEffectiveGeminiApiKey(): String {
+        val storedKey = try {
+            com.example.aza.security.SecureCredentialStore.getGeminiApiKey()
+        } catch (e: Exception) {
+            ""
+        }
+        return storedKey.ifBlank { BuildConfig.GEMINI_API_KEY }
+    }
+
     private suspend fun generateContentWithFallback(
         apiKey: String,
         request: GenerateContentRequest
@@ -633,7 +642,7 @@ class AppRepository(private val db: AppDatabase) {
     }
 
     suspend fun getAiMarketAnalysis(symbol: String, type: String): String = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
+        val apiKey = getEffectiveGeminiApiKey()
         if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY" || apiKey.contains("placeholder", ignoreCase = true)) {
             return@withContext getSimulatedMarketAnalysis(symbol, type)
         }
@@ -856,7 +865,7 @@ class AppRepository(private val db: AppDatabase) {
     }
 
     suspend fun getAzaResponse(systemInstructions: String, prompt: String): String = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
+        val apiKey = getEffectiveGeminiApiKey()
         if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY" || apiKey.contains("placeholder", ignoreCase = true)) {
             throw Exception("Local simulator fallback")
         }
@@ -911,7 +920,7 @@ class AppRepository(private val db: AppDatabase) {
     }
 
     suspend fun decomposeObjectiveToTasks(objective: AzaObjective): List<AzaAgentTask> = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
+        val apiKey = getEffectiveGeminiApiKey()
         val title = objective.title
         
         var generatedText = ""
