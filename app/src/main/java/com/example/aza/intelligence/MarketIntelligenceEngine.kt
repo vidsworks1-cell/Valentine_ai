@@ -890,8 +890,48 @@ class MarketIntelligenceEngine(
             return@withContext
         }
 
-        val account = repository.getAccountInfoDirect()
-        val accountBalance = account?.totalBalance ?: 5000.0
+        val state = repository.getCapabilityStateByNameDirect("Binance Capability")
+        val isAutonomous = state?.authPolicy == "AUTONOMOUS"
+        val operatingMode = state?.operatingMode ?: "MOCK"
+        val isLive = operatingMode == "LIVE"
+
+        val accountBalance: Double
+        if (isLive) {
+            // Live Trading: Query /api/v3/account for verified Spot USDT balance
+            val equityRes = BinanceConnector.fetchSpotEquityAndEarnStatus()
+            if (equityRes.isFailure) {
+                val err = equityRes.exceptionOrNull()?.message ?: "Failed to query /api/v3/account"
+                addThought("🚨 LIVE RISK ENGINE HALTED: Could not query live Binance account: $err")
+                return@withContext
+            }
+            val equity = equityRes.getOrThrow()
+
+            // Detect whether funds are held as LDUSDT (Binance Simple Earn)
+            if (equity.isEarnOnly) {
+                val earnMsg = "Funds are in Binance Simple Earn. Redeem to Spot before trading."
+                addThought("🛑 CRITICAL SIZING GUARD: $earnMsg (Held in Simple Earn: $${String.format(Locale.US, "%.2f", equity.totalLdUsdt)} LDUSDT, Spot: $${String.format(Locale.US, "%.2f", equity.freeSpotUsdt)} USDT)")
+                repository.insertChatMessage(
+                    ChatMessage(
+                        sender = "AZA RISK ENGINE",
+                        text = "🛑 **LIVE SIZING HALTED:** $earnMsg\n\nYour assets ($${String.format(Locale.US, "%.2f", equity.totalLdUsdt)} LDUSDT) are currently locked in Binance Simple Earn flexible savings, not in Binance Spot. Sizing and orders stopped to avoid Binance -2010 errors."
+                    )
+                )
+                return@withContext
+            }
+
+            // Never continue to position sizing or order submission when free Spot USDT is insufficient (< $5.00)
+            if (!equity.hasSufficientSpotBalance) {
+                addThought("🛑 LIVE SIZING HALTED: Insufficient free Spot USDT ($${String.format(Locale.US, "%.2f", equity.freeSpotUsdt)} USDT). Need >= $5.00 for Binance MIN_NOTIONAL.")
+                return@withContext
+            }
+
+            // Use verified live free Spot USDT balance as account equity
+            accountBalance = equity.freeSpotUsdt
+            addThought("✅ VERIFIED LIVE SPOT BALANCE: Using live equity of $${String.format(Locale.US, "%.2f", accountBalance)} USDT for position sizing.")
+        } else {
+            val account = repository.getAccountInfoDirect()
+            accountBalance = account?.totalBalance ?: 100.0
+        }
         
         val dbStr = repository.getStrategyByNameDirect(opportunity.strategy)
         val strategyWinRate = if (dbStr != null) dbStr.paperWinRate / 100.0 else 0.55
@@ -964,11 +1004,6 @@ class MarketIntelligenceEngine(
             exposure = recPositionSize,
             status = "READY"
         )
-
-        val state = repository.getCapabilityStateByNameDirect("Binance Capability")
-        val isAutonomous = state?.authPolicy == "AUTONOMOUS"
-        val operatingMode = state?.operatingMode ?: "MOCK"
-        val isLive = operatingMode == "LIVE"
 
         val proposalId = repository.insertProposal(proposal)
 
@@ -1049,6 +1084,45 @@ class MarketIntelligenceEngine(
         if (isLive) {
             val symbol = currentProposal.symbol
             val side = currentProposal.side.uppercase()
+
+            // Pre-execution live Spot equity verification
+            val equityCheck = BinanceConnector.fetchSpotEquityAndEarnStatus().getOrNull()
+            if (equityCheck != null) {
+                if (equityCheck.isEarnOnly) {
+                    val earnMsg = "Funds are in Binance Simple Earn. Redeem to Spot before trading."
+                    addThought("🛑 AUTONOMOUS ORDER BLOCKED: $earnMsg")
+                    val updatedToRejected = currentProposal.copy(
+                        status = "REJECTED",
+                        supportingEvidence = currentProposal.supportingEvidence + "\n🛑 [SIMPLE EARN GUARD] $earnMsg"
+                    )
+                    repository.updateProposal(updatedToRejected)
+                    repository.insertChatMessage(
+                        ChatMessage(
+                            sender = "AZA RISK ENGINE",
+                            text = "🛑 **LIVE ORDER BLOCKED:** $earnMsg (Held in Simple Earn: $${String.format(Locale.US, "%.2f", equityCheck.totalLdUsdt)} LDUSDT)."
+                        )
+                    )
+                    return@withContext
+                }
+
+                if (equityCheck.freeSpotUsdt < currentProposal.positionSize || equityCheck.freeSpotUsdt < 5.0) {
+                    val failMsg = "Insufficient free Spot USDT balance ($${String.format(Locale.US, "%.2f", equityCheck.freeSpotUsdt)} USDT available vs $${String.format(Locale.US, "%.2f", currentProposal.positionSize)} USDT required)."
+                    addThought("🛑 AUTONOMOUS ORDER BLOCKED: $failMsg")
+                    val updatedToRejected = currentProposal.copy(
+                        status = "REJECTED",
+                        supportingEvidence = currentProposal.supportingEvidence + "\n🛑 [INSUFFICIENT BALANCE] $failMsg"
+                    )
+                    repository.updateProposal(updatedToRejected)
+                    repository.insertChatMessage(
+                        ChatMessage(
+                            sender = "AZA RISK ENGINE",
+                            text = "🛑 **LIVE ORDER BLOCKED:** $failMsg Execution cancelled to prevent Binance -2010 error."
+                        )
+                    )
+                    return@withContext
+                }
+            }
+
             val quantity = currentProposal.positionSize / currentProposal.entry
             val clientOrderId = "aza_auto_live_" + java.util.UUID.randomUUID().toString().take(12)
 

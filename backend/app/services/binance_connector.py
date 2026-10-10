@@ -356,6 +356,70 @@ class BinanceConnector:
         """Fetches account details from Binance."""
         return await self._request("GET", "/api/v3/account", mode, signed=True)
 
+    async def get_spot_equity_and_earn_status(self, mode: str) -> Dict[str, Any]:
+        """
+        Queries /api/v3/account to extract exact live Spot USDT equity and detect Binance Simple Earn (LDUSDT).
+        Prevents position sizing on zero spot equity or simple earn funds.
+        """
+        res = await self.get_account_info(mode)
+        if not isinstance(res, dict) or "balances" not in res:
+            err_msg = res.get("msg") if isinstance(res, dict) else str(res)
+            return {
+                "error": err_msg or "Failed to retrieve /api/v3/account from Binance",
+                "free_usdt": 0.0,
+                "locked_usdt": 0.0,
+                "total_spot_usdt": 0.0,
+                "ldusdt_free": 0.0,
+                "ldusdt_locked": 0.0,
+                "total_ldusdt": 0.0,
+                "is_earn_only": False,
+                "has_simple_earn_funds": False,
+                "status_message": f"Account query failed: {err_msg}"
+            }
+
+        balances_list = res.get("balances", [])
+        free_usdt = 0.0
+        locked_usdt = 0.0
+        ldusdt_free = 0.0
+        ldusdt_locked = 0.0
+
+        for b in balances_list:
+            asset = str(b.get("asset", "")).upper()
+            free_val = float(b.get("free", 0.0))
+            locked_val = float(b.get("locked", 0.0))
+
+            if asset == "USDT":
+                free_usdt = free_val
+                locked_usdt = locked_val
+            elif asset == "LDUSDT" or asset == "LENDING_USDT":
+                ldusdt_free += free_val
+                ldusdt_locked += locked_val
+
+        total_spot_usdt = free_usdt + locked_usdt
+        total_ldusdt = ldusdt_free + ldusdt_locked
+        has_simple_earn_funds = total_ldusdt > 0.0
+        is_earn_only = (free_usdt <= 0.0 and total_ldusdt > 0.0)
+
+        if is_earn_only:
+            status_message = "Funds are in Binance Simple Earn. Redeem to Spot before trading."
+        elif free_usdt < 5.0:
+            status_message = f"Insufficient free Spot USDT balance (${free_usdt:.2f} USDT). Minimum Binance Spot order requires at least $5.00 USDT."
+        else:
+            status_message = f"Verified live Binance Spot equity: ${free_usdt:.2f} USDT."
+
+        return {
+            "error": None,
+            "free_usdt": free_usdt,
+            "locked_usdt": locked_usdt,
+            "total_spot_usdt": total_spot_usdt,
+            "ldusdt_free": ldusdt_free,
+            "ldusdt_locked": ldusdt_locked,
+            "total_ldusdt": total_ldusdt,
+            "is_earn_only": is_earn_only,
+            "has_simple_earn_funds": has_simple_earn_funds,
+            "status_message": status_message
+        }
+
     async def get_wallet_balances(self, mode: str) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """Fetches non-zero asset balances or returns error dictionary."""
         res = await self.get_account_info(mode)

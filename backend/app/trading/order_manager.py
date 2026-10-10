@@ -173,14 +173,83 @@ class OrderManager:
                 
                 # 1. Fetch relevant Wallet Balance based on trading mode
                 if trading_mode in ["TESTNET", "LIVE"]:
-                    balances = await BinanceConnector.get_instance().get_wallet_balances(trading_mode)
-                    usdt_balance = next((float(b["free"]) for b in balances if b["asset"] == "USDT"), 0.0)
-                    if usdt_balance <= 0.0:
-                        usdt_balance = 10000.0 if trading_mode == "TESTNET" else 1000.0
-                    balance = usdt_balance
+                    connector = BinanceConnector.get_instance()
+                    equity_status = await connector.get_spot_equity_and_earn_status(trading_mode)
+
+                    # Check for query failure
+                    if equity_status.get("error"):
+                        err_msg = equity_status["error"]
+                        logger.error(f"❌ [/api/v3/account ERROR] Failed to fetch live Binance balance: {err_msg}")
+                        ExecutionStateTracker.get_instance().transition(
+                            symbol=symbol,
+                            state=ExecutionState.REJECTED,
+                            side=side,
+                            stage="BALANCE_VERIFICATION",
+                            reason=f"Failed to query /api/v3/account: {err_msg}",
+                            price=float(opportunity.get("entry_price", 0.0)),
+                            trading_mode=trading_mode
+                        )
+                        return
+
+                    free_spot_usdt = float(equity_status.get("free_usdt", 0.0))
+                    total_ldusdt = float(equity_status.get("total_ldusdt", 0.0))
+
+                    # Guard A: Detect whether funds are held as LDUSDT (Binance Simple Earn)
+                    # If free Spot USDT is zero and only LDUSDT exists, stop execution immediately.
+                    if free_spot_usdt <= 0.0 and total_ldusdt > 0.0:
+                        earn_msg = "Funds are in Binance Simple Earn. Redeem to Spot before trading."
+                        logger.error(f"🛑 [SIMPLE EARN DETECTED] {earn_msg} (Held in Simple Earn: ${total_ldusdt:.2f} LDUSDT, Spot: ${free_spot_usdt:.2f} USDT)")
+                        ExecutionStateTracker.get_instance().transition(
+                            symbol=symbol,
+                            state=ExecutionState.REJECTED,
+                            side=side,
+                            stage="SIMPLE_EARN_GUARD",
+                            reason=earn_msg,
+                            price=float(opportunity.get("entry_price", 0.0)),
+                            trading_mode=trading_mode
+                        )
+                        try:
+                            await AuditService.create_audit_log(db, AuditLogCreate(
+                                level="WARNING",
+                                category="RISK_ENGINE",
+                                message=earn_msg,
+                                details=f"Spot USDT is $0.00 while ${total_ldusdt:.2f} LDUSDT is held in Binance Simple Earn. Sizing and order submission halted."
+                            ))
+                        except Exception:
+                            pass
+                        return
+
+                    # Guard B: Never continue to position sizing or order submission when free Spot USDT is insufficient (< 5.0 USDT minimum notional)
+                    if free_spot_usdt < 5.0:
+                        insufficient_msg = f"Insufficient free Spot USDT balance (${free_spot_usdt:.2f} USDT). Minimum Binance Spot order requires at least $5.00 USDT."
+                        logger.warning(f"🛑 [INSUFFICIENT BALANCE] {insufficient_msg}")
+                        ExecutionStateTracker.get_instance().transition(
+                            symbol=symbol,
+                            state=ExecutionState.REJECTED,
+                            side=side,
+                            stage="BALANCE_VERIFICATION",
+                            reason=insufficient_msg,
+                            price=float(opportunity.get("entry_price", 0.0)),
+                            trading_mode=trading_mode
+                        )
+                        try:
+                            await AuditService.create_audit_log(db, AuditLogCreate(
+                                level="WARNING",
+                                category="RISK_ENGINE",
+                                message="Insufficient free Spot USDT balance",
+                                details=insufficient_msg
+                            ))
+                        except Exception:
+                            pass
+                        return
+
+                    # Verified live Spot USDT equity: zero hardcoded/simulated balances
+                    balance = free_spot_usdt
+                    logger.info(f"✅ [LIVE BALANCE VERIFIED] Using live Binance Spot USDT equity: ${balance:.2f} (Simple Earn LDUSDT: ${total_ldusdt:.2f})")
 
                     # Spot Trading Safety Guard: In Binance Spot, a new SELL order requires holding the base asset
-                    if opportunity.get("side", "").upper() == "SELL":
+                    balances = await connector.get_wallet_balances(trading_mode)
+                    if isinstance(balances, list) and opportunity.get("side", "").upper() == "SELL":
                         base_asset = symbol.replace("USDT", "").replace("USDC", "").replace("FDUSD", "").upper()
                         base_free = next((float(b["free"]) for b in balances if b["asset"] == base_asset), 0.0)
                         if base_free <= 0.00001:

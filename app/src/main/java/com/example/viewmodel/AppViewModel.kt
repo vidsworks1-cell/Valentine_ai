@@ -831,6 +831,23 @@ class AppViewModel(
                 delay(3000)
                 if (!_isScalpLoopActive.value) break
 
+                // Live Spot Equity & Simple Earn Detection Guard
+                val equityCheck = com.example.aza.connector.BinanceConnector.fetchSpotEquityAndEarnStatus().getOrNull()
+                if (equityCheck != null) {
+                    if (equityCheck.isEarnOnly) {
+                        _scalpCurrentPhase.value = ScalpingCyclePhase.IDLE
+                        LuminaSmallAccountScalpingEngine.updatePhase(ScalpingCyclePhase.IDLE)
+                        _autopilotThoughts.value = _autopilotThoughts.value + "🛑 SCALP STOPPED: Funds are in Binance Simple Earn. Redeem to Spot before trading."
+                        break
+                    }
+                    if (equityCheck.freeSpotUsdt < 5.0) {
+                        _scalpCurrentPhase.value = ScalpingCyclePhase.IDLE
+                        LuminaSmallAccountScalpingEngine.updatePhase(ScalpingCyclePhase.IDLE)
+                        _autopilotThoughts.value = _autopilotThoughts.value + "🛑 SCALP STOPPED: Insufficient free Spot USDT balance ($${String.format(Locale.US, "%.2f", equityCheck.freeSpotUsdt)})."
+                        break
+                    }
+                }
+
                 // 2. Buy Phase
                 _scalpCurrentPhase.value = ScalpingCyclePhase.EXECUTING_BUY
                 val basePrice = when (sym) {
@@ -893,6 +910,23 @@ class AppViewModel(
 
     fun executeSingleScalpCycle(symbol: String, amountUsdt: Double) {
         viewModelScope.launch {
+            // Live Spot Equity & Simple Earn Detection Guard
+            val equityCheck = com.example.aza.connector.BinanceConnector.fetchSpotEquityAndEarnStatus().getOrNull()
+            if (equityCheck != null) {
+                if (equityCheck.isEarnOnly) {
+                    _scalpCurrentPhase.value = ScalpingCyclePhase.IDLE
+                    LuminaSmallAccountScalpingEngine.updatePhase(ScalpingCyclePhase.IDLE)
+                    _autopilotThoughts.value = _autopilotThoughts.value + "🛑 SCALP STOPPED: Funds are in Binance Simple Earn. Redeem to Spot before trading."
+                    return@launch
+                }
+                if (equityCheck.freeSpotUsdt < 5.0 || equityCheck.freeSpotUsdt < amountUsdt) {
+                    _scalpCurrentPhase.value = ScalpingCyclePhase.IDLE
+                    LuminaSmallAccountScalpingEngine.updatePhase(ScalpingCyclePhase.IDLE)
+                    _autopilotThoughts.value = _autopilotThoughts.value + "🛑 SCALP STOPPED: Insufficient free Spot USDT ($${String.format(Locale.US, "%.2f", equityCheck.freeSpotUsdt)} USDT available)."
+                    return@launch
+                }
+            }
+
             _scalpCurrentPhase.value = ScalpingCyclePhase.SCANNING
             LuminaSmallAccountScalpingEngine.updatePhase(ScalpingCyclePhase.SCANNING, symbol)
             delay(1000)

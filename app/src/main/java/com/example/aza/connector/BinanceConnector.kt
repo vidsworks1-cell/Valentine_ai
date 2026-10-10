@@ -14,6 +14,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -347,6 +348,58 @@ object BinanceConnector {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Queries /api/v3/account and verifies live Spot USDT equity.
+     * Detects Binance Simple Earn (LDUSDT) and prevents positioning on zero spot equity.
+     */
+    suspend fun fetchSpotEquityAndEarnStatus(): Result<SpotEquityStatus> = withContext(Dispatchers.IO) {
+        val balancesRes = fetchAccountBalances()
+        if (balancesRes.isFailure) {
+            return@withContext Result.failure(balancesRes.exceptionOrNull() ?: Exception("Failed to query /api/v3/account"))
+        }
+        val balances = balancesRes.getOrNull() ?: emptyList()
+        var freeUsdt = 0.0
+        var lockedUsdt = 0.0
+        var ldFree = 0.0
+        var ldLocked = 0.0
+
+        for (b in balances) {
+            val sym = b.asset.uppercase(Locale.US)
+            if (sym == "USDT") {
+                freeUsdt = b.free
+                lockedUsdt = b.locked
+            } else if (sym == "LDUSDT" || sym == "LENDING_USDT") {
+                ldFree += b.free
+                ldLocked += b.locked
+            }
+        }
+
+        val totalSpot = freeUsdt + lockedUsdt
+        val totalLd = ldFree + ldLocked
+        val isEarnOnly = (freeUsdt <= 0.0 && totalLd > 0.0)
+        val hasSufficient = freeUsdt >= 5.0
+
+        val msg = when {
+            isEarnOnly -> "Funds are in Binance Simple Earn. Redeem to Spot before trading."
+            !hasSufficient -> "Insufficient free Spot USDT balance ($${String.format(Locale.US, "%.2f", freeUsdt)} USDT). Minimum Binance Spot order requires at least $5.00 USDT."
+            else -> "Verified live Binance Spot equity: $${String.format(Locale.US, "%.2f", freeUsdt)} USDT."
+        }
+
+        Result.success(
+            SpotEquityStatus(
+                freeSpotUsdt = freeUsdt,
+                lockedSpotUsdt = lockedUsdt,
+                totalSpotUsdt = totalSpot,
+                ldUsdtFree = ldFree,
+                ldUsdtLocked = ldLocked,
+                totalLdUsdt = totalLd,
+                isEarnOnly = isEarnOnly,
+                hasSufficientSpotBalance = hasSufficient,
+                statusMessage = msg
+            )
+        )
     }
 
     /**
@@ -759,6 +812,18 @@ data class BinanceAssetBalance(
 ) {
     val total: Double get() = free + locked
 }
+
+data class SpotEquityStatus(
+    val freeSpotUsdt: Double,
+    val lockedSpotUsdt: Double,
+    val totalSpotUsdt: Double,
+    val ldUsdtFree: Double,
+    val ldUsdtLocked: Double,
+    val totalLdUsdt: Double,
+    val isEarnOnly: Boolean,
+    val hasSufficientSpotBalance: Boolean,
+    val statusMessage: String
+)
 
 data class BinanceOpenOrder(
     val orderId: String,

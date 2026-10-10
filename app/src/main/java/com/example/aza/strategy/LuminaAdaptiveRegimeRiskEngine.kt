@@ -148,11 +148,13 @@ object LuminaAdaptiveRegimeRiskEngine {
         dailyPortfolioVolatilityPct: Double = 2.5,
         mlPrediction: LuminaDeepMlPrediction? = null
     ): AdaptiveRiskAssessmentReport {
-        val safeEquity = max(5.0, totalEquityUsdt)
-        val regimeConfig = getRegimeRiskConfig(currentRegime, safeEquity)
+        val safeEquity = max(0.0, totalEquityUsdt)
+        val regimeConfig = getRegimeRiskConfig(currentRegime, if (safeEquity > 0.0) safeEquity else 5.0)
 
         // 1. Calculate Target Sizing based on Micro Risk Bounds
-        val baseAllocation = if (safeEquity <= 20.0) {
+        val baseAllocation = if (safeEquity <= 0.0) {
+            0.0
+        } else if (safeEquity <= 20.0) {
             // Micro-Account Mode (~$13 USDT): Binance $5 MIN_NOTIONAL requires concentrated single-position allocation
             (safeEquity - 1.50).coerceIn(5.50, safeEquity * 0.90)
         } else {
@@ -161,7 +163,7 @@ object LuminaAdaptiveRegimeRiskEngine {
 
         // Apply ML Prediction Confidence & Kelly Fraction
         val confidenceScale = if (mlPrediction != null) (mlPrediction.ensembleConfidencePct / 80.0).coerceIn(0.60, 1.20) else 1.0
-        val finalTargetSize = (baseAllocation * regimeConfig.regimeRiskMultiplier * confidenceScale).coerceIn(5.05, safeEquity * 0.92)
+        val finalTargetSize = if (safeEquity <= 0.0) 0.0 else (baseAllocation * regimeConfig.regimeRiskMultiplier * confidenceScale).coerceIn(5.05, safeEquity * 0.92)
 
         // 2. Stop-Loss Risk Capital Budget
         val riskCapitalUsdt = finalTargetSize * (regimeConfig.stopLossAtrMultiplier * 0.015) // ~1.5% ATR base
@@ -178,7 +180,7 @@ object LuminaAdaptiveRegimeRiskEngine {
 
         // 5. Circuit Breaker Checks
         val isCircuitBreakerTripped = currentRegime == MarketRegimeType.HIGH_VOLATILITY_SHOCK && dailyPortfolioVolatilityPct > 6.0
-        val isAllocationSafe = freeUsdt >= finalTargetSize && !isCircuitBreakerTripped
+        val isAllocationSafe = freeUsdt >= 5.0 && freeUsdt >= finalTargetSize && !isCircuitBreakerTripped
 
         val notes = mutableListOf<String>()
         notes.add("Market Regime: ${currentRegime.displayName} (Risk Multiplier: ${String.format(Locale.US, "%.2f", regimeConfig.regimeRiskMultiplier)}x).")

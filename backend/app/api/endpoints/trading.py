@@ -257,6 +257,21 @@ async def get_binance_balances(mode: Optional[str] = None):
         )
     return balances
 
+@router.get("/binance/equity-status")
+async def get_binance_equity_status(mode: Optional[str] = None):
+    """Queries live Binance Spot USDT equity, free balance, and Simple Earn (LDUSDT) status."""
+    from app.services.binance_connector import BinanceConnector
+    from app.scheduler.manager import LayeredSchedulerManager
+    
+    connector = BinanceConnector.get_instance()
+    scheduler = await LayeredSchedulerManager.get_instance()
+    target_mode = (mode or scheduler.global_trading_mode or "LIVE").upper()
+    if target_mode == "OFF":
+        target_mode = "LIVE" if connector.has_keys("LIVE") else ("TESTNET" if connector.has_keys("TESTNET") else "PAPER")
+    
+    equity_status = await connector.get_spot_equity_and_earn_status(target_mode)
+    return equity_status
+
 @router.get("/binance/orders")
 async def get_binance_orders(symbol: Optional[str] = None, mode: Optional[str] = None):
     """Retrieves open Binance Spot orders."""
@@ -642,11 +657,8 @@ async def get_portfolio_exposure_endpoint(db: AsyncSession = Depends(get_db)):
     
     if trading_mode in ["TESTNET", "LIVE"]:
         from app.services.binance_connector import BinanceConnector
-        balances = await BinanceConnector.get_instance().get_wallet_balances(trading_mode)
-        usdt_balance = next((float(b["free"]) for b in balances if b["asset"] == "USDT"), 0.0)
-        if usdt_balance <= 0.0:
-            usdt_balance = 10000.0 if trading_mode == "TESTNET" else 1000.0
-        balance = usdt_balance
+        equity_status = await BinanceConnector.get_instance().get_spot_equity_and_earn_status(trading_mode)
+        balance = float(equity_status.get("free_usdt", 0.0))
     else:
         wallet = await PaperTradingService.get_wallet(db, "lumina_default")
         if not wallet:
@@ -905,14 +917,11 @@ async def get_trading_summary_endpoint(db: AsyncSession = Depends(get_db)):
     scheduler = await LayeredSchedulerManager.get_instance()
     trading_mode = scheduler.global_trading_mode
     
-    # Paper wallet balance
+    # Live or Paper wallet balance
     if trading_mode in ["TESTNET", "LIVE"]:
         from app.services.binance_connector import BinanceConnector
-        balances = await BinanceConnector.get_instance().get_wallet_balances(trading_mode)
-        usdt_balance = next((float(b["free"]) for b in balances if b["asset"] == "USDT"), 0.0)
-        if usdt_balance <= 0.0:
-            usdt_balance = 10000.0 if trading_mode == "TESTNET" else 1000.0
-        balance = usdt_balance
+        equity_status = await BinanceConnector.get_instance().get_spot_equity_and_earn_status(trading_mode)
+        balance = float(equity_status.get("free_usdt", 0.0))
     else:
         wallet = await PaperTradingService.get_wallet(db, "lumina_default")
         if not wallet:

@@ -116,8 +116,12 @@ object MicroAccountRiskEngine {
         totalBalanceUsdt: Double,
         availableFreeUsdt: Double,
         activePositions: List<BinancePositionEntity>,
-        openOrders: List<BinanceOpenOrder>
+        openOrders: List<BinanceOpenOrder>,
+        isSimpleEarnOnly: Boolean = false
     ): Pair<Boolean, String> {
+        if (isSimpleEarnOnly) {
+            return Pair(false, "Funds are in Binance Simple Earn. Redeem to Spot before trading.")
+        }
         val config = determineRiskProfile(totalBalanceUsdt)
         val openPositionsCount = activePositions.count { it.status == "OPEN" && it.closedAt == null }
 

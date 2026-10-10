@@ -297,7 +297,7 @@ class AzaAutonomousScheduler(
                     capabilityName == "Binance Capability" && policy == "RISK_LIMIT" -> {
                         val estimator = dynamicExponentialEstimator
                         val volatility = estimator?.currentVolatility ?: 0.015
-                        val baseLimit = 1000.0
+                        val baseLimit = repository.getAccountInfoDirect()?.totalBalance ?: 100.0
                         val adjustedLimit = when {
                             volatility > 0.05 -> baseLimit * 0.25
                             volatility > 0.03 -> baseLimit * 0.50
