@@ -526,7 +526,7 @@ object BinanceConnector {
 
     /**
      * Place an order on Binance Spot.
-     * Support Market Buy/Sell and Limit Buy/Sell.
+     * Support Market Buy/Sell, Limit Buy/Sell, and Post-Only Maker Limit (GTX).
      */
     suspend fun placeOrder(
         symbol: String,
@@ -534,6 +534,7 @@ object BinanceConnector {
         type: String,
         quantity: Double,
         price: Double? = null,
+        timeInForce: String = "GTC",
         clientOrderId: String? = null
     ): Result<BinanceOpenOrder> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank() || apiSecret.isBlank()) {
@@ -571,7 +572,8 @@ object BinanceConnector {
                     throw IllegalArgumentException("Price is required for LIMIT orders.")
                 }
                 params["price"] = String.format(java.util.Locale.US, "%.2f", price)
-                params["timeInForce"] = "GTC"
+                // GTX = Good-Til-Crossing (Post-Only). Guarantees Maker order on Binance.
+                params["timeInForce"] = timeInForce
             }
             if (clientOrderId != null) {
                 params["newClientOrderId"] = clientOrderId
@@ -616,6 +618,12 @@ object BinanceConnector {
                 Log.w(TAG, impossibleEx.message)
                 _lastErrorMessage.value = impossibleEx.message
                 Result.failure(impossibleEx)
+            } else if (e.errorCode == -5022 || (e.message?.contains("Post-only", ignoreCase = true) == true)) {
+                // Post-only order would immediately match and trade, rejected by exchange to protect Maker status
+                val postOnlyMsg = "🛡️ POST-ONLY SHIELD: Order on $symbol would take liquidity as taker. Canceled by Binance GTX filter to preserve 0% slippage & maker fee."
+                Log.i(TAG, postOnlyMsg)
+                _lastErrorMessage.value = postOnlyMsg
+                Result.failure(e)
             } else {
                 Log.e(TAG, "Order placement failed (${e.errorCode}): ${e.message}", e)
                 _lastErrorMessage.value = e.message
@@ -626,6 +634,28 @@ object BinanceConnector {
             _lastErrorMessage.value = e.message
             Result.failure(e)
         }
+    }
+
+    /**
+     * Convenience method to place a guaranteed Post-Only Limit Order (GTX) on Binance.
+     * Guarantees 0% slippage and maker-tier fee (0.02% to 0.075%, or 0% on promo pairs).
+     */
+    suspend fun placePostOnlyLimitOrder(
+        symbol: String,
+        side: String,
+        quantity: Double,
+        price: Double,
+        clientOrderId: String? = null
+    ): Result<BinanceOpenOrder> {
+        return placeOrder(
+            symbol = symbol,
+            side = side,
+            type = "LIMIT",
+            quantity = quantity,
+            price = price,
+            timeInForce = "GTX",
+            clientOrderId = clientOrderId
+        )
     }
 
     /**

@@ -254,6 +254,73 @@ fun LuminaSmallAccountScalperCard(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    // 1. ORDER ROUTING & EXECUTION TYPE (MAKER VS TAKER)
+                    Text("Order Execution Route (Expectancy Shield):", fontSize = 9.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        com.example.aza.strategy.ScalpOrderExecutionType.values().forEach { execType ->
+                            val isSelected = config.executionType == execType
+                            Surface(
+                                onClick = { viewModel.updateSmallAccountScalpConfig(config.copy(executionType = execType)) },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) Color(0xFF00E676).copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) Color(0xFF00E676) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Icon(
+                                            imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                            contentDescription = null,
+                                            tint = if (isSelected) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = execType.label,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    Badge(
+                                        containerColor = if (isSelected) Color(0xFF00E676).copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = if (isSelected) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    ) {
+                                        Text(execType.badge, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // BNB Fee Discount Toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Savings, contentDescription = null, tint = Color(0xFFFFD600), modifier = Modifier.size(14.dp))
+                            Text("Deduct Fees in BNB (-25% discount)", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = config.useBnbFeeDiscount,
+                            onCheckedChange = { viewModel.updateSmallAccountScalpConfig(config.copy(useBnbFeeDiscount = it)) },
+                            modifier = Modifier.height(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     // Profit Target Selector
                     Text("Take-Profit Micro Target:", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -373,6 +440,16 @@ fun LuminaSmallAccountScalperCard(
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Text(cycle.symbol, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                                 Text("• ${cycle.holdingDurationSeconds}s", fontSize = 8.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Badge(
+                                                    containerColor = if (cycle.executionMode.contains("GTX", ignoreCase = true)) Color(0xFF00E676).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                                    contentColor = if (cycle.executionMode.contains("GTX", ignoreCase = true)) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurfaceVariant
+                                                ) {
+                                                    Text(
+                                                        if (cycle.executionMode.contains("GTX", ignoreCase = true)) "POST-ONLY" else "MARKET",
+                                                        fontSize = 7.5.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
                                             }
                                             Text(
                                                 text = "In: \$${cycle.entryPrice} → Out: \$${cycle.exitPrice}",

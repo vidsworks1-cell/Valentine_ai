@@ -341,6 +341,11 @@ fun TradingScreen(
             ExecutionGateHeaderCard(viewModel = viewModel)
         }
 
+        // PRIORITIZED SCALPING ENGINE
+        item {
+            LuminaSmallAccountScalperCard(viewModel = viewModel)
+        }
+
         item {
             BinanceRealityPanel(viewModel = viewModel)
         }
@@ -2138,6 +2143,11 @@ fun PositionManagerSection(
             ExecutionGateHeaderCard(viewModel = viewModel)
         }
 
+        // PRIORITIZED SCALPING APPROACH (SMALL ACCOUNT VELOCITY)
+        item {
+            LuminaSmallAccountScalperCard(viewModel = viewModel)
+        }
+
         // 1. Portfolio Health Summary Dashboard Card
         item {
             Card(
@@ -2493,12 +2503,6 @@ fun PositionManagerSection(
         item {
             LuminaTripartiteSyncCard(viewModel = viewModel)
             Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        // 2.13 Lumina Small Account High-Frequency Scalper & Dynamic Risk Engine
-        item {
-            LuminaSmallAccountScalperCard(viewModel = viewModel)
-            Spacer(modifier = Modifier.height(16.dp))
         }
 
         // 3. Live Position Monitoring List
@@ -4191,6 +4195,65 @@ fun TradingDiagnosticsDashboard(
                                             shape = RoundedCornerShape(4.dp)
                                         ) {
                                             Text(modeOption, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                // VPS Scalping Approach Prioritization
+                                val strategyPriority = layeredStatus["strategy_priority"] as? String ?: "SCALPING_FIRST"
+                                val isScalpPrioritized = strategyPriority == "SCALPING_FIRST"
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isScalpPrioritized) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface
+                                    ),
+                                    border = BorderStroke(1.dp, if (isScalpPrioritized) Color(0xFF81C784) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = androidx.compose.material.icons.Icons.Default.Bolt,
+                                                    contentDescription = "Scalp Priority",
+                                                    tint = if (isScalpPrioritized) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("VPS Scalping Engine Priority", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                            Surface(
+                                                color = if (isScalpPrioritized) Color(0xFF2E7D32) else Color(0xFF757575),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    if (isScalpPrioritized) "PRIORITIZED (LIVE)" else "STANDARD",
+                                                    fontSize = 8.sp,
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            "Micro-Profit Target: +0.35% Net | Tight Stop: -0.75% | Max Hold: 5.0m",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Button(
+                                            onClick = { viewModel.configureVpsScalpingPriority(true, 0.35, 0.75) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                            shape = RoundedCornerShape(4.dp),
+                                            modifier = Modifier.fillMaxWidth().height(28.dp),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Text("ENFORCE LIVE VPS SCALPING", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }

@@ -421,6 +421,18 @@ interface ContaboApiService {
         @Path("mode") mode: String
     ): Map<String, Any>
 
+    @POST("trading/strategy/scalping/prioritize")
+    suspend fun prioritizeScalpingStrategy(
+        @Query("enabled") enabled: Boolean = true,
+        @Query("target_profit_pct") targetProfitPct: Double = 0.35,
+        @Query("tight_stop_loss_pct") tightStopLossPct: Double = 0.75
+    ): Map<String, Any>
+
+    @POST("trading/config/scalping")
+    suspend fun updateVpsScalpConfig(
+        @Body config: Map<String, Any>
+    ): Map<String, Any>
+
     @POST("trading/emergency/reset")
     suspend fun resetEmergencyStop(): Map<String, Any>
 

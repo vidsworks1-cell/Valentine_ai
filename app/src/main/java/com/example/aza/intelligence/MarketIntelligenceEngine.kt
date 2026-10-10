@@ -1052,12 +1052,19 @@ class MarketIntelligenceEngine(
             val quantity = currentProposal.positionSize / currentProposal.entry
             val clientOrderId = "aza_auto_live_" + java.util.UUID.randomUUID().toString().take(12)
 
+            val isPostOnly = com.example.aza.strategy.LuminaSmallAccountScalpingEngine.config.value.executionType == com.example.aza.strategy.ScalpOrderExecutionType.POST_ONLY_MAKER_GTX
+            val orderType = if (isPostOnly && currentProposal.entry > 0.0) "LIMIT" else "MARKET"
+            val timeInForce = if (orderType == "LIMIT") "GTX" else "GTC"
+            val priceVal = if (orderType == "LIMIT") currentProposal.entry else null
+
             val startTime = System.currentTimeMillis()
             val orderResult = BinanceConnector.placeOrder(
                 symbol = symbol,
                 side = side,
-                type = "MARKET",
+                type = orderType,
                 quantity = quantity,
+                price = priceVal,
+                timeInForce = timeInForce,
                 clientOrderId = clientOrderId
             )
             val latency = System.currentTimeMillis() - startTime

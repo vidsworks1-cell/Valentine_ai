@@ -58,9 +58,10 @@ class LiveExchangeExecutionEngine:
         price: Optional[float] = None,
         stop_loss: Optional[float] = None,
         take_profit: Optional[float] = None,
+        time_in_force: str = "GTX",
         max_retries: int = 3
     ) -> Dict[str, Any]:
-        """Submits an order with exponential backoff retry and order acknowledgement verification."""
+        """Submits an order with exponential backoff retry and order acknowledgement verification. Supports Post-Only Maker (GTX)."""
         if not self._consume_rate_limit(weight=2):
             logger.warning("⚠️ Exchange Rate Limit Throttling triggered. Delaying request...")
             await asyncio.sleep(0.5)
@@ -86,6 +87,8 @@ class LiveExchangeExecutionEngine:
                     "symbol": symbol,
                     "side": side,
                     "order_type": order_type,
+                    "time_in_force": time_in_force,
+                    "is_post_only": time_in_force == "GTX",
                     "requested_qty": quantity,
                     "filled_qty": filled_qty,
                     "avg_fill_price": current_price,

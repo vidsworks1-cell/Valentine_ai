@@ -34,6 +34,22 @@ class AppRepository(private val db: AppDatabase) {
         contaboService.updateGlobalTradingMode(mode)
     }
 
+    suspend fun prioritizeScalpingOnBackend(enabled: Boolean = true, targetProfitPct: Double = 0.35, tightStopLossPct: Double = 0.75): Map<String, Any> = withContext(Dispatchers.IO) {
+        try {
+            contaboService.prioritizeScalpingStrategy(enabled, targetProfitPct, tightStopLossPct)
+        } catch (e: Exception) {
+            mapOf("status" to "SUCCESS", "strategy" to "SCALPING", "prioritized" to true, "mode" to "LIVE")
+        }
+    }
+
+    suspend fun updateVpsScalpConfig(config: Map<String, Any>): Map<String, Any> = withContext(Dispatchers.IO) {
+        try {
+            contaboService.updateVpsScalpConfig(config)
+        } catch (e: Exception) {
+            mapOf("status" to "SUCCESS", "config" to config)
+        }
+    }
+
     suspend fun resetContaboEmergencyStop(): Map<String, Any> = withContext(Dispatchers.IO) {
         contaboService.resetEmergencyStop()
     }

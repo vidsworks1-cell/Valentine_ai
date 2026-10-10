@@ -406,9 +406,10 @@ class BinanceConnector:
         order_type: str,
         quantity: Optional[float] = None,
         price: Optional[float] = None,
-        quote_order_qty: Optional[float] = None
+        quote_order_qty: Optional[float] = None,
+        time_in_force: str = "GTC"
     ) -> Dict[str, Any]:
-        """Creates an order (LIMIT or MARKET). Supports both base asset quantity and quoteOrderQty (USDT amount)."""
+        """Creates an order (LIMIT or MARKET). Supports both base asset quantity, quoteOrderQty, and Post-Only Maker (GTX)."""
         params = {
             "symbol": symbol.upper(),
             "side": side.upper(),
@@ -425,7 +426,7 @@ class BinanceConnector:
             if price is None:
                 raise ValueError("Price is required for LIMIT orders")
             params["price"] = str(price)
-            params["timeInForce"] = "GTC"
+            params["timeInForce"] = time_in_force
 
         return await self._request("POST", "/api/v3/order", mode, params=params, signed=True)
 
