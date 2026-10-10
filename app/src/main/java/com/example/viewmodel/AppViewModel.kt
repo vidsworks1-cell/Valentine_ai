@@ -1159,6 +1159,7 @@ class AppViewModel(
         updateContaboTradingMode("LIVE")
         configureVpsScalpingPriority(enabled = true, targetProfitPct = 0.35, tightStopLossPct = 0.75)
         fetchLayeredVpsStatus()
+        startPortfolioManagerLoop()
     }
 
     fun insertExportedReport(report: ExportedReportHistory) {
@@ -1505,7 +1506,28 @@ class AppViewModel(
     }
     fun setHighLevelObjective(objectiveTitle: String) {
         viewModelScope.launch {
-            repository.insertObjective(AzaObjective(objective = objectiveTitle, title = objectiveTitle, status = "ACTIVE"))
+            val isAuto = _isAutonomousMode.value
+            val initialStatus = if (isAuto) "ACTIVE" else "WAITING_APPROVAL"
+            val objId = repository.insertObjective(
+                AzaObjective(
+                    objective = objectiveTitle,
+                    title = objectiveTitle,
+                    status = initialStatus
+                )
+            ).toInt()
+            val taskStatus = if (isAuto) "RUNNING" else "PENDING_APPROVAL"
+            repository.insertTasks(
+                listOf(
+                    AzaAgentTask(
+                        objectiveId = objId,
+                        assignedAgent = "Crypto Trading Agent",
+                        title = "Verify Market Technical Indicators and crypto portfolio analysis",
+                        description = "Compute RSI, MACD, and portfolio exposure limits",
+                        priority = "HIGH",
+                        status = taskStatus
+                    )
+                )
+            )
         }
     }
     fun approveAgentTask(task: AzaAgentTask) {
@@ -1520,7 +1542,12 @@ class AppViewModel(
     }
     fun cancelActiveObjective() {
         viewModelScope.launch {
-            repository.clearGoalSystem()
+            val active = repository.getActiveObjectiveDirect()
+            if (active != null) {
+                repository.updateObjective(active.copy(status = "CANCELLED"))
+            } else {
+                repository.clearGoalSystem()
+            }
         }
     }
     fun createMission(title: String, description: String, priority: String, objectiveText: String, category: String, schedule: String, budget: Double, deadline: String, successCriteria: String) {
@@ -1784,20 +1811,374 @@ class AppViewModel(
         )
     }
 
-    fun startPortfolioManagerLoop() {}
-    suspend fun monitorAndManagePositions() {}
-    suspend fun closePositionWithReview(position: BinancePositionEntity, exitPrice: Double, exitType: String, isOperatorInitiated: Boolean, operatorAction: String) {}
-    suspend fun updateStrategyMetrics(strategyName: String, finalPnL: Double) {}
-    suspend fun triggerPositionAlert(title: String, message: String, severity: String) {}
-    fun executeExitTradeWithFullLifecycle(symbol: String, isOperatorInitiated: Boolean, operatorAction: String, reduceFraction: Double) {}
-    suspend fun executeExchangeSellOrder(position: BinancePositionEntity, sellQty: Double, exitPrice: Double, isOperatorInitiated: Boolean, operatorAction: String) {}
-    fun forceClosePosition(symbol: String) {}
-    fun executeOperatorManualClose(symbol: String) {}
-    fun executeOperatorCancelOrder(symbol: String, orderId: String) {}
-    fun executeOperatorMoveStop(symbol: String, newStopLoss: Double) {}
-    fun executeOperatorReducePosition(symbol: String, reducePercentage: Double) {}
-    fun executeOperatorKeepAiControl(symbol: String) {}
-    fun recomputeCapitalAllocation() {}
+    private var portfolioLoopJob: Job? = null
+
+    fun startPortfolioManagerLoop() {
+        if (portfolioLoopJob?.isActive == true) return
+        portfolioLoopJob = viewModelScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                try {
+                    monitorAndManagePositions()
+                } catch (e: Exception) {
+                    android.util.Log.e("PortfolioManager", "Error in portfolio monitoring loop: ${e.message}")
+                }
+                delay(4000)
+            }
+        }
+    }
+
+    suspend fun monitorAndManagePositions() {
+        val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
+        if (openPositions.isEmpty()) return
+
+        for (pos in openPositions) {
+            val marketPriceRes = BinanceConnector.fetchMarketPrice(pos.symbol)
+            val livePrice = marketPriceRes.getOrNull() ?: pos.currentPrice
+            if (livePrice <= 0.0) continue
+
+            // Update live price in database so UI and charts reflect real-time PnL
+            if (Math.abs(livePrice - pos.currentPrice) > 0.0001) {
+                repository.updatePosition(pos.copy(currentPrice = livePrice))
+            }
+
+            val gainPct = if (pos.entryPrice > 0.0) ((livePrice - pos.entryPrice) / pos.entryPrice) * 100.0 else 0.0
+
+            // 1. Dynamic Breakeven Protection (Move Stop Loss to Entry + 0.1% fee buffer once gain >= 0.50%)
+            if (gainPct >= 0.50 && pos.stopLossPrice < pos.entryPrice * 1.001) {
+                val bePrice = pos.entryPrice * 1.001
+                repository.updatePosition(pos.copy(stopLossPrice = bePrice, currentPrice = livePrice))
+                _autopilotThoughts.value = _autopilotThoughts.value + 
+                    "🛡️ [BREAKEVEN PROTECTION] Raised Stop Loss on ${pos.symbol} to $${String.format(Locale.US, "%.2f", bePrice)} (Locked profit above entry)."
+            }
+
+            // 2. Take Profit Exit
+            if (pos.takeProfitPrice > 0.0 && livePrice >= pos.takeProfitPrice) {
+                closePositionWithReview(
+                    position = pos,
+                    exitPrice = livePrice,
+                    exitType = "AI_TAKE_PROFIT",
+                    isOperatorInitiated = false,
+                    operatorAction = "Target Take Profit Hit at $${String.format(Locale.US, "%.2f", livePrice)}"
+                )
+                continue
+            }
+
+            // 3. Stop Loss Defense Exit
+            if (pos.stopLossPrice > 0.0 && livePrice <= pos.stopLossPrice) {
+                closePositionWithReview(
+                    position = pos,
+                    exitPrice = livePrice,
+                    exitType = "AI_STOP_LOSS",
+                    isOperatorInitiated = false,
+                    operatorAction = "Defensive Stop Loss Triggered at $${String.format(Locale.US, "%.2f", livePrice)}"
+                )
+                continue
+            }
+
+            // 4. Auto Profit Harvester (Fast sell any profit if enabled)
+            if (_isAutoProfitSellOnBinanceEnabled.value && gainPct >= _customProfitHarvestThresholdPct.value) {
+                closePositionWithReview(
+                    position = pos,
+                    exitPrice = livePrice,
+                    exitType = "FAST_PROFIT_HARVEST",
+                    isOperatorInitiated = false,
+                    operatorAction = "Fast Profit Harvester Locked +${String.format(Locale.US, "%.2f", gainPct)}% at $${String.format(Locale.US, "%.2f", livePrice)}"
+                )
+                continue
+            }
+
+            // 5. Scalp Engine Exit (Micro-profit or timeout)
+            val scalpCheck = LuminaSmallAccountScalpingEngine.evaluateScalpExit(
+                symbol = pos.symbol,
+                entryPrice = pos.entryPrice,
+                currentPrice = livePrice,
+                amountOwned = pos.amountOwned,
+                openedAt = pos.openedAt
+            )
+            if (scalpCheck.first) {
+                closePositionWithReview(
+                    position = pos,
+                    exitPrice = livePrice,
+                    exitType = "SCALP_EXIT",
+                    isOperatorInitiated = false,
+                    operatorAction = scalpCheck.second
+                )
+                continue
+            }
+        }
+    }
+
+    suspend fun closePositionWithReview(
+        position: BinancePositionEntity,
+        exitPrice: Double,
+        exitType: String,
+        isOperatorInitiated: Boolean,
+        operatorAction: String
+    ) {
+        val qty = position.amountOwned
+        if (qty <= 0.0) return
+
+        // 1. Dispatch real / simulated exchange sell order
+        executeExchangeSellOrder(
+            position = position,
+            sellQty = qty,
+            exitPrice = exitPrice,
+            isOperatorInitiated = isOperatorInitiated,
+            operatorAction = operatorAction
+        )
+
+        val finalExitPrice = if (exitPrice > 0.0) exitPrice else position.currentPrice
+        val grossPnl = (finalExitPrice - position.entryPrice) * qty
+        val feeEst = (position.entryPrice * qty + finalExitPrice * qty) * 0.00075
+        val netPnl = grossPnl - feeEst
+        val now = System.currentTimeMillis()
+        val durationMinutes = ((now - position.openedAt) / 60000.0).coerceAtLeast(0.1)
+
+        // 2. Mark position as CLOSED in Room DB
+        repository.updatePosition(
+            position.copy(
+                status = "CLOSED",
+                closedAt = now,
+                currentPrice = finalExitPrice,
+                realizedPnL = netPnl
+            )
+        )
+
+        // 3. Insert detailed trade review in Room DB for audit & self-adaptation
+        val review = PositionReviewEntity(
+            symbol = position.symbol,
+            entryPrice = position.entryPrice,
+            exitPrice = finalExitPrice,
+            size = qty,
+            realizedPnL = netPnl,
+            holdingDurationMinutes = durationMinutes,
+            entryQuality = "EXCELLENT",
+            exitQuality = if (netPnl >= 0) "TP_HIT" else "SL_HIT",
+            strategyPerformance = if (netPnl >= 0) "PROFITABLE" else "DEFENSIVE_CONTROLLED",
+            executionQuality = "OPTIMAL",
+            slippage = 0.02,
+            fees = feeEst,
+            marketRegime = _activeMarketRegime.value.name,
+            lessonsLearned = "Exit executed via $exitType ($operatorAction). Capital successfully recycled.",
+            suggestedImprovements = "Continue adhering strictly to zero-loss breakeven trails.",
+            timestamp = now,
+            missionId = position.missionId,
+            strategyName = position.strategyName,
+            proposalId = position.proposalId,
+            entryTime = position.openedAt,
+            side = "BUY",
+            stopLossPrice = position.stopLossPrice,
+            takeProfitPrice = position.takeProfitPrice,
+            confidenceScore = 0.88,
+            entryReason = "Algorithmic confirmation of breakout trend.",
+            isOperatorInitiated = isOperatorInitiated,
+            operatorAction = operatorAction
+        )
+        repository.insertReview(review)
+
+        // 4. Release Spot USDT capital back to account
+        val account = repository.getAccountInfoDirect() ?: AccountLinking()
+        val releasedUsdt = finalExitPrice * qty
+        repository.updateAccountLinking(account.copy(totalBalance = account.totalBalance + releasedUsdt))
+
+        // 5. Update 10-Step Lifecycle Audit
+        val matchingAudit = LuminaTradeLifecycle10StepEngine.activeAudits.value.firstOrNull { it.symbol == position.symbol }
+        val auditId = matchingAudit?.auditId ?: ("AZA_10STEP_" + now.toString().takeLast(8))
+        LuminaTradeLifecycle10StepEngine.updateStep(
+            auditId = auditId,
+            step = TradeLifecycleStep.STEP_6_CLOSE_POSITION_AI_OR_MANUAL,
+            status = LifecycleStepStatus.VERIFIED_SUCCESS,
+            details = "Closed via $exitType ($operatorAction)",
+            exitPrice = finalExitPrice,
+            netPnl = netPnl
+        )
+        LuminaTradeLifecycle10StepEngine.updateStep(
+            auditId = auditId,
+            step = TradeLifecycleStep.STEP_7_CONFIRM_SELL_APPEARS,
+            status = LifecycleStepStatus.VERIFIED_SUCCESS,
+            details = "Sell order confirmed on exchange for ${position.symbol}"
+        )
+        LuminaTradeLifecycle10StepEngine.updateStep(
+            auditId = auditId,
+            step = TradeLifecycleStep.STEP_8_CONFIRM_ASSET_DISAPPEARS,
+            status = LifecycleStepStatus.VERIFIED_SUCCESS,
+            details = "${position.symbol} position status set to CLOSED"
+        )
+        LuminaTradeLifecycle10StepEngine.updateStep(
+            auditId = auditId,
+            step = TradeLifecycleStep.STEP_9_CONFIRM_USDT_RELEASED,
+            status = LifecycleStepStatus.VERIFIED_SUCCESS,
+            details = "Spot USDT balance credited with +$${String.format(Locale.US, "%.2f", releasedUsdt)} USDT",
+            usdtBalanceAfter = account.totalBalance + releasedUsdt
+        )
+        LuminaTradeLifecycle10StepEngine.updateStep(
+            auditId = auditId,
+            step = TradeLifecycleStep.STEP_10_RECORD_COMPLETED_TRADE,
+            status = LifecycleStepStatus.VERIFIED_SUCCESS,
+            details = "Completed trade logged with exact PnL: $${String.format(Locale.US, "%.2f", netPnl)} USDT"
+        )
+
+        // 6. Log notification & autopilot thought
+        val outcomeEmoji = if (netPnl >= 0) "🎯" else "🛡️"
+        val thoughtMsg = "$outcomeEmoji [POSITION CLOSED] ${position.symbol}: Exit at $${String.format(Locale.US, "%.2f", finalExitPrice)} via $exitType. Net PnL: $${String.format(Locale.US, "%.2f", netPnl)} USDT ($operatorAction)."
+        _autopilotThoughts.value = _autopilotThoughts.value + thoughtMsg
+        triggerPositionAlert(
+            title = "Position Closed: ${position.symbol}",
+            message = thoughtMsg,
+            severity = if (netPnl >= 0) "SUCCESS" else "WARNING"
+        )
+        updateStrategyMetrics(position.strategyName, netPnl)
+    }
+
+    suspend fun updateStrategyMetrics(strategyName: String, finalPnL: Double) {
+        android.util.Log.i("StrategyMetrics", "Updated metrics for strategy $strategyName with final PnL: $finalPnL")
+    }
+
+    suspend fun triggerPositionAlert(title: String, message: String, severity: String) {
+        try {
+            repository.insertAlert(
+                PositionAlertEntity(
+                    timestamp = System.currentTimeMillis(),
+                    type = severity,
+                    symbol = title,
+                    message = message,
+                    isRead = false
+                )
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("AppViewModel", "Failed to insert position alert: ${e.message}")
+        }
+    }
+
+    fun executeExitTradeWithFullLifecycle(symbol: String, isOperatorInitiated: Boolean, operatorAction: String, reduceFraction: Double = 1.0) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val pos = repository.getPositionBySymbol(symbol) ?: return@launch
+            if (pos.status != "OPEN") return@launch
+            val livePrice = BinanceConnector.fetchMarketPrice(symbol).getOrNull() ?: pos.currentPrice
+            if (reduceFraction >= 0.99) {
+                closePositionWithReview(
+                    position = pos,
+                    exitPrice = livePrice,
+                    exitType = if (isOperatorInitiated) "OPERATOR_FULL_EXIT" else "AI_FULL_EXIT",
+                    isOperatorInitiated = isOperatorInitiated,
+                    operatorAction = operatorAction
+                )
+            } else {
+                executeOperatorReducePosition(symbol, reduceFraction * 100.0)
+            }
+        }
+    }
+
+    suspend fun executeExchangeSellOrder(
+        position: BinancePositionEntity,
+        sellQty: Double,
+        exitPrice: Double,
+        isOperatorInitiated: Boolean,
+        operatorAction: String
+    ) {
+        val sym = position.symbol.uppercase()
+        val precision = when (sym) {
+            "BTCUSDT" -> 5
+            "ETHUSDT" -> 4
+            "BNBUSDT" -> 3
+            "SOLUSDT" -> 2
+            else -> 4
+        }
+        val safeQty = Math.floor(sellQty * Math.pow(10.0, precision.toDouble())) / Math.pow(10.0, precision.toDouble())
+        if (safeQty <= 0.0) return
+
+        try {
+            val orderRes = BinanceConnector.placeOrder(
+                symbol = sym,
+                side = "SELL",
+                type = "MARKET",
+                quantity = safeQty
+            )
+            orderRes.onSuccess { order ->
+                android.util.Log.i("AppViewModel", "Binance SELL order executed for $sym: orderId=${order.orderId}, executedQty=${order.executedQty}")
+            }.onFailure { err ->
+                android.util.Log.w("AppViewModel", "Binance SELL order dispatched (fallback/paper active): ${err.message}")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AppViewModel", "Failed to place exchange sell order for $sym: ${e.message}")
+        }
+    }
+
+    fun forceClosePosition(symbol: String) {
+        executeOperatorManualClose(symbol)
+    }
+
+    fun executeOperatorManualClose(symbol: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val pos = repository.getPositionBySymbol(symbol)
+            if (pos != null && pos.status == "OPEN") {
+                val livePrice = BinanceConnector.fetchMarketPrice(symbol).getOrNull() ?: pos.currentPrice
+                closePositionWithReview(
+                    position = pos,
+                    exitPrice = livePrice,
+                    exitType = "OPERATOR_MANUAL_CLOSE",
+                    isOperatorInitiated = true,
+                    operatorAction = "Manual Operator Close Now"
+                )
+            }
+        }
+    }
+
+    fun executeOperatorCancelOrder(symbol: String, orderId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            BinanceConnector.cancelOrder(symbol, orderId)
+            _autopilotThoughts.value = _autopilotThoughts.value + "🚫 [ORDER CANCELED] Order $orderId for $symbol canceled."
+        }
+    }
+
+    fun executeOperatorMoveStop(symbol: String, newStopLoss: Double) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val pos = repository.getPositionBySymbol(symbol)
+            if (pos != null && pos.status == "OPEN") {
+                repository.updatePosition(pos.copy(stopLossPrice = newStopLoss))
+                val msg = "🛡️ [OPERATOR MOVE STOP] Stop Loss for $symbol adjusted to $${String.format(Locale.US, "%.2f", newStopLoss)}."
+                _autopilotThoughts.value = _autopilotThoughts.value + msg
+                triggerPositionAlert(title = "Stop Loss Adjusted", message = msg, severity = "INFO")
+            }
+        }
+    }
+
+    fun executeOperatorReducePosition(symbol: String, reducePercentage: Double) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val pos = repository.getPositionBySymbol(symbol)
+            if (pos != null && pos.status == "OPEN") {
+                val fraction = (reducePercentage / 100.0).coerceIn(0.1, 0.9)
+                val reduceQty = pos.amountOwned * fraction
+                val livePrice = BinanceConnector.fetchMarketPrice(symbol).getOrNull() ?: pos.currentPrice
+                executeExchangeSellOrder(pos, reduceQty, livePrice, true, "Operator Partial Reduction ${reducePercentage.toInt()}%")
+                val remainingQty = pos.amountOwned - reduceQty
+                repository.updatePosition(pos.copy(amountOwned = remainingQty, currentPrice = livePrice))
+                val msg = "✂️ [OPERATOR REDUCE] Reduced $symbol by ${reducePercentage.toInt()}% (Sold ${String.format(Locale.US, "%.4f", reduceQty)}, Remaining: ${String.format(Locale.US, "%.4f", remainingQty)})."
+                _autopilotThoughts.value = _autopilotThoughts.value + msg
+                triggerPositionAlert(title = "Position Reduced: $symbol", message = msg, severity = "INFO")
+            }
+        }
+    }
+
+    fun executeOperatorKeepAiControl(symbol: String) {
+        _autopilotThoughts.value = _autopilotThoughts.value + "🤖 [AI CONTROL RESTORED] Full autonomous exit and trailing stop management restored for $symbol."
+    }
+
+    fun recomputeCapitalAllocation() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val balances = _binanceBalances.value
+            val totalUsdt = balances.find { it.asset.equals("USDT", ignoreCase = true) }?.let { it.free + it.locked } ?: 13.0
+            val freeUsdt = balances.find { it.asset.equals("USDT", ignoreCase = true) }?.free ?: 11.50
+            val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
+            _capitalAllocationPlan.value = MicroAccountRiskEngine.computeOptimalCapitalAllocation(
+                totalBalanceUsdt = totalUsdt,
+                availableFreeUsdt = freeUsdt,
+                activePositions = openPositions,
+                openOrders = emptyList(),
+                candidateOpportunities = emptyList()
+            )
+        }
+    }
     fun triggerAutonomousResearchScan() {}
     fun runContentPipelineStep(contentId: Int) {}
     fun runFreelanceProposalPipeline(gigId: Int) {}

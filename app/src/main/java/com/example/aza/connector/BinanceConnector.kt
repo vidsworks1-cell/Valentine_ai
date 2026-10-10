@@ -614,11 +614,18 @@ object BinanceConnector {
             if (timeOffsetMs == 0L) {
                 syncServerTime()
             }
+            val stepDecimals = when (symbol.uppercase()) {
+                "BTCUSDT" -> 5
+                "ETHUSDT" -> 4
+                "BNBUSDT" -> 3
+                "SOLUSDT" -> 2
+                else -> 4
+            }
             val params = mutableMapOf(
                 "symbol" to symbol,
                 "side" to side,
                 "type" to type,
-                "quantity" to String.format(java.util.Locale.US, "%.6f", quantity)
+                "quantity" to String.format(java.util.Locale.US, "%.${stepDecimals}f", quantity)
             )
             if (type == "LIMIT") {
                 if (price == null) {
