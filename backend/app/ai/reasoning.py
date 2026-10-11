@@ -162,12 +162,14 @@ class AiReasoningEngine:
 
     async def _scan_loop(self):
         cache = await PriceCache.get_instance()
-        symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
+        core_symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
+        high_alpha_alts = ["SUIUSDT", "INJUSDT", "RENDERUSDT", "LINKUSDT", "AVAXUSDT", "TIAUSDT", "FETUSDT", "NEARUSDT"]
+        dynamic_symbols = list(dict.fromkeys(core_symbols + high_alpha_alts))
         
         while self.running:
             try:
-                # Poll cache for setups
-                for symbol in symbols:
+                # Poll cache for setups across dynamic institutional symbol universe
+                for symbol in dynamic_symbols:
                     price = cache.get_price(symbol)
                     tally = cache.get_update_tally(symbol)
                     
@@ -238,19 +240,40 @@ class AiReasoningEngine:
                             market_regime = "RANGING"
                             strategy = "Mean Reversion"
 
-                        # 2. Dynamic Stop Loss & Take Profit Placement based on Regime (Optimized R:R)
+                        # 2. Dynamic Stop Loss & Multi-Stage Take Profit Placement based on Regime (Adaptive ATR)
                         if market_regime == "TRENDING":
-                            sl_multiplier = 1.8  # Wider stop buffer against noise whipsaws
-                            tp_multiplier = 3.6  # Extended TP target (3.6 / 1.8 = 2.0 Nominal R:R)
+                            sl_multiplier = 1.5
+                            tp_stage1_mult = 1.2  # Stage 1: Partial scale-out + immediate breakeven lock
+                            tp_stage2_mult = 3.2  # Stage 2: Uncapped runner target
                         elif market_regime == "RANGING":
-                            sl_multiplier = 1.4  # Tighter stop for range boundaries
-                            tp_multiplier = 2.8  # 2.8 / 1.4 = 2.0 Nominal R:R
+                            sl_multiplier = 1.2
+                            tp_stage1_mult = 0.9
+                            tp_stage2_mult = 2.2
                         else:  # VOLATILE / SQUEEZE_FIRING
-                            sl_multiplier = 2.4  # Expanded stop buffer against breakout retest whipsaws
-                            tp_multiplier = 4.8  # 4.8 / 2.4 = 2.0 Nominal R:R
+                            sl_multiplier = 1.8
+                            tp_stage1_mult = 1.4
+                            tp_stage2_mult = 3.6
 
-                        stop_loss = round(price - (sl_multiplier * atr) if proposed_side == "BUY" else price + (sl_multiplier * atr), 2)
-                        take_profit = round(price + (tp_multiplier * atr) if proposed_side == "BUY" else price - (tp_multiplier * atr), 2)
+                        stop_loss = round(price - (sl_multiplier * atr) if proposed_side == "BUY" else price + (sl_multiplier * atr), 4)
+                        take_profit = round(price + (tp_stage2_mult * atr) if proposed_side == "BUY" else price - (tp_stage2_mult * atr), 4)
+                        tp_stage1_price = round(price + (tp_stage1_mult * atr) if proposed_side == "BUY" else price - (tp_stage1_mult * atr), 4)
+
+                        tp_stages = [
+                            {
+                                "stage": 1,
+                                "label": "STAGE_1_SCALE_OUT_BREAKEVEN",
+                                "level": tp_stage1_price,
+                                "percentage": 0.40,
+                                "hit": False
+                            },
+                            {
+                                "stage": 2,
+                                "label": "STAGE_2_RUNNER_EXIT",
+                                "level": take_profit,
+                                "percentage": 0.60,
+                                "hit": False
+                            }
+                        ]
                         
                         # 3. Confluence & Confidence Calibration Engine with ML Feature Weight Self-Pruning & Bayesian Belief
                         from app.ai.feature_pruning import FeatureWeightPruningEngine
@@ -528,6 +551,7 @@ class AiReasoningEngine:
                             "entry_price": price,
                             "stop_loss": stop_loss,
                             "take_profit": take_profit,
+                            "tp_stages": tp_stages,
                             "market_regime": market_regime,
                             "squeeze_info": squeeze_info,
                             "is_probationary_trade": is_probationary,

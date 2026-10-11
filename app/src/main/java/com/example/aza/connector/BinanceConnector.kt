@@ -581,6 +581,38 @@ object BinanceConnector {
      * Place an order on Binance Spot.
      * Support Market Buy/Sell, Limit Buy/Sell, and Post-Only Maker Limit (GTX).
      */
+    private val symbolPrecisionCache = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    fun getSymbolPrecision(symbol: String): Int {
+        val sym = symbol.uppercase()
+        val cached = symbolPrecisionCache[sym]
+        if (cached != null) return cached
+
+        val precision = when (sym) {
+            "BTCUSDT" -> 5
+            "ETHUSDT" -> 4
+            "BNBUSDT" -> 3
+            "SOLUSDT" -> 2
+            "SUIUSDT" -> 1
+            "INJUSDT" -> 2
+            "RENDERUSDT" -> 1
+            "LINKUSDT" -> 2
+            "AVAXUSDT" -> 2
+            "TIAUSDT" -> 1
+            "FETUSDT" -> 1
+            "NEARUSDT" -> 1
+            "DOGEUSDT" -> 0
+            "PEPEUSDT" -> 0
+            "ADAUSDT" -> 1
+            "DOTUSDT" -> 2
+            "MATICUSDT" -> 1
+            "LTCUSDT" -> 3
+            else -> 2
+        }
+        symbolPrecisionCache[sym] = precision
+        return precision
+    }
+
     suspend fun placeOrder(
         symbol: String,
         side: String,
@@ -614,13 +646,7 @@ object BinanceConnector {
             if (timeOffsetMs == 0L) {
                 syncServerTime()
             }
-            val stepDecimals = when (symbol.uppercase()) {
-                "BTCUSDT" -> 5
-                "ETHUSDT" -> 4
-                "BNBUSDT" -> 3
-                "SOLUSDT" -> 2
-                else -> 4
-            }
+            val stepDecimals = getSymbolPrecision(symbol)
             val params = mutableMapOf(
                 "symbol" to symbol,
                 "side" to side,

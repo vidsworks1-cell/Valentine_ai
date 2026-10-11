@@ -37,7 +37,11 @@ class BinanceWebSocketWorker:
 
     async def _loop(self):
         cache = await PriceCache.get_instance()
-        symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
+        symbols = [
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
+            "SUIUSDT", "INJUSDT", "RENDERUSDT", "LINKUSDT",
+            "AVAXUSDT", "TIAUSDT", "FETUSDT", "NEARUSDT"
+        ]
         
         from app.scheduler.manager import LayeredSchedulerManager
         scheduler = await LayeredSchedulerManager.get_instance()

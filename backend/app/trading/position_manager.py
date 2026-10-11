@@ -362,7 +362,7 @@ class PositionManager:
                                 await self._close_position(trade_id, current_price, "STOP_LOSS")
                                 continue
 
-                        # 4. Intelligent Early Exit Engine (Thesis Invalidation Check with Grace Period & Entry/Exit Symmetry)
+                        # 4. Intelligent Early Exit Engine (Thesis Invalidation Check with Grace Period & Gradual Decay)
                         from app.trading.mtf_confirmation import MTFConfirmationGuard
                         holding_time_sec = time.time() - pos.get("opened_at", time.time())
                         grace_period_sec = pos.get("grace_period_sec", 90.0)
@@ -376,9 +376,16 @@ class PositionManager:
                             trend_history.pop(0)
 
                         thesis_strength = pos.get("thesis_strength", 0.83)
+                        holding_time_min = holding_time_sec / 60.0
 
-                        # Entry / Exit Symmetry: Require current invalidity strength to meet or exceed entry thesis strength
-                        strength_succeeded = invalidity_strength >= thesis_strength
+                        # Gradual Invalidation Decay: Maintain institutional standard for first 20 mins, then linearly decays to 0.68 by minute 60
+                        if holding_time_min <= 20.0:
+                            required_invalidity_strength = thesis_strength
+                        else:
+                            decay_ratio = min(1.0, (holding_time_min - 20.0) / 40.0)
+                            required_invalidity_strength = max(0.68, thesis_strength - (0.15 * decay_ratio))
+
+                        strength_succeeded = invalidity_strength >= required_invalidity_strength
 
                         if strength_succeeded:
                             if pos.get("invalidation_first_detected_at", 0.0) == 0.0:
@@ -393,53 +400,52 @@ class PositionManager:
                         persistence_time_sec = time.time() - first_detected if first_detected > 0.0 else 0.0
                         consecutive_cycles = pos.get("invalidation_consecutive_cycles", 0)
 
-                        # Check invalidation trigger conditions:
-                        # 1. Reversal must persist for >= 3 consecutive cycles OR >= 60 seconds
-                        # 2. Invalidity strength must satisfy entry/exit symmetry (invalidity_strength >= thesis_strength)
+                        # Reversal must persist for >= 3 consecutive cycles OR >= 60 seconds
                         persist_confirmed = (consecutive_cycles >= 3 or persistence_time_sec >= 60.0)
 
                         if strength_succeeded and persist_confirmed:
                             if holding_time_sec < grace_period_sec:
                                 logger.info(
                                     f"🛡️ [GRACE PERIOD PROTECTED] Trade {trade_id} {symbol} ({side}): "
-                                    f"Thesis invalidation signal suppressed during Grace Period ({holding_time_sec:.1f}s / {grace_period_sec:.0f}s). "
-                                    f"Invalidity Strength: {invalidity_strength:.2f} >= Thesis Strength: {thesis_strength:.2f}."
+                                    f"Thesis invalidation signal suppressed during Grace Period ({holding_time_sec:.1f}s / {grace_period_sec:.0f}s)."
                                 )
                             else:
-                                # Enhanced Diagnostics Logging
                                 logger.warning(
                                     f"🚪 [INTELLIGENT EARLY EXIT - THESIS INVALIDATED]\n"
                                     f"  - Trade ID: {trade_id} ({symbol} {side})\n"
-                                    f"  - Entry Confidence (Thesis Strength): {thesis_strength:.2f}\n"
-                                    f"  - Entry Strategy: {pos.get('entry_strategy', 'Volatility Expansion Breakout')}\n"
-                                    f"  - Current Confidence: {pos.get('confidence', thesis_strength):.2f}\n"
-                                    f"  - Current Strategy / Opposing Bias: {mtf_details.get('opposing_side', 'N/A')}\n"
-                                    f"  - Trend Score (Invalidity Strength): {invalidity_strength:.2f} / {thesis_strength:.2f}\n"
-                                    f"  - MTF Breakdown: {mtf_details.get('formatted_breakdown', 'N/A')}\n"
-                                    f"  - Reason Score: {invalidity_strength * 100:.1f}%\n"
-                                    f"  - Persistence Time: {persistence_time_sec:.1f}s ({consecutive_cycles} cycles)\n"
-                                    f"  - Holding Duration: {holding_time_sec:.1f}s (Grace Period Passed: {grace_period_sec:.0f}s)\n"
-                                    f"  - Exit Confidence: {invalidity_strength:.2f}\n"
+                                    f"  - Invalidation Strength: {invalidity_strength:.2f} >= Required: {required_invalidity_strength:.2f} (Holding: {holding_time_min:.1f}m)\n"
                                     f"  - Final Decision: CLOSED via THESIS_INVALIDATION"
                                 )
                                 await self._close_position(trade_id, current_price, "THESIS_INVALIDATION")
                                 continue
 
-                        # 5. Time-Based Stale Trade Exit Engine (Capital Recycling)
+                        # 5. Strategy-Adaptive Stale Trade Exit Engine (Fast Capital Recycling)
                         opened_at = pos.get("opened_at", time.time())
                         time_open_sec = time.time() - opened_at
-                        stale_limit_sec = pos.get("stale_threshold_sec", int(self.default_stale_hours * 3600))
-                        stale_pct_limit = pos.get("stale_price_range_pct", self.default_stale_pct)
+                        strat_name = str(pos.get("strategy", pos.get("entry_strategy", pos.get("strategy_used", "Scalping")))).lower()
+                        
+                        # Strategy-adaptive holding timeouts (Scalp: 25m, Range/Mean-Rev: 45m, Breakout: 75m, Trend: 120m)
+                        if "scalp" in strat_name:
+                            base_stale_limit_sec = 25 * 60
+                        elif "mean_reversion" in strat_name or "ranging" in strat_name or "chop" in strat_name:
+                            base_stale_limit_sec = 45 * 60
+                        elif "breakout" in strat_name or "squeeze" in strat_name:
+                            base_stale_limit_sec = 75 * 60
+                        else:
+                            base_stale_limit_sec = 120 * 60
+
+                        stale_limit_sec = pos.get("stale_threshold_sec", base_stale_limit_sec)
+                        stale_pct_limit = pos.get("stale_price_range_pct", 0.35)
                         price_change_pct = abs((current_price - entry) / entry) * 100.0 if entry > 0 else 0.0
 
                         if time_open_sec >= stale_limit_sec and price_change_pct <= stale_pct_limit:
-                            open_hrs = round(time_open_sec / 3600.0, 1)
+                            open_mins = round(time_open_sec / 60.0, 1)
                             logger.warning(
-                                f"⏳ [STALE TRADE EXIT] Trade {trade_id} {symbol} ({side}): "
-                                f"Stagnant for {open_hrs}h with price change of {price_change_pct:.2f}% (<= {stale_pct_limit}%). "
-                                f"Exiting position to recycle capital and eliminate opportunity cost."
+                                f"⏳ [ADAPTIVE STALE EXIT] Trade {trade_id} {symbol} ({side}, Strategy: {strat_name}): "
+                                f"Stagnant for {open_mins}m with price change of {price_change_pct:.2f}% (<= {stale_pct_limit}%). "
+                                f"Exiting position to recycle capital into higher-ranked opportunities."
                             )
-                            await self._close_position(trade_id, current_price, "STALE_TRADE_EXIT")
+                            await self._close_position(trade_id, current_price, "STALE_MOMENTUM_ROTATE")
                             continue
 
                         # 6. Pyramiding Scale-In Evaluation for Winning Trends
@@ -587,16 +593,12 @@ class PositionManager:
         from app.services.binance_connector import BinanceConnector
         if trading_mode in ["TESTNET", "LIVE"]:
             opposite_side = "SELL" if side == "BUY" else "BUY"
-            step_precision = {
-                "BTCUSDT": 5,
-                "ETHUSDT": 4,
-                "BNBUSDT": 3,
-                "SOLUSDT": 2
-            }
-            prec = step_precision.get(symbol.upper(), 4)
-            close_qty = round(size, prec)
-            logger.info(f"Placing real Binance Spot close order for {symbol} ({opposite_side} qty: {close_qty}) in {trading_mode} mode...")
-            binance_res = await BinanceConnector.get_instance().create_order(
+            connector = BinanceConnector.get_instance()
+            filters = await connector.get_symbol_lot_size_filters(symbol, trading_mode)
+            prec = filters.get("precision", 4)
+            close_qty = connector.format_quantity_for_symbol(symbol, size, prec)
+            logger.info(f"Placing real Binance Spot close order for {symbol} ({opposite_side} qty: {close_qty}, precision: {prec}) in {trading_mode} mode...")
+            binance_res = await connector.create_order(
                 mode=trading_mode,
                 symbol=symbol,
                 side=opposite_side,
@@ -758,6 +760,13 @@ class PositionManager:
                         exit_reason=outcome_type
                     )
                     asyncio.create_task(ChampionChallengerEngine.get_instance().evaluate_strategies())
+
+                    # Notify Opportunity Queue to re-evaluate highest-ranked candidate using released capital
+                    try:
+                        from app.trading.opportunity_queue import OpportunityQueueEngine
+                        asyncio.create_task(OpportunityQueueEngine.get_instance().on_position_closed_event(symbol, pnl))
+                    except Exception as qe:
+                        logger.warning(f"Failed to notify Opportunity Queue: {qe}")
                 except Exception as sae:
                     logger.error(f"Failed to trigger post-trade research & adaptation workflows: {sae}")
                 

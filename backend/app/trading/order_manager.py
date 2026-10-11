@@ -488,26 +488,24 @@ class OrderManager:
                         logger.error(f"Failed to log risk rejected audit event: {ae}")
                     return
 
-                # Enforce Binance Spot LOT_SIZE step sizes and MIN_NOTIONAL (>= 5.0 USDT)
-                step_precision = {
-                    "BTCUSDT": 5,
-                    "ETHUSDT": 4,
-                    "BNBUSDT": 3,
-                    "SOLUSDT": 2
-                }
-                prec = step_precision.get(opportunity["symbol"].upper(), 4)
+                # Dynamically resolve Binance Spot LOT_SIZE step sizes and MIN_NOTIONAL
+                connector = BinanceConnector.get_instance()
+                filters = await connector.get_symbol_lot_size_filters(opportunity["symbol"], trading_mode)
+                prec = filters.get("precision", 4)
+                min_notional_req = float(filters.get("min_notional", 5.0))
                 factor = 10 ** prec
                 position_size = round(position_size, prec)
 
-                # In LIVE/TESTNET Binance Spot BUY: enforce min notional >= 5.05 USDT
+                # In LIVE/TESTNET Binance Spot BUY: enforce min notional >= (min_notional_req + 0.05) USDT
                 if trading_mode in ["TESTNET", "LIVE"] and opportunity["side"].upper() == "BUY":
                     notional_val = position_size * price
-                    if notional_val < 5.05:
-                        min_target_qty = math.ceil((5.05 / price) * factor) / float(factor)
+                    target_min_notional = max(5.05, min_notional_req + 0.05)
+                    if notional_val < target_min_notional:
+                        min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
                         min_required_cost = min_target_qty * price
                         if balance >= min_required_cost:
                             position_size = min_target_qty
-                            logger.info(f"⚡ [BINANCE SPOT NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} USDT) to satisfy Binance Spot MIN_NOTIONAL ($5.00).")
+                            logger.info(f"⚡ [BINANCE SPOT NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} USDT) to satisfy Binance Spot MIN_NOTIONAL (${min_notional_req:.2f}).")
                         else:
                             logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) is insufficient for minimum Binance Spot trade of {min_target_qty} {opportunity['symbol']} (${min_required_cost:.2f} USDT). Preserving cash buffer.")
                             ExecutionStateTracker.get_instance().transition(
@@ -559,7 +557,12 @@ class OrderManager:
                 order_submit_start_ms = time.time() * 1000.0
 
                 if trading_mode in ["TESTNET", "LIVE"]:
-                    logger.info(f"[STAGE: EXECUTION] Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}, type: {order_routing}) in {trading_mode} mode...")
+                    connector = BinanceConnector.get_instance()
+                    filters = await connector.get_symbol_lot_size_filters(opportunity["symbol"], trading_mode)
+                    prec = filters.get("precision", 4)
+                    position_size = connector.format_quantity_for_symbol(opportunity["symbol"], position_size, prec)
+
+                    logger.info(f"[STAGE: EXECUTION] Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}, precision: {prec}, type: {order_routing}) in {trading_mode} mode...")
                     ExecutionStateTracker.get_instance().transition(
                         symbol=opportunity["symbol"],
                         state=ExecutionState.ORDER_SUBMITTED,
@@ -576,7 +579,7 @@ class OrderManager:
                         "price": price if order_routing == "LIMIT" else None,
                         "mode": trading_mode
                     }
-                    binance_res = await BinanceConnector.get_instance().create_order(
+                    binance_res = await connector.create_order(
                         mode=trading_mode,
                         symbol=opportunity["symbol"],
                         side=opportunity["side"],
@@ -846,6 +849,7 @@ class OrderManager:
                     "binance_order_id": binance_order_id,
                     "confidence": opportunity.get("confidence_score", 0.83),
                     "strategy": opportunity.get("strategy_used", "Volatility Expansion Breakout"),
+                    "tp_stages": opportunity.get("tp_stages", []),
                     "risk_pct": risk_pct,
                     "trading_mode": trading_mode,
                     "scale_ins": 0,

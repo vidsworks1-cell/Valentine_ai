@@ -353,6 +353,27 @@ class MarketIntelligenceEngine(
         if (rankedOps.isNotEmpty()) {
             addThought("Ranked Top Opportunity: ${rankedOps.first().symbol} (${String.format(Locale.US, "%.1f", rankedOps.first().confidence * 100.0)}% Confidence, Strategy: ${rankedOps.first().strategy})")
             
+            // Buffer remaining high-conviction scanner candidates into Opportunity Queue
+            if (rankedOps.size > 1) {
+                for (otherOp in rankedOps.drop(1).take(5)) {
+                    if (otherOp.confidence >= 0.70) {
+                        val symPrice = tickerPrices[otherOp.symbol] ?: (basePrices[otherOp.symbol] ?: 100.0)
+                        val sl = symPrice * (1.0 - otherOp.risk.coerceIn(0.01, 0.05))
+                        val tp = symPrice * (1.0 + otherOp.expectedReward.coerceIn(0.02, 0.10))
+                        com.example.aza.strategy.OpportunityQueueEngine.enqueueOpportunity(
+                            symbol = otherOp.symbol,
+                            side = "BUY",
+                            strategy = otherOp.strategy,
+                            entryPrice = symPrice,
+                            stopLoss = sl,
+                            takeProfit = tp,
+                            confidence = otherOp.confidence,
+                            reason = "Global Scanner Candidate (Ranked #${rankedOps.indexOf(otherOp) + 1})"
+                        )
+                    }
+                }
+            }
+            
             val topOp = rankedOps.first()
             
             val regimeConfidenceThreshold = calculateRegimeAwareConfidenceThreshold(topOp.strategy, topOp.currentRegime)
@@ -415,6 +436,23 @@ class MarketIntelligenceEngine(
                 val safetyGatePassed = regimeConfirmed && strategyCompatible && atrRiskValid && positionSizeValid && portfolioExposureAcceptable && recentPerformanceAcceptable && !hasConflictingLessons && dailyLossGatePassed
                 
                 if (!safetyGatePassed) {
+                    if (!portfolioExposureAcceptable && strategyCompatible && atrRiskValid && positionSizeValid && recentPerformanceAcceptable && dailyLossGatePassed) {
+                        val symPrice = tickerPrices[topOp.symbol] ?: (basePrices[topOp.symbol] ?: 100.0)
+                        val sl = symPrice * (1.0 - topOp.risk.coerceIn(0.01, 0.05))
+                        val tp = symPrice * (1.0 + topOp.expectedReward.coerceIn(0.02, 0.10))
+                        val queued = com.example.aza.strategy.OpportunityQueueEngine.enqueueOpportunity(
+                            symbol = topOp.symbol,
+                            side = "BUY",
+                            strategy = topOp.strategy,
+                            entryPrice = symPrice,
+                            stopLoss = sl,
+                            takeProfit = tp,
+                            confidence = topOp.confidence,
+                            reason = "Portfolio Capacity Limit (${activePositions.count { it.status == "OPEN" }} open positions)"
+                        )
+                        addThought("📥 [OPPORTUNITY QUEUED] ${topOp.symbol} buffered in Opportunity Queue (Rank Score: ${queued.rankScore}). Will execute immediately once existing trade closes.")
+                    }
+
                     addThought("🚨 SAFETY GATE FAILED for ${topOp.symbol}:" +
                         "\n  - Regime Confirmed: $regimeConfirmed" +
                         "\n  - Strict Regime Compatibility Gate (Passed: $strategyCompatible): Strategy '${topOp.strategy}' compatible with '${topOp.currentRegime}'" +

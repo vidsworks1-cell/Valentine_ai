@@ -420,6 +420,83 @@ class BinanceConnector:
             "status_message": status_message
         }
 
+    async def get_exchange_info(self, mode: str) -> Dict[str, Any]:
+        """Fetches /api/v3/exchangeInfo from Binance."""
+        return await self._request("GET", "/api/v3/exchangeInfo", mode, signed=False)
+
+    async def get_symbol_lot_size_filters(self, symbol: str, mode: str = "LIVE") -> Dict[str, Any]:
+        """
+        Dynamically extracts and caches Binance LOT_SIZE and MIN_NOTIONAL filters
+        for any symbol (BTC, ETH, SOL, SUI, INJ, RENDER, LINK, AVAX, TIA, FET, NEAR, etc.).
+        """
+        now = time.time()
+        if not hasattr(self, "_filters_cache"):
+            self._filters_cache = {}
+            self._filters_cache_time = 0.0
+
+        sym_upper = symbol.upper()
+        if sym_upper in self._filters_cache and (now - self._filters_cache_time) < 3600.0:
+            return self._filters_cache[sym_upper]
+
+        try:
+            ex_info = await self.get_exchange_info(mode)
+            symbols_list = ex_info.get("symbols", [])
+            for s in symbols_list:
+                s_name = s.get("symbol", "").upper()
+                step_size = 0.0001
+                min_qty = 0.0001
+                min_notional = 5.0
+                prec = 4
+
+                for f in s.get("filters", []):
+                    f_type = f.get("filterType", "")
+                    if f_type == "LOT_SIZE":
+                        step_size = float(f.get("stepSize", 0.0001))
+                        min_qty = float(f.get("minQty", step_size))
+                        step_str = str(f.get("stepSize", "0.0001")).rstrip("0")
+                        if "." in step_str:
+                            prec = len(step_str.split(".")[1])
+                        else:
+                            prec = 0
+                    elif f_type in ["NOTIONAL", "MIN_NOTIONAL"]:
+                        min_notional = float(f.get("minNotional", f.get("notional", 5.0)))
+
+                self._filters_cache[s_name] = {
+                    "step_size": step_size,
+                    "min_qty": min_qty,
+                    "min_notional": min_notional,
+                    "precision": prec
+                }
+            self._filters_cache_time = now
+            if sym_upper in self._filters_cache:
+                return self._filters_cache[sym_upper]
+        except Exception as e:
+            logger.error(f"Error fetching exchangeInfo filters for {symbol}: {e}")
+
+        # Fallback precision map for common dynamic universe pairs
+        fallback_precisions = {
+            "BTCUSDT": 5, "ETHUSDT": 4, "BNBUSDT": 3, "SOLUSDT": 2,
+            "SUIUSDT": 1, "INJUSDT": 2, "RENDERUSDT": 1, "LINKUSDT": 2,
+            "AVAXUSDT": 2, "TIAUSDT": 1, "FETUSDT": 1, "NEARUSDT": 1,
+            "DOGEUSDT": 0, "PEPEUSDT": 0, "ADAUSDT": 1, "DOTUSDT": 2,
+            "MATICUSDT": 1, "LTCUSDT": 3
+        }
+        p = fallback_precisions.get(sym_upper, 2)
+        res = {
+            "step_size": 10 ** (-p) if p > 0 else 1.0,
+            "min_qty": 10 ** (-p) if p > 0 else 1.0,
+            "min_notional": 5.0,
+            "precision": p
+        }
+        self._filters_cache[sym_upper] = res
+        return res
+
+    def format_quantity_for_symbol(self, symbol: str, quantity: float, precision: int = 4) -> float:
+        """Formats quantity to conform strictly to Binance LOT_SIZE stepSize without rounding up."""
+        import math
+        factor = 10 ** precision
+        return math.floor(quantity * factor) / factor
+
     async def get_wallet_balances(self, mode: str) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """Fetches non-zero asset balances or returns error dictionary."""
         res = await self.get_account_info(mode)

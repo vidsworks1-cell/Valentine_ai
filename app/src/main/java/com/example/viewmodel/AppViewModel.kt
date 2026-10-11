@@ -206,6 +206,11 @@ class AppViewModel(
     val selfEvaluationReport: StateFlow<SelfEvaluationReport?> = marketIntelligenceEngine.selfEvaluationReport
     val learningMatrixCells: StateFlow<List<RegimeSymbolStrategyCell>> = marketIntelligenceEngine.learningMatrixCells
 
+    // Opportunity Queue & Capital Ranking Engine flows
+    val opportunityQueue: StateFlow<List<com.example.aza.strategy.QueuedTradeOpportunity>> = com.example.aza.strategy.OpportunityQueueEngine.queue
+    val totalEnqueuedOpportunities: StateFlow<Int> = com.example.aza.strategy.OpportunityQueueEngine.totalEnqueued
+    val totalPromotedOpportunities: StateFlow<Int> = com.example.aza.strategy.OpportunityQueueEngine.totalPromoted
+
     // --- CONTABO VPS STATEFLOWS ---
     private val _contaboHealthStatus = MutableStateFlow<String>("UNKNOWN")
     val contaboHealthStatus: StateFlow<String> = _contaboHealthStatus.asStateFlow()
@@ -819,7 +824,11 @@ class AppViewModel(
         LuminaSmallAccountScalpingEngine.updateLoopActive(true)
         scalpLoopJob?.cancel()
         scalpLoopJob = viewModelScope.launch {
-            val symbols = listOf("BTCUSDT", "ETHUSDT", "SOLUSDT")
+            val symbols = listOf(
+                "BTCUSDT", "ETHUSDT", "SOLUSDT", "SUIUSDT", "INJUSDT",
+                "RENDERUSDT", "LINKUSDT", "AVAXUSDT", "TIAUSDT", "FETUSDT",
+                "NEARUSDT", "BNBUSDT"
+            )
             var idx = 0
             while (_isScalpLoopActive.value) {
                 val sym = symbols[idx % symbols.size]
@@ -850,10 +859,21 @@ class AppViewModel(
 
                 // 2. Buy Phase
                 _scalpCurrentPhase.value = ScalpingCyclePhase.EXECUTING_BUY
-                val basePrice = when (sym) {
+                val livePrice = com.example.aza.connector.BinanceConnector.fetchMarketPrice(sym).getOrNull()
+                val basePrice = livePrice ?: when (sym) {
                     "BTCUSDT" -> 68250.0
                     "ETHUSDT" -> 3540.0
-                    else -> 142.0
+                    "BNBUSDT" -> 580.0
+                    "SOLUSDT" -> 142.0
+                    "SUIUSDT" -> 1.95
+                    "INJUSDT" -> 19.50
+                    "RENDERUSDT" -> 5.80
+                    "LINKUSDT" -> 11.20
+                    "AVAXUSDT" -> 27.50
+                    "TIAUSDT" -> 4.80
+                    "FETUSDT" -> 1.35
+                    "NEARUSDT" -> 4.90
+                    else -> 10.0
                 }
                 LuminaSmallAccountScalpingEngine.updatePhase(ScalpingCyclePhase.EXECUTING_BUY, sym, basePrice)
                 val notionalUsdt = 11.50
@@ -1905,6 +1925,26 @@ class AppViewModel(
                 )
                 continue
             }
+
+            // 6. Strategy-Adaptive Momentum Stagnation Timeout (Fast Capital Recycling)
+            val strat = pos.strategyName.lowercase(Locale.US)
+            val adaptiveTimeoutMinutes = when {
+                strat.contains("scalp") -> 25.0
+                strat.contains("mean_reversion") || strat.contains("range") || strat.contains("chop") -> 45.0
+                strat.contains("breakout") || strat.contains("squeeze") -> 75.0
+                else -> 120.0
+            }
+            val holdingMinutes = (System.currentTimeMillis() - pos.openedAt) / 60000.0
+            if (holdingMinutes >= adaptiveTimeoutMinutes && Math.abs(gainPct) <= 0.35) {
+                closePositionWithReview(
+                    position = pos,
+                    exitPrice = livePrice,
+                    exitType = "STALE_MOMENTUM_ROTATE",
+                    isOperatorInitiated = false,
+                    operatorAction = "Adaptive Stagnation Timeout (${holdingMinutes.toInt()}m on ${pos.strategyName}). Capital recycled."
+                )
+                continue
+            }
         }
     }
 
@@ -2028,6 +2068,92 @@ class AppViewModel(
             severity = if (netPnl >= 0) "SUCCESS" else "WARNING"
         )
         updateStrategyMetrics(position.strategyName, netPnl)
+
+        // 7. Opportunity Queue & Capital Ranking Engine Re-evaluation
+        evaluateAndPromoteNextQueuedOpportunity(releasedSymbol = position.symbol, releasedUsdt = releasedUsdt)
+    }
+
+    suspend fun evaluateAndPromoteNextQueuedOpportunity(releasedSymbol: String = "", releasedUsdt: Double = 0.0) {
+        val candidate = com.example.aza.strategy.OpportunityQueueEngine.popTopCandidate() ?: return
+        val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
+        if (openPositions.size >= 4) {
+            // Capacity full, re-enqueue
+            com.example.aza.strategy.OpportunityQueueEngine.enqueueOpportunity(
+                symbol = candidate.symbol,
+                side = candidate.side,
+                strategy = candidate.strategy,
+                entryPrice = candidate.entryPrice,
+                stopLoss = candidate.stopLoss,
+                takeProfit = candidate.takeProfit,
+                confidence = candidate.confidence,
+                rvol = candidate.rvol,
+                spreadBps = candidate.spreadBps,
+                reason = "Waiting for open position slot (${openPositions.size} open)"
+            )
+            return
+        }
+
+        val livePrice = BinanceConnector.fetchMarketPrice(candidate.symbol).getOrNull() ?: candidate.entryPrice
+        if (!com.example.aza.strategy.OpportunityQueueEngine.isCandidatePriceFresh(candidate, livePrice)) {
+            _autopilotThoughts.value = _autopilotThoughts.value + 
+                "⏳ [QUEUE DRIFT GUARD] Candidate ${candidate.symbol} price drifted >0.35% (Signal: $${candidate.entryPrice}, Current: $${livePrice}). Discarding stale entry."
+            return
+        }
+
+        _autopilotThoughts.value = _autopilotThoughts.value + 
+            "🚀 [CAPITAL RECYCLED -> QUEUE EXECUTION] Capital freed from $releasedSymbol deployed into Rank #1 candidate: ${candidate.symbol} (Score: ${candidate.rankScore}, Strategy: ${candidate.strategy}). Executing order..."
+
+        val account = repository.getAccountInfoDirect() ?: AccountLinking()
+        val targetCapital = Math.min(account.totalBalance * 0.40, Math.max(6.0, releasedUsdt.coerceAtLeast(6.0)))
+        val precision = BinanceConnector.getSymbolPrecision(candidate.symbol)
+        val rawQty = if (livePrice > 0.0) targetCapital / livePrice else 0.0
+        val safeQty = Math.floor(rawQty * Math.pow(10.0, precision.toDouble())) / Math.pow(10.0, precision.toDouble())
+
+        if (safeQty <= 0.0) return
+
+        try {
+            val orderRes = BinanceConnector.placeOrder(
+                symbol = candidate.symbol,
+                side = "BUY",
+                type = "MARKET",
+                quantity = safeQty
+            )
+            orderRes.onSuccess {
+                android.util.Log.i("AppViewModel", "Queue candidate ${candidate.symbol} BUY executed: ${it.orderId}")
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("AppViewModel", "Queue order execution error: ${e.message}")
+        }
+
+        val now = System.currentTimeMillis()
+        val posEntity = BinancePositionEntity(
+            symbol = candidate.symbol,
+            entryPrice = livePrice,
+            currentPrice = livePrice,
+            amountOwned = safeQty,
+            status = "OPEN",
+            openedAt = now,
+            closedAt = null,
+            realizedPnL = 0.0,
+            stopLossPrice = candidate.stopLoss,
+            takeProfitPrice = candidate.takeProfit,
+            strategyName = candidate.strategy,
+            proposalId = null,
+            missionId = null
+        )
+        repository.insertPosition(posEntity)
+
+        val newBalance = (account.totalBalance - (livePrice * safeQty)).coerceAtLeast(0.0)
+        repository.updateAccountLinking(account.copy(totalBalance = newBalance))
+
+        _autopilotThoughts.value = _autopilotThoughts.value + 
+            "✅ [QUEUE ORDER FILLED] Bought ${String.format(Locale.US, "%.${precision}f", safeQty)} ${candidate.symbol} at $${String.format(Locale.US, "%.2f", livePrice)}. SL: $${String.format(Locale.US, "%.2f", candidate.stopLoss)} | TP: $${String.format(Locale.US, "%.2f", candidate.takeProfit)}."
+
+        triggerPositionAlert(
+            title = "Queue Trade Executed: ${candidate.symbol}",
+            message = "Executed Rank #1 Opportunity ${candidate.symbol} with recycled capital from $releasedSymbol.",
+            severity = "SUCCESS"
+        )
     }
 
     suspend fun updateStrategyMetrics(strategyName: String, finalPnL: Double) {
@@ -2077,13 +2203,7 @@ class AppViewModel(
         operatorAction: String
     ) {
         val sym = position.symbol.uppercase()
-        val precision = when (sym) {
-            "BTCUSDT" -> 5
-            "ETHUSDT" -> 4
-            "BNBUSDT" -> 3
-            "SOLUSDT" -> 2
-            else -> 4
-        }
+        val precision = BinanceConnector.getSymbolPrecision(sym)
         val safeQty = Math.floor(sellQty * Math.pow(10.0, precision.toDouble())) / Math.pow(10.0, precision.toDouble())
         if (safeQty <= 0.0) return
 

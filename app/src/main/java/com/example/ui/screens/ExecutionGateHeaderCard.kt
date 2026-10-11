@@ -20,6 +20,7 @@ import com.example.aza.strategy.ExecutionState
 import com.example.aza.strategy.LuminaOperatingMode
 import com.example.aza.strategy.PendingApprovalTrade
 import com.example.aza.strategy.PendingTradeStatus
+import com.example.aza.strategy.QueuedTradeOpportunity
 import com.example.viewmodel.AppViewModel
 import java.util.Locale
 
@@ -34,6 +35,7 @@ fun ExecutionGateHeaderCard(
     val pendingQueue by viewModel.pendingApprovalQueue.collectAsState()
     val executionStates by viewModel.executionStates.collectAsState()
     val executionVerifications by viewModel.executionVerifications.collectAsState()
+    val opportunityQueue by viewModel.opportunityQueue.collectAsState()
 
     var showUnlockConfirmDialog by remember { mutableStateOf(false) }
     var showModeSelectorDialog by remember { mutableStateOf(false) }
@@ -291,6 +293,81 @@ fun ExecutionGateHeaderCard(
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Execute ${trade.proposalNumber}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // OPPORTUNITY QUEUE & CAPITAL RANKING ENGINE
+            if (opportunityQueue.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("⚡", fontSize = 12.sp)
+                        Text(
+                            "OPPORTUNITY QUEUE & CAPITAL RANKING (${opportunityQueue.size})",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFB300)
+                        )
+                    }
+                    Badge(containerColor = Color(0xFFFFB300).copy(alpha = 0.15f)) {
+                        Text("AUTO-ROTATE ON EXIT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB300))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                opportunityQueue.take(3).forEachIndexed { idx, item ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Color(0xFFFFB300).copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Badge(containerColor = Color(0xFFFFB300)) {
+                                        Text("#${idx + 1}", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 9.sp)
+                                    }
+                                    Text(item.symbol, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text(item.strategy, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text(
+                                    "Entry: $${String.format(java.util.Locale.US, "%.2f", item.entryPrice)} • SL: $${String.format(java.util.Locale.US, "%.2f", item.stopLoss)} • TP: $${String.format(java.util.Locale.US, "%.2f", item.takeProfit)}",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    "Rank: ${String.format(java.util.Locale.US, "%.1f", item.rankScore)}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFFFFB300)
+                                )
+                                Text(
+                                    "${String.format(java.util.Locale.US, "%.1f", item.confidence * 100)}% Conf",
+                                    fontSize = 9.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }

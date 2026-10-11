@@ -460,9 +460,14 @@ class PortfolioGuard:
                         swap_symbol=swap_sym
                     )
                 else:
-                    msg = f"[PORTFOLIO GUARD] Maximum open positions reached ({self.MAX_OPEN_POSITIONS}). Rejection maintained (No stagnant positions qualify for alpha swap)."
+                    msg = f"[PORTFOLIO GUARD] Maximum open positions reached ({self.MAX_OPEN_POSITIONS}). Candidate buffered in Opportunity Queue for next capital release."
                     logger.warning(msg)
                     self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                    try:
+                        from app.trading.opportunity_queue import OpportunityQueueEngine
+                        asyncio.create_task(OpportunityQueueEngine.get_instance().enqueue_opportunity(opportunity, reason=msg))
+                    except Exception as qe:
+                        logger.error(f"Error enqueuing opportunity into OpportunityQueue: {qe}")
                     return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
 
             # 5. Correlation Cluster Limit Check
@@ -470,6 +475,11 @@ class PortfolioGuard:
                 msg = f"[CORRELATION GUARD] Cluster '{sector}' already has {len(same_side_sector_pos)} active {proposed_side} position(s). Limit: {self.MAX_CLUSTER_POSITIONS}."
                 logger.warning(msg)
                 self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                try:
+                    from app.trading.opportunity_queue import OpportunityQueueEngine
+                    asyncio.create_task(OpportunityQueueEngine.get_instance().enqueue_opportunity(opportunity, reason=msg))
+                except Exception as qe:
+                    logger.error(f"Error enqueuing opportunity into OpportunityQueue: {qe}")
                 return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
 
             # 6. Concentration & Total Portfolio Heat Check
