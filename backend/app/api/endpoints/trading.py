@@ -1972,6 +1972,37 @@ async def rebalance_capital_allocation(total_equity: float = 100000.0, current_r
     return CapitalAllocationEngine.get_instance().recalculate_strategy_allocations(total_equity=total_equity, current_regime=current_regime)
 
 # ==========================================
+# Strategy Portfolio Manager APIs
+# ==========================================
+
+@router.get("/strategy-portfolio")
+async def get_strategy_portfolio_summary():
+    """
+    Answers: 'Which strategy deserves my capital today?'
+    Returns real-time statistical edges, expectancies, confidence scores,
+    capital shares, and risk multipliers across strategies.
+    """
+    from app.trading.strategy_portfolio_manager import StrategyPortfolioManager
+    return StrategyPortfolioManager.get_instance().get_portfolio_allocation_report()
+
+@router.post("/strategy-portfolio/rebalance")
+async def rebalance_strategy_portfolio(
+    current_regime: str = "VOLATILE",
+    market_quality_score: float = 80.0,
+    total_equity: float = 100000.0
+):
+    """
+    Rebalances institutional strategy risk budget and capital shares based on
+    statistical edge and current market regime.
+    """
+    from app.trading.strategy_portfolio_manager import StrategyPortfolioManager
+    return StrategyPortfolioManager.get_instance().rebalance_capital(
+        current_regime=current_regime,
+        market_quality_score=market_quality_score,
+        total_equity=total_equity
+    )
+
+# ==========================================
 # Long-Term Portfolio Performance Attribution APIs
 # ==========================================
 
@@ -2304,9 +2335,17 @@ async def verify_trade_claim(symbol: str, trading_mode: str = "LIVE"):
         "position": pos
     }
 
+@router.get("/dust/analytics")
+async def get_dust_analytics():
+    """Returns institutional dust telemetry and recovery statistics."""
+    from app.trading.dust_recovery_engine import DustRecoveryEngine
+    return DustRecoveryEngine.get_instance().get_dust_analytics()
 
-
-
+@router.post("/dust/convert-now")
+async def convert_dust_now(trading_mode: str = "LIVE"):
+    """Manually triggers batch conversion of all accumulated eligible dust balances into BNB."""
+    from app.trading.dust_recovery_engine import DustRecoveryEngine
+    return await DustRecoveryEngine.get_instance().convert_accumulated_dust(trading_mode)
 
 
 

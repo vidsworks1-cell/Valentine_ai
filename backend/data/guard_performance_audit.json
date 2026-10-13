@@ -1,0 +1,81 @@
+{
+  "updated_at": 1791917518.9912443,
+  "guard_tallies": {
+    "MacroGuard": {
+      "total_rejected": 144,
+      "good_reject": 108,
+      "false_reject": 34,
+      "missed_winners": 12,
+      "saved_losers": 108
+    },
+    "MTFGuard": {
+      "total_rejected": 95,
+      "good_reject": 76,
+      "false_reject": 19,
+      "missed_winners": 7,
+      "saved_losers": 76
+    },
+    "PortfolioGuard": {
+      "total_rejected": 68,
+      "good_reject": 48,
+      "false_reject": 20,
+      "missed_winners": 9,
+      "saved_losers": 48
+    },
+    "ConfidenceFilter": {
+      "total_rejected": 115,
+      "good_reject": 92,
+      "false_reject": 23,
+      "missed_winners": 6,
+      "saved_losers": 92
+    },
+    "VolumeLiquidityGuard": {
+      "total_rejected": 82,
+      "good_reject": 69,
+      "false_reject": 13,
+      "missed_winners": 4,
+      "saved_losers": 69
+    },
+    "MarketDataGuard": {
+      "total_rejected": 30,
+      "good_reject": 28,
+      "false_reject": 2,
+      "missed_winners": 0,
+      "saved_losers": 28
+    }
+  },
+  "records": [
+    {
+      "signal_id": "REJ-AVAXUSDT-1791917500598",
+      "symbol": "AVAXUSDT",
+      "side": "BUY",
+      "strategy": "Breakout Momentum",
+      "guard_name": "MacroGuard",
+      "rejection_reason": "Macro risk elevated",
+      "entry_price": 32.5,
+      "stop_loss": 31.2,
+      "take_profit": 35.0,
+      "confidence": 0.82,
+      "timestamp": 1791917500.5988655,
+      "evaluated": false,
+      "classification": "PENDING",
+      "counterfactual_pnl_r": 0.0
+    },
+    {
+      "signal_id": "REJ-AVAXUSDT-1791917518991",
+      "symbol": "AVAXUSDT",
+      "side": "BUY",
+      "strategy": "Breakout Momentum",
+      "guard_name": "MacroGuard",
+      "rejection_reason": "Macro risk elevated",
+      "entry_price": 32.5,
+      "stop_loss": 31.2,
+      "take_profit": 35.0,
+      "confidence": 0.82,
+      "timestamp": 1791917518.9911149,
+      "evaluated": false,
+      "classification": "PENDING",
+      "counterfactual_pnl_r": 0.0
+    }
+  ]
+}

@@ -61,6 +61,23 @@ def _default_rejection_handler(ctx: 'DecisionContext'):
     except Exception as e:
         logger.debug(f"Event handler execution analytics failed: {e}")
 
+    # 4. Module 7: Guard Performance Auditor
+    try:
+        from app.trading.guard_performance_auditor import GuardPerformanceAuditor
+        GuardPerformanceAuditor.get_instance().record_rejection(
+            guard_name=stage or category or "GeneralGuard",
+            symbol=symbol,
+            side=side,
+            strategy=strategy,
+            entry_price=price,
+            stop_loss=0.0,
+            take_profit=0.0,
+            confidence=ctx.adapted_confidence,
+            reason=reason
+        )
+    except Exception as e:
+        logger.debug(f"Event handler guard performance auditor failed: {e}")
+
     # 4. Portfolio Attribution Risk Prevention Event
     try:
         from app.trading.portfolio_attribution import PortfolioAttributionEngine

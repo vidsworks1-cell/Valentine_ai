@@ -1,0 +1,25 @@
+{
+  "trade_id": "TR-9901",
+  "symbol": "BTCUSDT",
+  "side": "BUY",
+  "strategy": "Volatility Expansion",
+  "entry_price": 65000.0,
+  "context_similarity_pct": 78.9,
+  "historical_context_expectancy_r": 1.98,
+  "similarity_confidence_pct": 65.2,
+  "similarity_confidence_tier": "MODERATE",
+  "market_quality_score": 88.0,
+  "breakout_quality_score": 91.0,
+  "strategy_portfolio_share_pct": 48.4,
+  "strategy_expected_expectancy_r": 1.8,
+  "strategy_confidence_score": 82.0,
+  "strategy_allocation_tier": "DOMINANT_EDGE",
+  "meta_conviction_score": 86.0,
+  "ev_rank_str": "#1 of 24",
+  "risk_allocation_pct": 0.02,
+  "primary_risks": [
+    "Minimal structural friction; multi-agent consensus aligned"
+  ],
+  "conviction_tier": "HIGH CONVICTION (Standard Book)",
+  "timestamp": 1791918183.1851647
+}

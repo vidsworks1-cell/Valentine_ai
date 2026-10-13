@@ -1,0 +1,123 @@
+{
+  "updated_at": 1791918183.1773646,
+  "total_equity": 100000.0,
+  "current_regime": "VOLATILE",
+  "market_quality_score": 80.0,
+  "strategies": {
+    "Volatility Expansion": {
+      "expected_expectancy_r": 1.8,
+      "confidence_score": 82.0,
+      "win_rate_pct": 68.0,
+      "recent_trades_count": 28,
+      "profit_factor": 2.35,
+      "preferred_regimes": [
+        "TRENDING",
+        "VOLATILE"
+      ],
+      "active": true
+    },
+    "Breakout Momentum": {
+      "expected_expectancy_r": 0.4,
+      "confidence_score": 79.0,
+      "win_rate_pct": 52.0,
+      "recent_trades_count": 34,
+      "profit_factor": 1.25,
+      "preferred_regimes": [
+        "TRENDING"
+      ],
+      "active": true
+    },
+    "Mean Reversion": {
+      "expected_expectancy_r": -0.2,
+      "confidence_score": 74.0,
+      "win_rate_pct": 41.0,
+      "recent_trades_count": 22,
+      "profit_factor": 0.88,
+      "preferred_regimes": [
+        "RANGING",
+        "COMPRESSED"
+      ],
+      "active": true
+    },
+    "Trend Following": {
+      "expected_expectancy_r": 1.2,
+      "confidence_score": 80.0,
+      "win_rate_pct": 60.0,
+      "recent_trades_count": 30,
+      "profit_factor": 1.85,
+      "preferred_regimes": [
+        "TRENDING"
+      ],
+      "active": true
+    },
+    "Liquidity Sweep": {
+      "expected_expectancy_r": 0.95,
+      "confidence_score": 78.0,
+      "win_rate_pct": 58.0,
+      "recent_trades_count": 25,
+      "profit_factor": 1.62,
+      "preferred_regimes": [
+        "VOLATILE",
+        "RANGING"
+      ],
+      "active": true
+    }
+  },
+  "allocations": {
+    "Volatility Expansion": {
+      "expected_expectancy_r": 1.8,
+      "confidence_score": 82.0,
+      "regime_factor": 1.3,
+      "statistical_edge_score": 1.919,
+      "tier": "DOMINANT_EDGE",
+      "suspension_reason": "",
+      "capital_share_pct": 48.4,
+      "allocated_capital_usd": 48372.7,
+      "risk_multiplier": 1.3
+    },
+    "Breakout Momentum": {
+      "expected_expectancy_r": 0.4,
+      "confidence_score": 79.0,
+      "regime_factor": 0.85,
+      "statistical_edge_score": 0.269,
+      "tier": "RESTRICTED_ALLOCATION",
+      "suspension_reason": "",
+      "capital_share_pct": 6.8,
+      "allocated_capital_usd": 6771.37,
+      "risk_multiplier": 0.6
+    },
+    "Mean Reversion": {
+      "expected_expectancy_r": -0.2,
+      "confidence_score": 74.0,
+      "regime_factor": 0.85,
+      "statistical_edge_score": 0.0,
+      "tier": "DEFENSIVE_SUSPENDED",
+      "suspension_reason": "Negative expected expectancy (-0.20R) in VOLATILE regime; capital suspended.",
+      "capital_share_pct": 0.0,
+      "allocated_capital_usd": 0.0,
+      "risk_multiplier": 0.0
+    },
+    "Trend Following": {
+      "expected_expectancy_r": 1.2,
+      "confidence_score": 80.0,
+      "regime_factor": 0.85,
+      "statistical_edge_score": 0.816,
+      "tier": "HIGH_ALLOCATION",
+      "suspension_reason": "",
+      "capital_share_pct": 20.6,
+      "allocated_capital_usd": 20571.26,
+      "risk_multiplier": 1.1
+    },
+    "Liquidity Sweep": {
+      "expected_expectancy_r": 0.95,
+      "confidence_score": 78.0,
+      "regime_factor": 1.3,
+      "statistical_edge_score": 0.963,
+      "tier": "HIGH_ALLOCATION",
+      "suspension_reason": "",
+      "capital_share_pct": 24.3,
+      "allocated_capital_usd": 24284.67,
+      "risk_multiplier": 1.1
+    }
+  }
+}

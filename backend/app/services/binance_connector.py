@@ -497,6 +497,43 @@ class BinanceConnector:
         factor = 10 ** precision
         return math.floor(quantity * factor) / factor
 
+    async def get_free_asset_balance(self, asset: str, mode: str = "LIVE") -> float:
+        """Queries /api/v3/account to extract the exact live free balance of a specific base asset."""
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "PAPER":
+            mock_acc = await self._mock_request("GET", "/api/v3/account", mode_upper, {})
+            for b in mock_acc.get("balances", []):
+                if b.get("asset", "").upper() == asset.upper():
+                    return float(b.get("free", 0.0))
+            return 0.0
+
+        res = await self.get_account_info(mode_upper)
+        if isinstance(res, dict) and "balances" in res:
+            asset_upper = asset.upper()
+            for b in res.get("balances", []):
+                if b.get("asset", "").upper() == asset_upper:
+                    return float(b.get("free", 0.0))
+        return 0.0
+
+    async def get_dust_convertible_assets(self, mode: str = "LIVE") -> Dict[str, Any]:
+        """Queries /sapi/v1/asset/dust-btc to list all assets eligible for small balance conversion to BNB."""
+        return await self._request("POST", "/sapi/v1/asset/dust-btc", mode, signed=True)
+
+    async def convert_dust_to_bnb(self, assets: List[str], mode: str = "LIVE") -> Dict[str, Any]:
+        """
+        Executes official Binance Dust Conversion /sapi/v1/asset/dust to convert
+        specified small asset balances directly into BNB.
+        """
+        if not assets:
+            return {"error": "NO_ASSETS_PROVIDED", "msg": "No assets specified for dust conversion."}
+
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "PAPER":
+            return await self._mock_request("POST", "/sapi/v1/asset/dust", mode_upper, {"asset": assets})
+
+        params = {"asset": ",".join(a.upper() for a in assets)}
+        return await self._request("POST", "/sapi/v1/asset/dust", mode_upper, params=params, signed=True)
+
     async def get_wallet_balances(self, mode: str) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """Fetches non-zero asset balances or returns error dictionary."""
         res = await self.get_account_info(mode)
@@ -669,5 +706,39 @@ class BinanceConnector:
                     "workingTime": int(time.time() * 1000),
                     "fills": []
                 }
+
+        elif path == "/sapi/v1/asset/dust-btc":
+            return {
+                "details": [
+                    {"asset": "LINK", "assetFullName": "Chainlink", "amountFree": "0.00045000", "toBTC": "0.00000007", "toBNB": "0.00001050"},
+                    {"asset": "SOL", "assetFullName": "Solana", "amountFree": "0.00020000", "toBTC": "0.00000004", "toBNB": "0.00000620"},
+                    {"asset": "SUI", "assetFullName": "Sui", "amountFree": "0.01500000", "toBTC": "0.00000003", "toBNB": "0.00000450"}
+                ],
+                "totalTransferBtc": "0.00000014",
+                "totalTransferBNB": "0.00002120",
+                "dribbletPercentage": "0.02"
+            }
+
+        elif path == "/sapi/v1/asset/dust":
+            raw_assets = params.get("asset", ["LINK", "SOL"])
+            if isinstance(raw_assets, str):
+                assets_conv = [a.strip() for a in raw_assets.split(",") if a.strip()]
+            else:
+                assets_conv = list(raw_assets)
+            now_ms = int(time.time() * 1000)
+            return {
+                "totalServiceCharge": "0.00000042",
+                "totalTransfered": "0.00002078",
+                "transferResult": [
+                    {
+                        "amount": "0.00045000",
+                        "fromAsset": a,
+                        "operateTime": now_ms,
+                        "serviceChargeAmount": "0.00000021",
+                        "tranId": 4815162340 + i,
+                        "transferedAmount": "0.00001029"
+                    } for i, a in enumerate(assets_conv)
+                ]
+            }
 
         return {"error": "MOCK_UNSUPPORTED", "msg": f"Mock endpoint not defined for {path}"}

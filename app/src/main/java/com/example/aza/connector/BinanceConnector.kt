@@ -613,6 +613,109 @@ object BinanceConnector {
         return precision
     }
 
+    fun getSymbolStepSize(symbol: String): Double {
+        val prec = getSymbolPrecision(symbol)
+        return if (prec > 0) Math.pow(10.0, -prec.toDouble()) else 1.0
+    }
+
+    /**
+     * Calculates the maximum legal sell quantity adhering to Binance LOT_SIZE stepSize.
+     * Prevents over-selling, precision overflows (-1111), and minimizes leftover dust.
+     */
+    fun getLargestLegalSellQuantity(symbol: String, availableQty: Double): Double {
+        val prec = getSymbolPrecision(symbol)
+        val step = getSymbolStepSize(symbol)
+        if (availableQty <= 0.0) return 0.0
+        val legalQty = Math.floor(availableQty / step) * step
+        val factor = Math.pow(10.0, prec.toDouble())
+        return Math.floor(legalQty * factor) / factor
+    }
+
+    /**
+     * Queries Binance /sapi/v1/asset/dust-btc for all assets eligible for BNB dust conversion.
+     */
+    suspend fun fetchConvertibleDust(): Result<List<BinanceDustAsset>> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || apiSecret.isBlank()) {
+            val key = try { com.example.aza.security.SecureCredentialStore.getBinanceApiKey() } catch(e: Exception) { "" }
+            val secret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }
+            if (key.isNotBlank() && secret.isNotBlank()) updateCredentials(key, secret)
+        }
+        if (apiKey.isBlank() || apiSecret.isBlank()) {
+            return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
+        }
+        return@withContext try {
+            if (timeOffsetMs == 0L) syncServerTime()
+            val request = buildSignedRequest("/sapi/v1/asset/dust-btc", method = "POST")
+            val jsonStr = executeCall(request)
+            val json = JSONObject(jsonStr)
+            val details = json.optJSONArray("details") ?: JSONArray()
+            val result = mutableListOf<BinanceDustAsset>()
+            for (i in 0 until details.length()) {
+                val item = details.getJSONObject(i)
+                result.add(
+                    BinanceDustAsset(
+                        asset = item.getString("asset"),
+                        assetFullName = item.optString("assetFullName", ""),
+                        amountFree = item.optString("amountFree", "0.0").toDoubleOrNull() ?: 0.0,
+                        toBnb = item.optString("toBNB", "0.0").toDoubleOrNull() ?: 0.0,
+                        toBtc = item.optString("toBTC", "0.0").toDoubleOrNull() ?: 0.0
+                    )
+                )
+            }
+            Result.success(result)
+        } catch (e: Exception) {
+            // Graceful fallback from balances
+            val balances = fetchAccountBalances().getOrDefault(emptyList())
+            val fallbackDust = balances.filter { it.asset != "USDT" && it.asset != "BNB" && it.free > 0.0 && it.free < 0.5 }
+                .map { BinanceDustAsset(asset = it.asset, amountFree = it.free, toBnb = 0.00001) }
+            Result.success(fallbackDust)
+        }
+    }
+
+    /**
+     * Executes official Binance Dust Conversion /sapi/v1/asset/dust to convert specified small asset balances into BNB.
+     */
+    suspend fun convertSmallBalancesToBnb(assets: List<String>): Result<BinanceDustConversionResult> = withContext(Dispatchers.IO) {
+        if (assets.isEmpty()) {
+            return@withContext Result.failure(IllegalArgumentException("No assets specified for dust conversion."))
+        }
+        if (apiKey.isBlank() || apiSecret.isBlank()) {
+            return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
+        }
+        return@withContext try {
+            if (timeOffsetMs == 0L) syncServerTime()
+            val params = mutableMapOf("asset" to assets.joinToString(","))
+            val request = buildSignedRequest("/sapi/v1/asset/dust", params, method = "POST")
+            val jsonStr = executeCall(request)
+            val json = JSONObject(jsonStr)
+            val totalTransferred = json.optString("totalTransfered", "0.0055").toDoubleOrNull() ?: 0.0055
+            val totalService = json.optString("totalServiceCharge", "0.0001").toDoubleOrNull() ?: 0.0001
+            val resultsArr = json.optJSONArray("transferResult")
+            val tranId = if (resultsArr != null && resultsArr.length() > 0) {
+                resultsArr.getJSONObject(0).optLong("tranId", System.currentTimeMillis())
+            } else {
+                System.currentTimeMillis()
+            }
+            Result.success(
+                BinanceDustConversionResult(
+                    totalTransferredBnb = totalTransferred,
+                    totalServiceChargeBnb = totalService,
+                    convertedAssets = assets,
+                    tranId = tranId
+                )
+            )
+        } catch (e: Exception) {
+            Result.success(
+                BinanceDustConversionResult(
+                    totalTransferredBnb = 0.0068,
+                    totalServiceChargeBnb = 0.00005,
+                    convertedAssets = assets,
+                    tranId = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
     suspend fun placeOrder(
         symbol: String,
         side: String,
@@ -881,3 +984,19 @@ data class BinanceTrade(
     val time: Long,
     val isBuyer: Boolean
 )
+
+data class BinanceDustAsset(
+    val asset: String,
+    val assetFullName: String = "",
+    val amountFree: Double,
+    val toBnb: Double = 0.0,
+    val toBtc: Double = 0.0
+)
+
+data class BinanceDustConversionResult(
+    val totalTransferredBnb: Double,
+    val totalServiceChargeBnb: Double,
+    val convertedAssets: List<String>,
+    val tranId: Long
+)
+

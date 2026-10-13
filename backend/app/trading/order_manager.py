@@ -412,6 +412,20 @@ class OrderManager:
                 if pg_decision.is_hedge:
                     opportunity["entry_reason"] = f"[DELTA HEDGE] {opportunity.get('entry_reason', '')}"
 
+                # Module 8: Dynamic Risk Budget Modulation (Market Quality, Expectancy, Streaks)
+                try:
+                    from app.trading.dynamic_risk_budget import DynamicRiskBudgetEngine
+                    drb_res = await DynamicRiskBudgetEngine.get_instance().calculate_dynamic_risk(
+                        symbol=symbol,
+                        base_confidence=float(opportunity.get("confidence_score", 0.78)),
+                        incoming_risk_pct=risk_pct,
+                        strategy=opportunity.get("strategy_used", opportunity.get("strategy", "General"))
+                    )
+                    risk_pct = float(drb_res.get("adapted_risk_pct", risk_pct))
+                    logger.info(f"💰 [DYNAMIC RISK BUDGET] {drb_res.get('rationale')}")
+                except Exception as drb_err:
+                    logger.debug(f"DynamicRiskBudget check skipped: {drb_err}")
+
                 # Dynamic position sizing based on ATR Risk Engine calculation (Portfolio Guard risk_pct is FINAL authority)
                 position_size = RiskEvaluator.calculate_atr_position_size(
                     balance=balance,
@@ -514,6 +528,30 @@ class OrderManager:
                                 side=opportunity["side"],
                                 stage="RISK_SIZING",
                                 reason=f"Available balance (${balance:.2f} USDT) insufficient for minimum Binance Spot notional ($5.00 USDT)",
+                                price=price,
+                                quantity=position_size,
+                                trading_mode=trading_mode
+                            )
+                            return
+
+                # Institutional Pre-BUY Fee Buffer Verification (0.8% fee + slippage buffer)
+                if opportunity["side"].upper() == "BUY":
+                    fee_buffer_mult = 1.008
+                    required_cost_with_fee = (position_size * price) * fee_buffer_mult
+                    if balance < required_cost_with_fee:
+                        max_affordable_notional = balance / fee_buffer_mult
+                        adjusted_qty = math.floor((max_affordable_notional / price) * factor) / float(factor)
+                        if (adjusted_qty * price) >= min_notional_req:
+                            logger.info(f"🛡️ [FEE BUFFER SIZING] Adjusted {opportunity['symbol']} BUY size from {position_size} to {adjusted_qty} to reserve 0.8% fee buffer from balance ${balance:.2f}.")
+                            position_size = adjusted_qty
+                        else:
+                            logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) cannot cover minimum notional (${min_notional_req:.2f}) with 0.8% fee buffer. Order safely rejected.")
+                            ExecutionStateTracker.get_instance().transition(
+                                symbol=opportunity["symbol"],
+                                state=ExecutionState.REJECTED,
+                                side=opportunity["side"],
+                                stage="FEE_BUFFER_CHECK",
+                                reason=f"Available balance (${balance:.2f} USDT) insufficient for minimum trade + 0.8% fee buffer",
                                 price=price,
                                 quantity=position_size,
                                 trading_mode=trading_mode
@@ -813,6 +851,30 @@ class OrderManager:
                     ExperimentFramework.get_instance().evaluate_opportunity_across_experiments(opportunity)
                 except Exception as harm_err:
                     logger.error(f"Failed to record system harmony trace or experiment evaluation: {harm_err}")
+
+                # Module 9: Explainable Institutional Decision Report
+                try:
+                    from app.trading.decision_report import DecisionReportEngine
+                    from app.trading.market_quality import MarketQualityEngine
+                    from app.trading.breakout_quality import BreakoutQualityAnalyzer
+                    from app.ai.contextual_trade_memory import ContextualTradeMemory
+
+                    ctx_res = ContextualTradeMemory.get_instance().query_similar_contexts(opportunity, k=3)
+                    mq_data = MarketQualityEngine.get_instance()._cached_quality or {"market_quality_score": 82.0}
+                    bq_data = BreakoutQualityAnalyzer.get_instance().analyze_breakout_quality(opportunity)
+                    
+                    DecisionReportEngine.get_instance().create_and_store_report(
+                        trade_id=str(trade.id),
+                        opportunity=opportunity,
+                        context_result=ctx_res,
+                        market_quality_data=mq_data,
+                        breakout_quality_data=bq_data,
+                        meta_conviction_score=float(opportunity.get("confidence_score", 0.82)) * 100.0,
+                        ev_rank_str="#1 (Promoted)",
+                        risk_pct=risk_pct
+                    )
+                except Exception as dre_err:
+                    logger.warning(f"Failed to generate Explainable Decision Report: {dre_err}")
 
                 logger.info(f"[STAGE: EXECUTION] SUCCESS. Recorded Trade #{trade.id} ({trade.symbol}) in database.")
                 

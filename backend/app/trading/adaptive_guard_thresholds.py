@@ -75,16 +75,27 @@ class AdaptiveGuardThresholds:
         else:
             effective = base
 
-        # Consult Decision Quality Engine for feedback calibration
+        # Consult Decision Quality Engine & Guard Performance Auditor for feedback calibration
         try:
             from app.trading.decision_quality import DecisionQualityEngine
+            from app.trading.guard_performance_auditor import GuardPerformanceAuditor
             dq = DecisionQualityEngine.get_instance()
             metrics = dq.get_system_decision_metrics()
             false_rejection_rate = metrics.get("system_false_rejection_rate", 0.0)
             false_approval_rate = metrics.get("false_approval_rate", 0.0)
 
+            # Check guard performance auditor precision
+            auditor = GuardPerformanceAuditor.get_instance()
+            prec_report = auditor.get_guard_precision_report()
+            
+            # If MTF Guard has high precision (> 75%), maintain discipline; if false rejection rate is high, calibrate slightly
+            mtf_stat = prec_report.get("MTFGuard", {})
+            if mtf_stat.get("false_rejection_rate_pct", 0.0) > 30.0 and guard_param == "mtf_alignment_pct":
+                effective = max(55.0, effective - 2.5)
+                logger.debug(f"⚙️ [GUARD AUDIT CALIBRATION] Relaxed {guard_param} to {effective} based on auditor data.")
+
             # High false rejection rate -> slightly relax threshold to capture valid trades
-            if false_rejection_rate > 0.25 and guard_param == "mtf_alignment_pct":
+            elif false_rejection_rate > 0.25 and guard_param == "mtf_alignment_pct":
                 effective = max(55.0, effective - 3.0)
                 logger.debug(f"⚙️ [ADAPTIVE THRESHOLD] High false rejection rate ({false_rejection_rate:.2f}). Relaxed {guard_param} to {effective}")
             # High false approval rate -> slightly tighten threshold to protect capital

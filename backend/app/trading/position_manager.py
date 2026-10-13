@@ -312,7 +312,31 @@ class PositionManager:
                                         f"📉 [REGIME DYNAMIC TRAILING] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
                                         f"SL lowered from {old_sl} to {target_sl} (Lowest: {pos.get('lowest_price', entry)}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
                                     )
-                        
+                        # 1b. Module 6: Adaptive Profit Optimization (TP Extension & Dynamic Trajectory)
+                        try:
+                            from app.trading.adaptive_profit_optimizer import AdaptiveProfitOptimizer
+                            apo_decision = AdaptiveProfitOptimizer.get_instance().evaluate_trajectory(
+                                position=pos,
+                                current_price=current_price,
+                                rvol=float(pos.get("rvol", 1.5)),
+                                rsi=float(pos.get("rsi", 55.0)),
+                                momentum_accelerating=True
+                            )
+                            if apo_decision.action == "EXTEND_TP" and apo_decision.new_take_profit:
+                                pos["take_profit"] = apo_decision.new_take_profit
+                                pos["tp_extensions_count"] = int(pos.get("tp_extensions_count", 0)) + 1
+                                if apo_decision.new_trailing_stop:
+                                    pos["trailing_stop"] = apo_decision.new_trailing_stop
+                                    pos["trailing_active"] = True
+                            elif apo_decision.action == "TIGHTEN_TRAIL" and apo_decision.new_trailing_stop:
+                                pos["trailing_stop"] = apo_decision.new_trailing_stop
+                                pos["trailing_active"] = True
+                            elif apo_decision.action == "EARLY_EXIT_HARVEST":
+                                await self._close_position(trade_id, current_price, "EARLY_EXIT_HARVEST")
+                                continue
+                        except Exception as apo_err:
+                            logger.debug(f"AdaptiveProfitOptimizer check failed: {apo_err}")
+
                         # 2. Check Multi-Stage Partial Take Profits
                         stages = pos.get("tp_stages", [])
                         stage_triggered = False
@@ -589,14 +613,30 @@ class PositionManager:
         scheduler = await LayeredSchedulerManager.get_instance()
         trading_mode = scheduler.global_trading_mode
         
-        # If in TESTNET or LIVE, place closing order on Binance
+        # If in TESTNET or LIVE, place closing order on Binance using Smart Exit Engine
         from app.services.binance_connector import BinanceConnector
+        base_asset = symbol.replace("USDT", "")
         if trading_mode in ["TESTNET", "LIVE"]:
             opposite_side = "SELL" if side == "BUY" else "BUY"
             connector = BinanceConnector.get_instance()
             filters = await connector.get_symbol_lot_size_filters(symbol, trading_mode)
             prec = filters.get("precision", 4)
-            close_qty = connector.format_quantity_for_symbol(symbol, size, prec)
+            step_size = float(filters.get("step_size", 10 ** (-prec)))
+            min_qty = float(filters.get("min_qty", step_size))
+
+            # Smart Exit Engine: Query Binance for actual free balance before selling
+            sell_qty = size
+            if opposite_side == "SELL":
+                actual_free = await connector.get_free_asset_balance(base_asset, trading_mode)
+                if actual_free > 0.0:
+                    legal_qty = math.floor(actual_free / step_size) * step_size
+                    if legal_qty >= min_qty:
+                        logger.info(f"🔍 [SMART EXIT ENGINE] Binance reports {actual_free} {base_asset} free. Maximum legal sell qty calculated as {legal_qty} (DB record had {size}).")
+                        sell_qty = legal_qty
+                    else:
+                        logger.warning(f"⚠️ [SMART EXIT ENGINE] Actual free {actual_free} {base_asset} below min_qty {min_qty}. Using internal size {size}.")
+
+            close_qty = connector.format_quantity_for_symbol(symbol, sell_qty, prec)
             logger.info(f"Placing real Binance Spot close order for {symbol} ({opposite_side} qty: {close_qty}, precision: {prec}) in {trading_mode} mode...")
             binance_res = await connector.create_order(
                 mode=trading_mode,
@@ -767,6 +807,50 @@ class PositionManager:
                         asyncio.create_task(OpportunityQueueEngine.get_instance().on_position_closed_event(symbol, pnl))
                     except Exception as qe:
                         logger.warning(f"Failed to notify Opportunity Queue: {qe}")
+
+                    # Notify Dust Recovery Engine to detect residual dust and auto-liquidate/accumulate
+                    try:
+                        from app.trading.dust_recovery_engine import DustRecoveryEngine
+                        asyncio.create_task(DustRecoveryEngine.get_instance().on_trade_completed(
+                            symbol=symbol,
+                            base_asset=base_asset,
+                            exit_price=exit_price,
+                            trading_mode=trading_mode,
+                            trade_size_usdt=exit_price * size
+                        ))
+                    except Exception as dre_err:
+                        logger.warning(f"Failed to notify DustRecoveryEngine: {dre_err}")
+
+                    # Module 1 & 8 & Strategy Portfolio Manager: Record rich snapshot & update allocations
+                    try:
+                        from app.ai.contextual_trade_memory import ContextualTradeMemory
+                        from app.trading.dynamic_risk_budget import DynamicRiskBudgetEngine
+                        from app.trading.strategy_portfolio_manager import StrategyPortfolioManager
+                        initial_risk = float(pos.get("risk_amount", abs(entry - float(pos.get("stop_loss", entry*0.98))) * size))
+                        r_mult = pnl / max(1.0, initial_risk)
+                        strat_name = pos.get("strategy", "Breakout Momentum")
+                        DynamicRiskBudgetEngine.get_instance().record_trade_completion(pnl, r_mult)
+                        StrategyPortfolioManager.get_instance().record_strategy_trade(
+                            strategy_name=strat_name,
+                            realized_r=r_mult,
+                            pnl=pnl
+                        )
+                        ContextualTradeMemory.get_instance().record_completed_trade(
+                            trade_id=str(trade_id),
+                            symbol=symbol,
+                            strategy=strat_name,
+                            regime=pos.get("market_regime", "TRENDING"),
+                            atr=float(pos.get("atr", entry * 0.015)),
+                            entry_price=entry,
+                            pnl=pnl,
+                            exit_reason=outcome_type,
+                            holding_seconds=time_open_sec,
+                            risk_amount=initial_risk,
+                            confidence=float(pos.get("confidence", 0.80)),
+                            macro_score=40.0
+                        )
+                    except Exception as ctm_err:
+                        logger.warning(f"Failed to record in ContextualTradeMemory / DynamicRiskBudgetEngine / StrategyPortfolioManager: {ctm_err}")
                 except Exception as sae:
                     logger.error(f"Failed to trigger post-trade research & adaptation workflows: {sae}")
                 

@@ -1,0 +1,19 @@
+{
+  "trade_id": "VERIFY-001",
+  "symbol": "LINKUSDT",
+  "side": "BUY",
+  "strategy": "Breakout Momentum",
+  "entry_price": 18.5,
+  "context_similarity_pct": 71.4,
+  "historical_context_expectancy_r": 1.69,
+  "market_quality_score": 74.6,
+  "breakout_quality_score": 86.3,
+  "meta_conviction_score": 86.0,
+  "ev_rank_str": "#1 of 24",
+  "risk_allocation_pct": 0.015,
+  "primary_risks": [
+    "Minimal structural friction; multi-agent consensus aligned"
+  ],
+  "conviction_tier": "HIGH CONVICTION (Standard Book)",
+  "timestamp": 1791917519.0066142
+}

@@ -158,6 +158,19 @@ class PortfolioGuard:
                 confidence_score=incoming_conf,
                 confidence_threshold=0.75
             )
+            # Module 7: Guard Performance Auditor
+            from app.trading.guard_performance_auditor import GuardPerformanceAuditor
+            GuardPerformanceAuditor.get_instance().record_rejection(
+                guard_name="PortfolioGuard",
+                symbol=opportunity.get("symbol", "UNKNOWN"),
+                side=opportunity.get("side", "BUY"),
+                strategy=opportunity.get("strategy_used", opportunity.get("strategy", "General")),
+                entry_price=float(opportunity.get("entry_price", opportunity.get("price", 0.0))),
+                stop_loss=float(opportunity.get("stop_loss", 0.0)),
+                take_profit=float(opportunity.get("take_profit", 0.0)),
+                confidence=incoming_conf,
+                reason=msg
+            )
         except Exception as e:
             logger.error(f"Failed to record rejected opportunity in PortfolioGuard: {e}")
 
@@ -428,8 +441,18 @@ class PortfolioGuard:
                     is_hedge=True
                 )
 
-            # 4. Check Maximum Open Positions & Opportunistic Alpha Position Swap
-            if open_count >= self.MAX_OPEN_POSITIONS:
+            # 4. Check Maximum Open Positions (Modulated by Market Quality Engine) & Opportunistic Alpha Position Swap
+            effective_max_open = self.MAX_OPEN_POSITIONS
+            try:
+                from app.trading.market_quality import MarketQualityEngine
+                mq = MarketQualityEngine.get_instance()._cached_quality
+                if mq:
+                    mq_cap = int(mq.get("max_concurrent_cap", self.MAX_OPEN_POSITIONS))
+                    effective_max_open = min(self.MAX_OPEN_POSITIONS, mq_cap)
+            except Exception:
+                pass
+
+            if open_count >= effective_max_open:
                 lowest_pos = None
                 lowest_conviction = 1.0
 

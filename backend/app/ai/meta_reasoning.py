@@ -133,17 +133,26 @@ class MetaReasoningEngine:
             liquidity_score = 72.0
             liq_note = "Adequate orderbook depth with neutral liquidation sweep bias."
 
-        # 3. Score Volume (RVOL & Volume Profile Expansion)
-        volatility_squeeze = candidate_setup.get("squeeze_info", {}).get("squeeze_state", "NORMAL")
-        if volatility_squeeze == "SQUEEZE_FIRING":
-            volume_score = 95.0
-            vol_note = "Squeeze firing with explosive relative volume expansion."
-        elif volatility_squeeze == "SQUEEZE_ACTIVE":
-            volume_score = 68.0
-            vol_note = "Volume compression active; awaiting breakout confirmation."
-        else:
-            volume_score = 78.0
-            vol_note = "Sustained institutional volume flow above 20-period average."
+        # 3. Score Volume & Breakout Quality (RVOL & Breakout Integrity)
+        try:
+            from app.trading.breakout_quality import BreakoutQualityAnalyzer
+            bq_res = BreakoutQualityAnalyzer.get_instance().analyze_breakout_quality(candidate_setup)
+            bq_score = float(bq_res.get("breakout_quality_score", 80.0))
+            candidate_setup["breakout_quality"] = bq_res
+            if not bq_res.get("is_genuine_breakout", True):
+                volume_score = min(58.0, bq_score)
+                vol_note = f"Warning: Elevated fake breakout probability ({bq_res.get('fake_breakout_probability_pct')}%) detected."
+            else:
+                volume_score = max(75.0, bq_score)
+                vol_note = f"Genuine volume expansion verified (Breakout Quality: {bq_score:.0f}/100, Follow-through: {bq_res.get('follow_through_probability_pct')}%.)."
+        except Exception:
+            volatility_squeeze = candidate_setup.get("squeeze_info", {}).get("squeeze_state", "NORMAL")
+            if volatility_squeeze == "SQUEEZE_FIRING":
+                volume_score = 95.0
+                vol_note = "Squeeze firing with explosive relative volume expansion."
+            else:
+                volume_score = 78.0
+                vol_note = "Sustained institutional volume flow above 20-period average."
 
         # 4. Score Momentum (Oscillator Alignment & Impulse Velocity)
         if confidence >= 0.88:
