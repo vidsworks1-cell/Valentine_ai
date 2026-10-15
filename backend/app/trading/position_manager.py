@@ -460,6 +460,7 @@ class PositionManager:
 
                         stale_limit_sec = pos.get("stale_threshold_sec", base_stale_limit_sec)
                         stale_pct_limit = pos.get("stale_price_range_pct", 0.35)
+                        price_change_pct = (abs(current_price - entry) / entry * 100.0) if entry > 0 else 0.0
                         # Hard maximum cap: Exceeding 120m (or 60m for scalp) triggers mandatory exit
                         hard_max_time_sec = 60 * 60 if "scalp" in strat_name else 120 * 60
                         is_hard_max_exceeded = time_open_sec >= hard_max_time_sec
