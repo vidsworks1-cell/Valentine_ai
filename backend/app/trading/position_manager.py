@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+import math
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from app.workers.price_cache import PriceCache
@@ -511,13 +512,24 @@ class PositionManager:
         from app.services.binance_connector import BinanceConnector
         if trading_mode in ["TESTNET", "LIVE"]:
             opposite_side = "SELL" if side == "BUY" else "BUY"
-            logger.info(f"Placing real Binance Spot partial close order for {symbol} ({opposite_side} qty: {close_size}) in {trading_mode} mode...")
-            binance_res = await BinanceConnector.get_instance().create_order(
+            connector = BinanceConnector.get_instance()
+            filters = await connector.get_symbol_lot_size_filters(symbol, trading_mode)
+            prec = filters.get("precision", 4)
+            step_size = float(filters.get("step_size", 10 ** (-prec)))
+            min_qty = float(filters.get("min_qty", step_size))
+
+            legal_close_qty = math.floor(close_size / step_size) * step_size
+            if legal_close_qty < min_qty:
+                legal_close_qty = min_qty
+
+            formatted_close_qty = connector.format_quantity_for_symbol(symbol, legal_close_qty, prec)
+            logger.info(f"Placing real Binance Spot partial close order for {symbol} ({opposite_side} qty: {formatted_close_qty}, prec: {prec}) in {trading_mode} mode...")
+            binance_res = await connector.create_order(
                 mode=trading_mode,
                 symbol=symbol,
                 side=opposite_side,
                 order_type="MARKET",
-                quantity=close_size
+                quantity=formatted_close_qty
             )
             
             if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
