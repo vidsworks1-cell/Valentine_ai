@@ -460,16 +460,20 @@ class PositionManager:
 
                         stale_limit_sec = pos.get("stale_threshold_sec", base_stale_limit_sec)
                         stale_pct_limit = pos.get("stale_price_range_pct", 0.35)
-                        price_change_pct = abs((current_price - entry) / entry) * 100.0 if entry > 0 else 0.0
+                        # Hard maximum cap: Exceeding 120m (or 60m for scalp) triggers mandatory exit
+                        hard_max_time_sec = 60 * 60 if "scalp" in strat_name else 120 * 60
+                        is_hard_max_exceeded = time_open_sec >= hard_max_time_sec
+                        is_stale_stall = (time_open_sec >= stale_limit_sec and price_change_pct <= stale_pct_limit)
 
-                        if time_open_sec >= stale_limit_sec and price_change_pct <= stale_pct_limit:
+                        if is_hard_max_exceeded or is_stale_stall:
                             open_mins = round(time_open_sec / 60.0, 1)
+                            reason_tag = "HARD_TIMEOUT_EXIT" if is_hard_max_exceeded else "STALE_MOMENTUM_ROTATE"
                             logger.warning(
-                                f"⏳ [ADAPTIVE STALE EXIT] Trade {trade_id} {symbol} ({side}, Strategy: {strat_name}): "
-                                f"Stagnant for {open_mins}m with price change of {price_change_pct:.2f}% (<= {stale_pct_limit}%). "
+                                f"⏳ [{reason_tag}] Trade {trade_id} {symbol} ({side}, Strategy: {strat_name}): "
+                                f"Open for {open_mins}m (Hard cap: {hard_max_time_sec/60:.0f}m, Stale threshold: {stale_limit_sec/60:.0f}m). "
                                 f"Exiting position to recycle capital into higher-ranked opportunities."
                             )
-                            await self._close_position(trade_id, current_price, "STALE_MOMENTUM_ROTATE")
+                            await self._close_position(trade_id, current_price, reason_tag)
                             continue
 
                         # 6. Pyramiding Scale-In Evaluation for Winning Trends

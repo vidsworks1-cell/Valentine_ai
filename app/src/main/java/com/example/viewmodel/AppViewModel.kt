@@ -2316,8 +2316,20 @@ class AppViewModel(
             _autopilotThoughts.value = _autopilotThoughts.value + "🚨 [EMERGENCY LIQUIDATION INITIATED] Recovering trapped spot assets (RENDER, INJ, ETH, BNB) into USDT..."
             
             val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
-            val spotBalances = BinanceConnector.fetchAccountBalances().getOrDefault(emptyList())
-            val earnBalances = BinanceConnector.fetchSimpleEarnPositions().getOrDefault(emptyList())
+            val spotBalancesRes = BinanceConnector.fetchAccountBalances()
+            val earnBalancesRes = BinanceConnector.fetchSimpleEarnPositions()
+
+            if (spotBalancesRes.isFailure) {
+                val err = spotBalancesRes.exceptionOrNull()?.message ?: "Unknown error"
+                _autopilotThoughts.value = _autopilotThoughts.value + "⚠️ [BINANCE SPOT SYNC] Balance query returned: $err"
+            }
+            if (earnBalancesRes.isFailure) {
+                val err = earnBalancesRes.exceptionOrNull()?.message ?: "Unknown error"
+                _autopilotThoughts.value = _autopilotThoughts.value + "⚠️ [BINANCE EARN SYNC] Simple Earn query returned: $err"
+            }
+
+            val spotBalances = spotBalancesRes.getOrDefault(emptyList())
+            val earnBalances = earnBalancesRes.getOrDefault(emptyList())
             val allBalances = spotBalances + earnBalances
 
             val targetAssets = (openPositions.map { it.symbol.removeSuffix("USDT") } +
@@ -2348,6 +2360,10 @@ class AppViewModel(
                 if (res.isSuccess) {
                     recoveredCount++
                     _autopilotThoughts.value = _autopilotThoughts.value + "✅ [RECOVERED] $asset: ${res.getOrNull()}"
+                } else {
+                    val err = res.exceptionOrNull()?.message ?: "Unknown error"
+                    _autopilotThoughts.value = _autopilotThoughts.value + "⚠️ [LIQUIDATE BLOCKED] $asset: $err"
+                    android.util.Log.w("PortfolioManager", "Liquidate failed for $asset: $err")
                 }
 
                 // If open position exists in Room DB, mark it closed with review

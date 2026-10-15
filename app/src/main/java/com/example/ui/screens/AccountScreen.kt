@@ -1532,7 +1532,8 @@ fun AccountScreen(
                                     env = selectedEnv,
                                     tradingMode = selectedMode
                                 )
-                                // Immediately update BinanceConnector's dynamic order placement capability state
+                                // Immediately update BinanceConnector credentials and dynamic order placement capability state
+                                com.example.aza.connector.BinanceConnector.updateCredentials(inputApiKey, inputSecretKey)
                                 com.example.aza.connector.BinanceConnector.setOrderPlacementEnabled(selectedMode == "Autonomous Trading")
                                 // Sync back to Database as secure placeholder
                                 viewModel.updateCapabilityCredentials("Binance Capability", inputApiKey, inputSecretKey)

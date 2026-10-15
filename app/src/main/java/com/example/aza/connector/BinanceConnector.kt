@@ -122,6 +122,19 @@ object BinanceConnector {
     }
 
     /**
+     * Ensures credentials are loaded from SecureCredentialStore if currently blank.
+     */
+    fun ensureCredentials() {
+        if (apiKey.isBlank() || apiSecret.isBlank()) {
+            val key = try { com.example.aza.security.SecureCredentialStore.getBinanceApiKey() } catch(e: Exception) { "" }
+            val secret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }
+            if (key.isNotBlank() && secret.isNotBlank()) {
+                updateCredentials(key, secret)
+            }
+        }
+    }
+
+    /**
      * Enable or disable order execution. Disabled by default for Phase 14.1.
      */
     fun setOrderPlacementEnabled(enabled: Boolean) {
@@ -309,13 +322,7 @@ object BinanceConnector {
      * Fetch user's spot account balance information directly from Binance GET /api/v3/account.
      */
     suspend fun fetchAccountBalances(): Result<List<BinanceAssetBalance>> = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank() || apiSecret.isBlank()) {
-            val key = try { com.example.aza.security.SecureCredentialStore.getBinanceApiKey() } catch(e: Exception) { "" }
-            val secret = try { com.example.aza.security.SecureCredentialStore.getBinanceApiSecret() } catch(e: Exception) { "" }
-            if (key.isNotBlank() && secret.isNotBlank()) {
-                updateCredentials(key, secret)
-            }
-        }
+        ensureCredentials()
         if (apiKey.isBlank() || apiSecret.isBlank()) {
             return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
         }
@@ -720,6 +727,7 @@ object BinanceConnector {
      * Queries active holdings in Binance Simple Earn (Flexible / Soft Staking).
      */
     suspend fun fetchSimpleEarnPositions(): Result<List<BinanceAssetBalance>> = withContext(Dispatchers.IO) {
+        ensureCredentials()
         if (apiKey.isBlank() || apiSecret.isBlank()) return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
         return@withContext try {
             if (timeOffsetMs == 0L) syncServerTime()
@@ -748,6 +756,7 @@ object BinanceConnector {
      * Resolves mandatory productId from /sapi/v1/simple-earn/flexible/position first.
      */
     suspend fun redeemFlexibleSimpleEarn(asset: String, amount: Double = 0.0): Result<Boolean> = withContext(Dispatchers.IO) {
+        ensureCredentials()
         if (apiKey.isBlank() || apiSecret.isBlank()) return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
         val cleanAsset = asset.uppercase().removeSuffix("USDT")
         return@withContext try {
@@ -800,6 +809,7 @@ object BinanceConnector {
      * Bypasses the $5.00 MIN_NOTIONAL barrier of the spot order book!
      */
     suspend fun convertAssetToUsdt(fromAsset: String, fromAmount: Double): Result<BinanceConvertResult> = withContext(Dispatchers.IO) {
+        ensureCredentials()
         if (apiKey.isBlank() || apiSecret.isBlank()) return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
         val assetClean = fromAsset.uppercase().removeSuffix("USDT")
         if (assetClean.equals("USDT", ignoreCase = true)) {
@@ -907,6 +917,7 @@ object BinanceConnector {
         timeInForce: String = "GTC",
         clientOrderId: String? = null
     ): Result<BinanceOpenOrder> = withContext(Dispatchers.IO) {
+        ensureCredentials()
         if (apiKey.isBlank() || apiSecret.isBlank()) {
             return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
         }
