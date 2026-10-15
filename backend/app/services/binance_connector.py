@@ -535,11 +535,20 @@ class BinanceConnector:
         return await self._request("POST", "/sapi/v1/asset/dust", mode_upper, params=params, signed=True)
 
     async def redeem_flexible_earn(self, asset: str, mode: str = "LIVE") -> Dict[str, Any]:
-        """Redeems soft-staking / simple earn flexible assets back to Spot."""
+        """Redeems soft-staking / simple earn flexible assets back to Spot using valid productId."""
         mode_upper = (mode or "PAPER").upper()
         if mode_upper == "PAPER":
             return {"success": True, "redeemed": asset}
-        params = {"asset": asset.upper(), "destAccount": "SPOT", "redeemAll": "true"}
+        clean_asset = asset.upper().replace("USDT", "")
+        product_id = f"{clean_asset}001"
+        try:
+            pos_info = await self._request("GET", "/sapi/v1/simple-earn/flexible/position", mode_upper, params={"asset": clean_asset}, signed=True)
+            if isinstance(pos_info, dict) and "rows" in pos_info and len(pos_info["rows"]) > 0:
+                product_id = pos_info["rows"][0].get("productId", product_id)
+        except Exception as e:
+            logger.debug(f"Failed to lookup flexible productId for {clean_asset}: {e}")
+
+        params = {"productId": product_id, "destAccount": "SPOT", "redeemAll": "true"}
         return await self._request("POST", "/sapi/v1/simple-earn/flexible/redeem", mode_upper, params=params, signed=True)
 
     async def convert_asset_to_usdt(self, from_asset: str, amount: float, mode: str = "LIVE") -> Dict[str, Any]:

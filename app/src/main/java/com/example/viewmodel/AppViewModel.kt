@@ -1851,6 +1851,53 @@ class AppViewModel(
     }
 
     suspend fun monitorAndManagePositions() {
+        // Step 0: Auto-reconciliation of live Binance Spot and Simple Earn (Soft Staking) holdings
+        try {
+            val spotBalances = BinanceConnector.fetchAccountBalances().getOrDefault(emptyList())
+            val earnBalances = BinanceConnector.fetchSimpleEarnPositions().getOrDefault(emptyList())
+            val allBalances = (spotBalances + earnBalances)
+                .filter { !it.asset.equals("USDT", ignoreCase = true) && (it.free > 0.00001 || it.locked > 0.00001) }
+
+            if (allBalances.isNotEmpty()) {
+                val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
+                val openSymbols = openPositions.map { it.symbol.removeSuffix("USDT").uppercase() }.toSet()
+
+                for (bal in allBalances) {
+                    val asset = bal.asset.uppercase()
+                    val totalQty = bal.free + bal.locked
+                    if (totalQty <= 0.00001) continue
+
+                    val matchingPos = openPositions.firstOrNull { it.symbol.startsWith(asset, ignoreCase = true) }
+                    val estPrice = BinanceConnector.fetchMarketPrice("${asset}USDT").getOrNull() ?: (matchingPos?.currentPrice ?: 1.0)
+                    val notional = totalQty * estPrice
+
+                    // If untracked in local DB, or known trapped asset (RENDER, INJ, ETH, BNB), or held > 10m
+                    val isUntracked = (matchingPos == null)
+                    val isKnownStuck = listOf("RENDER", "INJ", "ETH", "BNB").contains(asset)
+                    val isStaleInDb = matchingPos != null && (System.currentTimeMillis() - matchingPos.openedAt) >= (10 * 60000L)
+
+                    if (isUntracked || isKnownStuck || isStaleInDb) {
+                        android.util.Log.i("PortfolioManager", "⚡ [AUTO-LIQUIDATE] Redeeming & converting $asset ($totalQty tokens, ~$${String.format(Locale.US, "%.2f", notional)} USDT) to USDT...")
+                        val res = BinanceConnector.smartLiquidateToUsdt(asset, totalQty, estPrice)
+                        if (res.isSuccess) {
+                            _autopilotThoughts.value = _autopilotThoughts.value + "✅ [AUTO-LIQUIDATE SUCCESS] $asset: ${res.getOrNull()}"
+                            if (matchingPos != null) {
+                                closePositionWithReview(
+                                    position = matchingPos,
+                                    exitPrice = estPrice,
+                                    exitType = "AUTO_STRANDED_RECOVERY",
+                                    isOperatorInitiated = false,
+                                    operatorAction = "Auto-recovered stranded asset $asset to USDT"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PortfolioManager", "Error in auto-reconciling stranded exchange assets: ${e.message}")
+        }
+
         val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
         if (openPositions.isEmpty()) return
 
@@ -1866,8 +1913,8 @@ class AppViewModel(
 
             val gainPct = if (pos.entryPrice > 0.0) ((livePrice - pos.entryPrice) / pos.entryPrice) * 100.0 else 0.0
 
-            // 1. Dynamic Breakeven Protection (Move Stop Loss to Entry + 0.1% fee buffer once gain >= 0.50%)
-            if (gainPct >= 0.50 && pos.stopLossPrice < pos.entryPrice * 1.001) {
+            // 1. Dynamic Breakeven Protection (Move Stop Loss to Entry + 0.1% fee buffer once gain >= 0.35%)
+            if (gainPct >= 0.35 && pos.stopLossPrice < pos.entryPrice * 1.001) {
                 val bePrice = pos.entryPrice * 1.001
                 repository.updatePosition(pos.copy(stopLossPrice = bePrice, currentPrice = livePrice))
                 _autopilotThoughts.value = _autopilotThoughts.value + 
@@ -1932,15 +1979,15 @@ class AppViewModel(
             // 6. Multi-Stage Invalidation, Adaptive Stagnation & Hard Max Holding Cap
             val strat = pos.strategyName.lowercase(Locale.US)
             val adaptiveTimeoutMinutes = when {
-                strat.contains("scalp") -> 20.0
-                strat.contains("mean_reversion") || strat.contains("range") || strat.contains("chop") -> 40.0
-                strat.contains("breakout") || strat.contains("squeeze") -> 60.0
-                else -> 90.0
+                strat.contains("scalp") -> 8.0
+                strat.contains("mean_reversion") || strat.contains("range") || strat.contains("chop") -> 15.0
+                strat.contains("breakout") || strat.contains("squeeze") -> 20.0
+                else -> 25.0
             }
             val holdingMinutes = (System.currentTimeMillis() - pos.openedAt) / 60000.0
 
-            // 6a. Early Thesis Invalidation: If holding > 20 mins and in loss > 1.2%, cut loss early rather than holding indefinitely
-            if (holdingMinutes >= 20.0 && gainPct <= -1.2) {
+            // 6a. Early Thesis Invalidation: If holding > 8 mins and in loss > 0.5%, cut loss early rather than holding indefinitely
+            if (holdingMinutes >= 8.0 && gainPct <= -0.5) {
                 closePositionWithReview(
                     position = pos,
                     exitPrice = livePrice,
@@ -1952,7 +1999,7 @@ class AppViewModel(
             }
 
             // 6b. Adaptive Stagnation: If momentum has stalled past strategy limit and gain is below target
-            if (holdingMinutes >= adaptiveTimeoutMinutes && gainPct < 1.0) {
+            if (holdingMinutes >= adaptiveTimeoutMinutes && gainPct < 0.35) {
                 closePositionWithReview(
                     position = pos,
                     exitPrice = livePrice,
@@ -1963,8 +2010,8 @@ class AppViewModel(
                 continue
             }
 
-            // 6c. Hard Maximum Holding Cap (120 minutes max): Never hold intraday crypto positions dead in consolidation for 4+ hours!
-            if (holdingMinutes >= 120.0) {
+            // 6c. Hard Maximum Holding Cap (30 minutes max): Never hold intraday crypto positions dead in consolidation for hours!
+            if (holdingMinutes >= 30.0) {
                 closePositionWithReview(
                     position = pos,
                     exitPrice = livePrice,

@@ -717,26 +717,77 @@ object BinanceConnector {
     }
 
     /**
-     * Redeems assets from Binance Simple Earn (Flexible / Soft Staking) back into Spot account.
+     * Queries active holdings in Binance Simple Earn (Flexible / Soft Staking).
      */
-    suspend fun redeemFlexibleSimpleEarn(asset: String, amount: Double = 0.0): Result<Boolean> = withContext(Dispatchers.IO) {
+    suspend fun fetchSimpleEarnPositions(): Result<List<BinanceAssetBalance>> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank() || apiSecret.isBlank()) return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
         return@withContext try {
             if (timeOffsetMs == 0L) syncServerTime()
+            val request = buildSignedRequest("/sapi/v1/simple-earn/flexible/position", mapOf("size" to "100"))
+            val jsonStr = executeCall(request)
+            val json = JSONObject(jsonStr)
+            val rows = json.optJSONArray("rows") ?: JSONArray()
+            val result = mutableListOf<BinanceAssetBalance>()
+            for (i in 0 until rows.length()) {
+                val row = rows.getJSONObject(i)
+                val asset = row.optString("asset", "")
+                val totalAmount = row.optString("totalAmount", "0.0").toDoubleOrNull() ?: 0.0
+                if (asset.isNotBlank() && totalAmount > 0.0) {
+                    result.add(BinanceAssetBalance(asset = asset, free = 0.0, locked = totalAmount))
+                }
+            }
+            Result.success(result)
+        } catch (e: Exception) {
+            Log.d(TAG, "Simple Earn position fetch error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Redeems assets from Binance Simple Earn (Flexible / Soft Staking) back into Spot account.
+     * Resolves mandatory productId from /sapi/v1/simple-earn/flexible/position first.
+     */
+    suspend fun redeemFlexibleSimpleEarn(asset: String, amount: Double = 0.0): Result<Boolean> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || apiSecret.isBlank()) return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
+        val cleanAsset = asset.uppercase().removeSuffix("USDT")
+        return@withContext try {
+            if (timeOffsetMs == 0L) syncServerTime()
+
+            // Step 1: Discover the mandatory productId and exact locked balance from active subscriptions
+            var productId = "${cleanAsset}001"
+            var lockedAmountStr: String? = null
+            try {
+                val posReq = buildSignedRequest("/sapi/v1/simple-earn/flexible/position", mapOf("asset" to cleanAsset))
+                val posStr = executeCall(posReq)
+                val posJson = JSONObject(posStr)
+                val rows = posJson.optJSONArray("rows")
+                if (rows != null && rows.length() > 0) {
+                    val row = rows.getJSONObject(0)
+                    productId = row.optString("productId", productId)
+                    lockedAmountStr = row.optString("totalAmount", null)
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Could not resolve productId from flexible position for $cleanAsset: ${e.message}")
+            }
+
+            // Step 2: Submit redeem with mandatory productId
             val params = mutableMapOf(
-                "asset" to asset.uppercase(),
-                "destAccount" to "SPOT"
+                "productId" to productId,
+                "destAccount" to "SPOT",
+                "redeemAll" to "true"
             )
             if (amount > 0.0) {
                 params["amount"] = String.format(Locale.US, "%.8f", amount).trimEnd('0').trimEnd('.')
-            } else {
-                params["redeemAll"] = "true"
+                params.remove("redeemAll")
+            } else if (!lockedAmountStr.isNullOrBlank()) {
+                params["amount"] = lockedAmountStr
             }
+
             val request = buildSignedRequest("/sapi/v1/simple-earn/flexible/redeem", params, method = "POST")
             val jsonStr = executeCall(request)
             val json = JSONObject(jsonStr)
             val success = json.optBoolean("success", true)
-            Log.i(TAG, "Simple Earn flexible redeem requested for $asset: success=$success")
+            Log.i(TAG, "✅ Simple Earn flexible redeem executed for $cleanAsset (productId=$productId): success=$success")
             Result.success(success)
         } catch (e: Exception) {
             Log.w(TAG, "Simple Earn flexible redeem for $asset skipped/failed: ${e.message}")
