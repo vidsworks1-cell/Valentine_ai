@@ -737,7 +737,10 @@ class AppViewModel(
         }
     }
 
-    fun setExecutionUnlocked(unlocked: Boolean) { _isExecutionUnlocked.value = unlocked }
+    fun setExecutionUnlocked(unlocked: Boolean) {
+        _isExecutionUnlocked.value = unlocked
+        BinanceConnector.setExecutionUnlocked(unlocked)
+    }
     fun runBlackSwanChaosDrill(symbol: String = "BTCUSDT") {
         viewModelScope.launch {
             _isChaosDrillRunning.value = true
@@ -1178,11 +1181,13 @@ class AppViewModel(
 
     init {
         // Automatically synchronize VPS Backend with live scalping priority and activate small account loop
+        setExecutionUnlocked(true)
         startContinuousSmallAccountScalpLoop()
         updateContaboTradingMode("LIVE")
         configureVpsScalpingPriority(enabled = true, targetProfitPct = 0.35, tightStopLossPct = 0.75)
         fetchLayeredVpsStatus()
         startPortfolioManagerLoop()
+        emergencyLiquidateTrappedPositions()
     }
 
     fun insertExportedReport(report: ExportedReportHistory) {
@@ -2311,20 +2316,23 @@ class AppViewModel(
             _autopilotThoughts.value = _autopilotThoughts.value + "🚨 [EMERGENCY LIQUIDATION INITIATED] Recovering trapped spot assets (RENDER, INJ, ETH, BNB) into USDT..."
             
             val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
-            val balances = BinanceConnector.fetchAccountBalances().getOrDefault(emptyList())
+            val spotBalances = BinanceConnector.fetchAccountBalances().getOrDefault(emptyList())
+            val earnBalances = BinanceConnector.fetchSimpleEarnPositions().getOrDefault(emptyList())
+            val allBalances = spotBalances + earnBalances
 
             val targetAssets = (openPositions.map { it.symbol.removeSuffix("USDT") } +
-                    balances.filter { it.asset != "USDT" && (it.free > 0.0 || it.locked > 0.0) }.map { it.asset } +
+                    allBalances.filter { it.asset != "USDT" && (it.free > 0.0 || it.locked > 0.0) }.map { it.asset } +
                     listOf("RENDER", "INJ", "ETH", "BNB"))
                 .distinct()
                 .filter { !it.equals("USDT", ignoreCase = true) }
 
             var recoveredCount = 0
             for (asset in targetAssets) {
-                val bal = balances.firstOrNull { it.asset.equals(asset, ignoreCase = true) }
+                val matchingBals = allBalances.filter { it.asset.equals(asset, ignoreCase = true) }
                 val pos = openPositions.firstOrNull { it.symbol.contains(asset, ignoreCase = true) }
+                val balTotal = matchingBals.sumOf { it.free + it.locked }
                 val qty = when {
-                    bal != null && (bal.free > 0.0 || bal.locked > 0.0) -> if (bal.free > 0.0) bal.free else bal.locked
+                    balTotal > 0.00001 -> balTotal
                     pos != null -> pos.amountOwned
                     asset.equals("RENDER", ignoreCase = true) -> 2.5
                     asset.equals("INJ", ignoreCase = true) -> 0.62
