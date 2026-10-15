@@ -21,7 +21,14 @@ class CrossAssetCorrelationEngine:
     """
     _instance: Optional['CrossAssetCorrelationEngine'] = None
 
-    DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "SPX_PROXY", "DXY_PROXY"]
+    DEFAULT_SYMBOLS = [
+        "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
+        "ADAUSDT", "DOTUSDT", "MATICUSDT", "AVAXUSDT",
+        "LINKUSDT", "NEARUSDT", "LTCUSDT", "XRPUSDT",
+        "PEPEUSDT", "DOGEUSDT", "RENDERUSDT", "INJUSDT",
+        "SUIUSDT", "FETUSDT", "TIAUSDT",
+        "SPX_PROXY", "DXY_PROXY"
+    ]
 
     def __init__(self):
         self._cached_matrix: Optional[Dict[str, Any]] = None
@@ -46,7 +53,29 @@ class CrossAssetCorrelationEngine:
         for s in syms:
             base_p = cache.get_price(s)
             if not base_p or base_p <= 0:
-                base_p = 92500.0 if "BTC" in s else (3500.0 if "ETH" in s else (180.0 if "SOL" in s else (580.0 if "BNB" in s else (5500.0 if "SPX" in s else 104.5))))
+                base_p = (
+                    92500.0 if "BTC" in s else
+                    3500.0 if "ETH" in s else
+                    180.0 if "SOL" in s else
+                    580.0 if "BNB" in s else
+                    5500.0 if "SPX" in s else
+                    104.5 if "DXY" in s else
+                    27.5 if "AVAX" in s else
+                    11.2 if "LINK" in s else
+                    19.5 if "INJ" in s else
+                    1.95 if "SUI" in s else
+                    5.8 if "RENDER" in s else
+                    1.35 if "FET" in s else
+                    4.8 if "TIA" in s else
+                    4.9 if "NEAR" in s else
+                    75.0 if "LTC" in s else
+                    0.58 if "XRP" in s else
+                    0.38 if "ADA" in s else
+                    5.5 if "DOT" in s else
+                    0.45 if "MATIC" in s else
+                    0.12 if "DOGE" in s else
+                    0.000010 if "PEPE" in s else 10.0
+                )
             
             tally = cache.get_update_tally(s)
             s_int = int(base_p * 10)

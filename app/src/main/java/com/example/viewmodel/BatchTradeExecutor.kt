@@ -31,7 +31,7 @@ object BatchTradeExecutor {
         var peakBalance = currentBal
         var maxDrawdown = 0.0
 
-        val symbols = listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT")
+        val symbols = com.example.aza.strategy.LuminaMultiSymbolUniverseEngine.UNIVERSE_SPECIFICATIONS.map { it.first }
         val strategies = listOf(
             "Breakout Momentum",
             "Volatility Expansion Breakout",
@@ -54,7 +54,20 @@ object BatchTradeExecutor {
                 "SOLUSDT" -> 145.0 + (i % 80) * 0.4
                 "BNBUSDT" -> 585.0 + (i % 60) * 0.3
                 "XRPUSDT" -> 0.58 + (i % 50) * 0.002
-                else -> 0.45 + (i % 40) * 0.001
+                "ADAUSDT" -> 0.38 + (i % 40) * 0.001
+                "AVAXUSDT" -> 27.50 + (i % 40) * 0.1
+                "LINKUSDT" -> 11.20 + (i % 30) * 0.05
+                "NEARUSDT" -> 4.90 + (i % 20) * 0.02
+                "SUIUSDT" -> 1.95 + (i % 20) * 0.01
+                "RENDERUSDT" -> 5.80 + (i % 25) * 0.02
+                "FETUSDT" -> 1.35 + (i % 20) * 0.005
+                "TIAUSDT" -> 4.80 + (i % 20) * 0.02
+                "LTCUSDT" -> 75.0 + (i % 30) * 0.2
+                "DOTUSDT" -> 5.50 + (i % 25) * 0.02
+                "MATICUSDT" -> 0.45 + (i % 30) * 0.001
+                "DOGEUSDT" -> 0.12 + (i % 20) * 0.001
+                "PEPEUSDT" -> 0.000010 + (i % 10) * 0.0000005
+                else -> 10.0 + (i % 40) * 0.05
             }
 
             val winProb = when (strategy) {

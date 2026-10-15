@@ -162,9 +162,16 @@ class AiReasoningEngine:
 
     async def _scan_loop(self):
         cache = await PriceCache.get_instance()
-        core_symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
-        high_alpha_alts = ["SUIUSDT", "INJUSDT", "RENDERUSDT", "LINKUSDT", "AVAXUSDT", "TIAUSDT", "FETUSDT", "NEARUSDT"]
-        dynamic_symbols = list(dict.fromkeys(core_symbols + high_alpha_alts))
+        # Expanded institutional multi-tier symbol universe (Blue-Chips, Major Alts, High-Growth Moonshots)
+        all_universe_symbols = [
+            # Tier 1: Blue-Chips (The 4 Pillars)
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
+            # Tier 2: Popular Major Altcoins
+            "ADAUSDT", "DOTUSDT", "MATICUSDT", "AVAXUSDT", "LINKUSDT", "NEARUSDT", "LTCUSDT", "XRPUSDT",
+            # Tier 3: High-Growth & Moonshot Opportunities
+            "PEPEUSDT", "DOGEUSDT", "RENDERUSDT", "INJUSDT", "SUIUSDT", "FETUSDT", "TIAUSDT"
+        ]
+        dynamic_symbols = list(dict.fromkeys(all_universe_symbols))
         
         while self.running:
             try:
@@ -222,26 +229,35 @@ class AiReasoningEngine:
                         squeeze_info = VolatilitySqueezeDetector.get_instance().detect_squeeze(symbol, price)
                         squeeze_state = squeeze_info["squeeze_state"]
 
-                        # 1. Regime Classification based on relative volatility & trend metric & Squeeze state
+                        # 1. Regime Classification - Prioritizing Volatility Expansion Breakout
                         if squeeze_state == "SQUEEZE_FIRING":
                             market_regime = "VOLATILE"
                             strategy = "Volatility Expansion Breakout"
                         elif squeeze_state == "SQUEEZE_ACTIVE":
-                            market_regime = "RANGING"
-                            strategy = "Mean Reversion"
-                        elif relative_volatility > 0.016:
+                            if squeeze_info.get("compression_score", 0.0) >= 45.0 or squeeze_info.get("rvol", 1.0) >= 1.15:
+                                market_regime = "VOLATILE"
+                                strategy = "Volatility Expansion Breakout"
+                            else:
+                                market_regime = "RANGING"
+                                strategy = "Mean Reversion"
+                        elif relative_volatility > 0.012:
                             market_regime = "VOLATILE"
-                            # Require genuine volume surge for breakout, else default to Breakout Momentum
-                            strategy = "Volatility Expansion Breakout" if squeeze_info.get("rvol", 1.0) >= 1.35 else "Breakout Momentum"
+                            # Prioritize Volatility Expansion Breakout on early organic volume expansion
+                            strategy = "Volatility Expansion Breakout" if squeeze_info.get("rvol", 1.0) >= 1.18 else "Breakout Momentum"
                         elif tally % 3 == 0:
                             market_regime = "TRENDING"
-                            strategy = "Breakout Momentum"
+                            strategy = "Volatility Expansion Breakout" if squeeze_info.get("rvol", 1.0) >= 1.22 else "Breakout Momentum"
                         else:
                             market_regime = "RANGING"
                             strategy = "Mean Reversion"
 
-                        # 2. Dynamic Stop Loss & Multi-Stage Take Profit Placement based on Regime (Adaptive ATR)
-                        if market_regime == "TRENDING":
+                        # 2. Dynamic Stop Loss & Multi-Stage Take Profit Placement (Optimized for VEB Expectancy)
+                        if strategy == "Volatility Expansion Breakout":
+                            # Institutional Optimization: Tight 1.45x ATR SL, 1.50x Stage 1 TP (+BE lock), 3.80x Runner TP (2.62 RRR)
+                            sl_multiplier = 1.45
+                            tp_stage1_mult = 1.50
+                            tp_stage2_mult = 3.80
+                        elif market_regime == "TRENDING":
                             sl_multiplier = 1.5
                             tp_stage1_mult = 1.2  # Stage 1: Partial scale-out + immediate breakeven lock
                             tp_stage2_mult = 3.2  # Stage 2: Uncapped runner target

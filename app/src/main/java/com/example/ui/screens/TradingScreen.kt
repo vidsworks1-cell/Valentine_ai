@@ -1615,7 +1615,7 @@ fun MarketIntelligenceSection(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    val symbols = listOf("BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT")
+                    val symbols = com.example.aza.strategy.LuminaMultiSymbolUniverseEngine.UNIVERSE_SPECIFICATIONS.map { it.first }
                     symbols.forEach { sym ->
                         val symOps = opportunities.filter { it.symbol == sym }
                         val maxConf = symOps.maxOfOrNull { it.confidence } ?: 0.5
@@ -3398,7 +3398,8 @@ fun TradingDiagnosticsDashboard(
                             modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT").forEach { sym ->
+                            val universeSymbols = com.example.aza.strategy.LuminaMultiSymbolUniverseEngine.UNIVERSE_SPECIFICATIONS.map { it.first }
+                            universeSymbols.forEach { sym ->
                                 ChoiceChip(
                                     text = sym,
                                     isSelected = (validationSymbol == sym),
@@ -5520,10 +5521,10 @@ fun TradingDiagnosticsDashboard(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    val symbols = contaboMarketStatus?.cachedSymbols ?: listOf("BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT")
+                                    val symbols = contaboMarketStatus?.cachedSymbols ?: com.example.aza.strategy.LuminaMultiSymbolUniverseEngine.UNIVERSE_SPECIFICATIONS.map { it.first }
                                     symbols.forEach { sym ->
                                         Card(
                                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),

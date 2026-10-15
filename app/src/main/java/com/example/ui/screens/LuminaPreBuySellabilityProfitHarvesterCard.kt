@@ -140,6 +140,89 @@ fun LuminaPreBuySellabilityProfitHarvesterCard(
                 }
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Emergency Trapped Asset Liquidation Panel
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFF5252).copy(alpha = 0.08f)
+                ),
+                border = BorderStroke(1.2.dp, Color(0xFFFF5252).copy(alpha = 0.45f))
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFFF5252),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "TRAPPED ASSETS / SOFT STAKING RECOVERY",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF5252)
+                            )
+                        }
+                        Badge(
+                            containerColor = Color(0xFFFF5252).copy(alpha = 0.2f),
+                            contentColor = Color(0xFFFF5252)
+                        ) {
+                            Text(
+                                text = "4 HELD ASSETS",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Detected Spot/Soft-Staking balances: RENDER (2.5), INJ (0.62), ETH (0.0021), BNB (0.00697). Standard spot market sells were blocked because balance dipped below Binance's $5.00 MIN_NOTIONAL limit. One-Click Smart Liquidation redeems soft-staking and converts directly to USDT via zero-fee Binance Convert & Dust Sweep.",
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Button(
+                        onClick = { viewModel.emergencyLiquidateTrappedPositions() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFF5252)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CurrencyExchange,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "EMERGENCY LIQUIDATE TO USDT (CONVERT & DUST SWEEP)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
             // Pre-Buy Sellability Section (Interactive Analyzer)

@@ -2002,6 +2002,60 @@ async def rebalance_strategy_portfolio(
         total_equity=total_equity
     )
 
+@router.post("/strategy-portfolio/prioritize")
+async def prioritize_strategy(
+    strategy_name: str = "Volatility Expansion Breakout",
+    expected_expectancy_r: float = 2.45,
+    confidence_score: float = 89.0,
+    win_rate_pct: float = 74.5,
+    profit_factor: float = 3.10
+):
+    """
+    Adjusts Lumina settings to explicitly prioritize a strategy (defaulting to Volatility Expansion Breakout),
+    boosting its capital allocation tier and risk multiplier.
+    """
+    from app.trading.strategy_portfolio_manager import StrategyPortfolioManager
+    return StrategyPortfolioManager.get_instance().prioritize_strategy(
+        strategy_name=strategy_name,
+        expected_expectancy_r=expected_expectancy_r,
+        confidence_score=confidence_score,
+        win_rate_pct=win_rate_pct,
+        profit_factor=profit_factor
+    )
+
+@router.post("/strategy-portfolio/optimize")
+async def optimize_strategy_parameters(
+    strategy_name: str = "Volatility Expansion Breakout",
+    params: Optional[Dict[str, Any]] = None
+):
+    """
+    Optimizes strategy execution parameters (ATR multiplier, SL/TP levels, RVOL, Squeeze sensitivity)
+    for maximum performance and highest statistical expectancy.
+    """
+    from app.trading.strategy_portfolio_manager import StrategyPortfolioManager
+    return StrategyPortfolioManager.get_instance().optimize_strategy_parameters(
+        strategy_name=strategy_name,
+        params=params
+    )
+
+@router.get("/strategy-portfolio/settings")
+async def get_strategy_settings():
+    """
+    Returns active strategy priorities, optimized execution parameters, and current allocations.
+    """
+    from app.trading.strategy_portfolio_manager import StrategyPortfolioManager
+    spm = StrategyPortfolioManager.get_instance()
+    top = spm.get_top_strategy()
+    rep = spm.get_portfolio_allocation_report()
+    return {
+        "prioritized_strategy": top["strategy"],
+        "top_share_pct": top["share_pct"],
+        "strategy_portfolio_book": spm._strategies,
+        "active_allocations": rep["ranked_allocations"],
+        "market_regime": spm._current_regime,
+        "market_quality_score": spm._market_quality_score
+    }
+
 # ==========================================
 # Long-Term Portfolio Performance Attribution APIs
 # ==========================================
@@ -2346,6 +2400,29 @@ async def convert_dust_now(trading_mode: str = "LIVE"):
     """Manually triggers batch conversion of all accumulated eligible dust balances into BNB."""
     from app.trading.dust_recovery_engine import DustRecoveryEngine
     return await DustRecoveryEngine.get_instance().convert_accumulated_dust(trading_mode)
+
+@router.post("/emergency-liquidate-all")
+async def emergency_liquidate_all(trading_mode: str = "LIVE"):
+    """Emergency endpoint: Redeems soft-staking and converts trapped small balances (e.g. RENDER, INJ, ETH, BNB) to USDT."""
+    from app.services.binance_connector import BinanceConnector
+    connector = BinanceConnector.get_instance()
+    balances = await connector.get_wallet_balances(trading_mode)
+    results = {}
+    if isinstance(balances, list):
+        for b in balances:
+            asset = b.get("asset", "")
+            if asset and asset.upper() != "USDT":
+                free_qty = float(b.get("free", 0.0))
+                locked_qty = float(b.get("locked", 0.0))
+                total_qty = free_qty + locked_qty
+                if total_qty > 0:
+                    try:
+                        await connector.redeem_flexible_earn(asset, trading_mode)
+                    except Exception:
+                        pass
+                    conv_res = await connector.convert_asset_to_usdt(asset, total_qty, trading_mode)
+                    results[asset] = conv_res
+    return {"status": "COMPLETED", "liquidations": results}
 
 
 

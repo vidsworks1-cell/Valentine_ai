@@ -68,11 +68,11 @@ class VolatilitySqueezeDetector:
         # Relative Volume (RVOL) for breakout confirmation
         rvol = round(1.0 + ((price_int + tally * 2) % 9) * 0.12, 2)
 
-        # Determine Squeeze State
-        if squeeze_ratio < 0.92 or atr_compression_ratio < 0.70:
+        # Determine Squeeze State - Calibrated for high-conviction Volatility Expansion
+        if squeeze_ratio < 0.94 or atr_compression_ratio < 0.72:
             squeeze_state = "SQUEEZE_ACTIVE"
             squeeze_description = "High volatility compression coiling energy. Standby for momentum breakout."
-        elif squeeze_ratio >= 0.92 and squeeze_ratio <= 1.15 and rvol >= 1.25:
+        elif squeeze_ratio >= 0.90 and squeeze_ratio <= 1.20 and rvol >= 1.20:
             squeeze_state = "SQUEEZE_FIRING"
             squeeze_description = "Squeeze release in progress! Volatility expansion & volume surge confirmed."
         else:

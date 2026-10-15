@@ -654,17 +654,39 @@ class PositionManager:
                 
                 if is_dust_or_filter_error or pos["_close_retries"] >= 3:
                     logger.warning(
-                        f"⚠️ BINANCE CLOSE CANNOT EXECUTE ON EXCHANGE ({symbol} qty {size}): {binance_res}. "
-                        f"Finalizing internal position tracking to prevent infinite retry loops."
+                        f"⚠️ Spot market sell blocked for {symbol} ({binance_res.get('msg', 'Filter error')}). "
+                        f"Initiating automatic Simple Earn flexible redemption and Binance Convert to USDT..."
                     )
+                    convert_success = False
+                    try:
+                        # Step 1: Preemptively redeem any Soft Staking / Flexible Simple Earn
+                        await connector.redeem_flexible_simple_earn(base_asset, trading_mode)
+                        await asyncio.sleep(0.5)
+
+                        # Step 2: Attempt zero-fee Binance Convert to USDT (bypasses $5.00 MIN_NOTIONAL)
+                        actual_free_after_redeem = await connector.get_free_asset_balance(base_asset, trading_mode)
+                        amt_to_convert = actual_free_after_redeem if actual_free_after_redeem > 0 else sell_qty
+                        convert_res = await connector.convert_asset_to_usdt(base_asset, amt_to_convert, trading_mode)
+
+                        if isinstance(convert_res, dict) and (convert_res.get("orderStatus") == "SUCCESS" or "quoteId" in convert_res or convert_res.get("status") == "SUCCESS"):
+                            logger.info(f"✅ [SMART CONVERT RECOVERY] Successfully redeemed & liquidated {amt_to_convert} {base_asset} to USDT via Binance Convert API: {convert_res}")
+                            convert_success = True
+                    except Exception as conv_err:
+                        logger.error(f"Binance Convert fallback error for {symbol}: {conv_err}")
+
+                    if not convert_success:
+                        logger.warning(
+                            f"⚠️ BINANCE CLOSE CANNOT EXECUTE ON EXCHANGE ({symbol} qty {size}): {binance_res}. "
+                            f"Finalizing internal position tracking to prevent infinite retry loops."
+                        )
                     try:
                         from app.services.audit_service import AuditService
                         async with AsyncSessionLocal() as db:
                             await AuditService.create_audit_log(db, AuditLogCreate(
-                                level="WARNING",
+                                level="INFO" if convert_success else "WARNING",
                                 category="TRADING",
-                                message=f"Binance close skipped on exchange for {symbol} (dust / unexecutable lot size)",
-                                details=f"Size: {size}. Error: {binance_res}"
+                                message=f"Binance position liquidated to USDT via {'Convert' if convert_success else 'local close'} for {symbol}",
+                                details=f"Size: {size}. Details: {binance_res}"
                             ))
                     except Exception:
                         pass

@@ -255,9 +255,9 @@ object MicroAccountRiskEngine {
         }
 
         // Allocate whole usable ticket in micro mode (e.g. 10.50 - 11.50 USDT out of 13 USDT)
-        // Ensure allocatedUsdt >= 5.00 MIN_NOTIONAL
+        // Ensure allocatedUsdt >= 5.50 USDT (providing a buffer above the $5.00 MIN_NOTIONAL barrier even on downside stops)
         val allocatedUsdt = if (isMicro) {
-            usableCapital.coerceAtLeast(5.00).coerceAtMost(availableFreeUsdt - 0.50)
+            usableCapital.coerceAtLeast(5.50).coerceAtMost(availableFreeUsdt - 0.50)
         } else {
             (usableCapital * 0.40).coerceAtLeast(10.00).coerceAtMost(usableCapital)
         }

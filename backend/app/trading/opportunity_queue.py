@@ -143,10 +143,11 @@ class OpportunityQueueEngine:
             edge_score = float(strat_alloc.get("statistical_edge_score", 0.5))
             strategy_edge_score = min(1.0, max(0.0, edge_score / 2.0))
 
+            is_veb = "volatility expansion" in strategy_name.lower() or strat_alloc.get("is_prioritized", False)
             if tier == "DOMINANT_EDGE":
-                strategy_bonus = 10.0  # Top strategy priority boost
+                strategy_bonus = 15.0 if is_veb else 10.0  # Top strategy priority boost
             elif tier == "HIGH_ALLOCATION":
-                strategy_bonus = 5.0
+                strategy_bonus = 6.0
             elif tier == "DEFENSIVE_SUSPENDED":
                 strategy_bonus = -35.0  # Never prioritize trades from suspended strategies with negative expectancy
         except Exception:

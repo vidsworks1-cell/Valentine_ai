@@ -2,6 +2,7 @@ package com.example.aza.intelligence
 
 import com.example.aza.connector.BinanceCandle
 import com.example.aza.connector.BinanceConnector
+import com.example.aza.strategy.LuminaMultiSymbolUniverseEngine
 import com.example.data.database.*
 import com.example.data.repository.AppRepository
 import kotlinx.coroutines.CoroutineScope
@@ -396,9 +397,9 @@ class MarketIntelligenceEngine(
                 
                 // 5. PHASE 3: PORTFOLIO BETA GUARD (Limit correlated exposure across assets & support delta-neutral pairs)
                 val activePositions = repository.getAllPositionsDirect()
-                val cryptoSymbols = listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT")
-                val isCrypto = cryptoSymbols.contains(topOp.symbol)
-                val activeCryptoPositions = activePositions.filter { it.status == "OPEN" && cryptoSymbols.contains(it.symbol) }
+                val cryptoSymbols = LuminaMultiSymbolUniverseEngine.UNIVERSE_SPECIFICATIONS.map { it.first } + listOf("BTC", "ETH", "SOL", "BNB")
+                val isCrypto = cryptoSymbols.any { topOp.symbol.contains(it, ignoreCase = true) }
+                val activeCryptoPositions = activePositions.filter { it.status == "OPEN" && cryptoSymbols.any { sym -> it.symbol.contains(sym, ignoreCase = true) } }
                 
                 // Check directional exposure:
                 val activeLongCount = activeCryptoPositions.count { it.amountOwned >= 0.0 }
@@ -1792,7 +1793,7 @@ class MarketIntelligenceEngine(
         val account = repository.getAccountInfoDirect()
         val currentBalance = account?.totalBalance ?: 5000.0
 
-        val cryptoSymbols = listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "BTC", "ETH", "SOL", "BNB")
+        val cryptoSymbols = LuminaMultiSymbolUniverseEngine.UNIVERSE_SPECIFICATIONS.map { it.first } + listOf("BTC", "ETH", "SOL", "BNB")
         val isCrypto = cryptoSymbols.any { symbol.contains(it, ignoreCase = true) }
 
         val activeCryptoPositions = activePositions.filter { pos -> pos.status == "OPEN" && cryptoSymbols.any { pos.symbol.contains(it, ignoreCase = true) } }

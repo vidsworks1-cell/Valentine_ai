@@ -5,6 +5,17 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
 
+// Complete institutional multi-tier symbol universe for Lumina strategies
+val ALL_LUMINA_UNIVERSE_MARKETS = listOf(
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
+    "ADAUSDT", "DOTUSDT", "MATICUSDT", "AVAXUSDT",
+    "LINKUSDT", "NEARUSDT", "LTCUSDT", "XRPUSDT",
+    "PEPEUSDT", "DOGEUSDT", "RENDERUSDT", "INJUSDT",
+    "SUIUSDT", "FETUSDT", "TIAUSDT",
+    "BTC", "ETH", "SOL", "BNB", "ADA", "DOT", "MATIC", "AVAX", "LINK", "NEAR", "LTC", "XRP", "PEPE", "DOGE", "RENDER", "INJ", "SUI", "FET", "TIA",
+    "NVDA", "AAPL"
+)
+
 // Helper functions for indicators
 object StrategyIndicators {
     fun calculateSMA(prices: List<Double>, period: Int): Double {
@@ -81,7 +92,7 @@ class TrendFollowingStrategy(
     override val name = "Trend Following"
     override val version = "1.1.0"
     override val description = "Follows strong market momentum using fast short-term (12) and confirmation (4) moving average crossovers with RSI confirmation."
-    override val supportedMarkets = listOf("BTC", "ETH", "SOL", "AAPL", "NVDA")
+    override val supportedMarkets = ALL_LUMINA_UNIVERSE_MARKETS
     override val riskProfile = "Conservative"
     override val timeframe = "4H"
     override val requiredIndicators = listOf("EMA (12, 4)", "RSI (14)")
@@ -192,7 +203,7 @@ class BreakoutStrategy(
     override val name = "Breakout"
     override val version = "1.4.0"
     override val description = "Captures high-probability trend breakouts confirmed by volume, volatility expansion, and momentum rate-of-change filter."
-    override val supportedMarkets = listOf("BTC", "ETH", "SOL", "NVDA", "AAPL")
+    override val supportedMarkets = ALL_LUMINA_UNIVERSE_MARKETS
     override val riskProfile = "Aggressive"
     override val timeframe = "1H"
     override val requiredIndicators = listOf("Bollinger Bands", "RSI (14)", "ATR (14)", "Donchian Channels", "Rate of Change (ROC)")
@@ -414,7 +425,7 @@ class MeanReversionStrategy(
         params["oversoldThreshold"]?.let { oversoldThreshold = it }
         params["overboughtThreshold"]?.let { overboughtThreshold = it }
     }
-    override val supportedMarkets = listOf("ETH", "BNB", "SOL", "AAPL", "NVDA") // BTC blacklisted for Mean Reversion due to poor reward-to-risk asymmetry (5x larger loss than win)
+    override val supportedMarkets = ALL_LUMINA_UNIVERSE_MARKETS.filter { !it.startsWith("BTC") } // BTC blacklisted for Mean Reversion due to poor reward-to-risk asymmetry (5x larger loss than win)
     override val riskProfile = "Conservative"
     override val timeframe = "30M"
     override val requiredIndicators = listOf("RSI (14)", "Bollinger Bands (20, 2.0)", "ADX (14)", "ATR (14)")
@@ -766,7 +777,7 @@ class LiquiditySweepStrategy(
     override val name = "Liquidity Sweep"
     override val version = "1.0.0"
     override val description = "Identifies key liquidity sweeps below support levels followed by immediate institutional absorption and reversal."
-    override val supportedMarkets = listOf("BTC", "ETH", "SOL")
+    override val supportedMarkets = ALL_LUMINA_UNIVERSE_MARKETS
     override val riskProfile = "Moderate"
     override val timeframe = "15M"
     override val requiredIndicators = listOf("Swing Lows", "RSI (14)", "ATR (14)")
@@ -884,7 +895,7 @@ class LiquiditySweepStrategy(
 
 class VolatilityExpansionBreakoutStrategy(
     var period: Int = 20,
-    var atrMultiplier: Double = 1.8
+    var atrMultiplier: Double = 1.65
 ) : TradingStrategy {
     override val name = "Volatility Expansion Breakout"
     override val version = "2.0.0-adaptive"
@@ -944,7 +955,7 @@ class VolatilityExpansionBreakoutStrategy(
         defaultProfile.updateFromParamMap(params)
     }
 
-    override val supportedMarkets = listOf("BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "BTC", "ETH", "SOL", "BNB", "NVDA", "AAPL")
+    override val supportedMarkets = ALL_LUMINA_UNIVERSE_MARKETS
     override val riskProfile = "Aggressive"
     override val timeframe = "1H"
     override val requiredIndicators = listOf("Bollinger Bands (20, 2.0)", "ATR (14)", "ADX (14)", "Donchian Channels", "Volume Moving Average (20)")
@@ -1190,7 +1201,7 @@ class MeanReversionGridStrategy(
         params["adxTrendCeiling"]?.let { adxTrendCeiling = it }
     }
 
-    override val supportedMarkets = listOf("BTC", "ETH", "SOL", "BNB", "AAPL", "NVDA")
+    override val supportedMarkets = ALL_LUMINA_UNIVERSE_MARKETS
     override val riskProfile = "Conservative"
     override val timeframe = "15M/30M"
     override val requiredIndicators = listOf("Bollinger Bands (20, 2.0)", "RSI (14)", "ADX (14)", "ATR (14)")

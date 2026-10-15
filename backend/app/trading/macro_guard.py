@@ -32,10 +32,16 @@ class SystemicMacroGuardEngine:
         self.recent_trim_events: List[Dict[str, Any]] = []
         self.last_evaluated_at: Optional[str] = None
         
-        # Price history buffer for correlation calculations
-        self._price_history: Dict[str, List[float]] = {
-            "BTCUSDT": [], "ETHUSDT": [], "SOLUSDT": [], "BNBUSDT": []
-        }
+        self.monitored_universe: List[str] = [
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
+            "ADAUSDT", "DOTUSDT", "MATICUSDT", "AVAXUSDT",
+            "LINKUSDT", "NEARUSDT", "LTCUSDT", "XRPUSDT",
+            "PEPEUSDT", "DOGEUSDT", "RENDERUSDT", "INJUSDT",
+            "SUIUSDT", "FETUSDT", "TIAUSDT"
+        ]
+        
+        # Price history buffer for correlation calculations across entire universe
+        self._price_history: Dict[str, List[float]] = {sym: [] for sym in self.monitored_universe}
         self.max_history_len: int = 30
 
     @classmethod
@@ -46,10 +52,11 @@ class SystemicMacroGuardEngine:
 
     def update_price(self, symbol: str, price: float):
         """Updates rolling price history for correlation matrix calculation."""
-        if symbol in self._price_history:
-            self._price_history[symbol].append(price)
-            if len(self._price_history[symbol]) > self.max_history_len:
-                self._price_history[symbol].pop(0)
+        if symbol not in self._price_history:
+            self._price_history[symbol] = []
+        self._price_history[symbol].append(price)
+        if len(self._price_history[symbol]) > self.max_history_len:
+            self._price_history[symbol].pop(0)
 
     def calculate_correlation(self, asset_a: str, asset_b: str) -> float:
         """Calculates Pearson correlation coefficient between two assets."""
@@ -59,7 +66,25 @@ class SystemicMacroGuardEngine:
         min_len = min(len(hist_a), len(hist_b))
         if min_len < 5:
             # Default realistic baseline correlation if history is accumulating
-            baselines = {("BTCUSDT", "ETHUSDT"): 0.88, ("BTCUSDT", "SOLUSDT"): 0.82, ("BTCUSDT", "BNBUSDT"): 0.79}
+            baselines = {
+                ("BTCUSDT", "ETHUSDT"): 0.88,
+                ("BTCUSDT", "SOLUSDT"): 0.82,
+                ("BTCUSDT", "BNBUSDT"): 0.79,
+                ("BTCUSDT", "ADAUSDT"): 0.78,
+                ("BTCUSDT", "AVAXUSDT"): 0.81,
+                ("BTCUSDT", "LINKUSDT"): 0.77,
+                ("BTCUSDT", "NEARUSDT"): 0.79,
+                ("BTCUSDT", "SUIUSDT"): 0.74,
+                ("BTCUSDT", "DOTUSDT"): 0.76,
+                ("BTCUSDT", "LTCUSDT"): 0.75,
+                ("BTCUSDT", "DOGEUSDT"): 0.70,
+                ("BTCUSDT", "PEPEUSDT"): 0.68,
+                ("BTCUSDT", "INJUSDT"): 0.76,
+                ("BTCUSDT", "RENDERUSDT"): 0.77,
+                ("BTCUSDT", "FETUSDT"): 0.75,
+                ("BTCUSDT", "TIAUSDT"): 0.73,
+                ("BTCUSDT", "XRPUSDT"): 0.72,
+            }
             key = (asset_a, asset_b) if (asset_a, asset_b) in baselines else (asset_b, asset_a)
             return baselines.get(key, 0.75)
 
@@ -84,21 +109,21 @@ class SystemicMacroGuardEngine:
         now_str = datetime.now(timezone.utc).isoformat()
         self.last_evaluated_at = now_str
 
-        # Fetch current prices from PriceCache
+        # Fetch current prices from PriceCache across all universe assets
         prices = {}
-        for sym in ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]:
-            px = PriceCache.get_price(sym) or (65000.0 if sym == "BTCUSDT" else 3500.0 if sym == "ETHUSDT" else 150.0 if sym == "SOLUSDT" else 580.0)
+        for sym in self.monitored_universe:
+            default_p = 65000.0 if "BTC" in sym else (3500.0 if "ETH" in sym else (150.0 if "SOL" in sym else (580.0 if "BNB" in sym else 10.0)))
+            px = PriceCache.get_price(sym) or default_p
             prices[sym] = px
             self.update_price(sym, px)
 
-        # Compute cross-correlation matrix against BTC
-        correlations = {
-            "ETHUSDT": self.calculate_correlation("BTCUSDT", "ETHUSDT"),
-            "SOLUSDT": self.calculate_correlation("BTCUSDT", "SOLUSDT"),
-            "BNBUSDT": self.calculate_correlation("BTCUSDT", "BNBUSDT")
-        }
+        # Compute cross-correlation matrix against BTC for all universe assets
+        correlations = {}
+        for sym in self.monitored_universe:
+            if sym != "BTCUSDT":
+                correlations[sym] = self.calculate_correlation("BTCUSDT", sym)
 
-        avg_correlation = sum(correlations.values()) / len(correlations)
+        avg_correlation = sum(correlations.values()) / max(1, len(correlations))
 
         # Detect Lead Asset (BTC) short-term impulse drop
         btc_hist = self._price_history.get("BTCUSDT", [])

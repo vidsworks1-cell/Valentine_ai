@@ -534,6 +534,30 @@ class BinanceConnector:
         params = {"asset": ",".join(a.upper() for a in assets)}
         return await self._request("POST", "/sapi/v1/asset/dust", mode_upper, params=params, signed=True)
 
+    async def redeem_flexible_earn(self, asset: str, mode: str = "LIVE") -> Dict[str, Any]:
+        """Redeems soft-staking / simple earn flexible assets back to Spot."""
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "PAPER":
+            return {"success": True, "redeemed": asset}
+        params = {"asset": asset.upper(), "destAccount": "SPOT", "redeemAll": "true"}
+        return await self._request("POST", "/sapi/v1/simple-earn/flexible/redeem", mode_upper, params=params, signed=True)
+
+    async def convert_asset_to_usdt(self, from_asset: str, amount: float, mode: str = "LIVE") -> Dict[str, Any]:
+        """Converts any asset balance directly to USDT via official Binance Convert API (no MIN_NOTIONAL barrier)."""
+        mode_upper = (mode or "PAPER").upper()
+        clean = from_asset.upper().replace("USDT", "")
+        if mode_upper == "PAPER":
+            return {"status": "SUCCESS", "fromAsset": clean, "toAsset": "USDT", "fromAmount": amount}
+        quote = await self._request("POST", "/sapi/v1/convert/getQuote", mode_upper, params={
+            "fromAsset": clean,
+            "toAsset": "USDT",
+            "fromAmount": str(amount)
+        }, signed=True)
+        if isinstance(quote, dict) and "quoteId" in quote:
+            qid = quote["quoteId"]
+            return await self._request("POST", "/sapi/v1/convert/acceptQuote", mode_upper, params={"quoteId": qid}, signed=True)
+        return quote
+
     async def get_wallet_balances(self, mode: str) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """Fetches non-zero asset balances or returns error dictionary."""
         res = await self.get_account_info(mode)

@@ -74,7 +74,13 @@ class MarketQualityEngine:
             # 3. Liquidity & Spread Conditions (across benchmark assets)
             from app.workers.price_cache import PriceCache
             cache = await PriceCache.get_instance()
-            benchmarks = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "LINKUSDT"]
+            benchmarks = [
+                "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
+                "ADAUSDT", "DOTUSDT", "MATICUSDT", "AVAXUSDT",
+                "LINKUSDT", "NEARUSDT", "LTCUSDT", "XRPUSDT",
+                "PEPEUSDT", "DOGEUSDT", "RENDERUSDT", "INJUSDT",
+                "SUIUSDT", "FETUSDT", "TIAUSDT"
+            ]
             spread_samples = []
             for sym in benchmarks:
                 px = cache.get_price(sym)

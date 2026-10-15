@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,7 +32,7 @@ fun LuminaAdvancedMlRiskCard(
     val riskReport by viewModel.adaptiveRiskReport.collectAsState()
 
     var selectedSymbol by remember { mutableStateOf("BTCUSDT") }
-    val symbols = listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "LTCUSDT")
+    val symbols = com.example.aza.strategy.LuminaMultiSymbolUniverseEngine.UNIVERSE_SPECIFICATIONS.map { it.first }
 
     var showXaiDetails by remember { mutableStateOf(true) }
     var showRiskDetails by remember { mutableStateOf(true) }
@@ -91,7 +93,7 @@ fun LuminaAdvancedMlRiskCard(
 
             // Market Symbol Selector Chips
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 symbols.forEach { sym ->

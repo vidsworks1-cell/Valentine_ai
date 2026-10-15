@@ -103,7 +103,7 @@ object BinanceConnector {
         _cooldownExpirationTime.value = System.currentTimeMillis() + (seconds * 1000)
     }
 
-    private val _isOrderPlacementEnabled = MutableStateFlow(false)
+    private val _isOrderPlacementEnabled = MutableStateFlow(true)
     val isOrderPlacementEnabled = _isOrderPlacementEnabled.asStateFlow()
 
     /**
@@ -716,6 +716,137 @@ object BinanceConnector {
         }
     }
 
+    /**
+     * Redeems assets from Binance Simple Earn (Flexible / Soft Staking) back into Spot account.
+     */
+    suspend fun redeemFlexibleSimpleEarn(asset: String, amount: Double = 0.0): Result<Boolean> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || apiSecret.isBlank()) return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
+        return@withContext try {
+            if (timeOffsetMs == 0L) syncServerTime()
+            val params = mutableMapOf(
+                "asset" to asset.uppercase(),
+                "destAccount" to "SPOT"
+            )
+            if (amount > 0.0) {
+                params["amount"] = String.format(Locale.US, "%.8f", amount).trimEnd('0').trimEnd('.')
+            } else {
+                params["redeemAll"] = "true"
+            }
+            val request = buildSignedRequest("/sapi/v1/simple-earn/flexible/redeem", params, method = "POST")
+            val jsonStr = executeCall(request)
+            val json = JSONObject(jsonStr)
+            val success = json.optBoolean("success", true)
+            Log.i(TAG, "Simple Earn flexible redeem requested for $asset: success=$success")
+            Result.success(success)
+        } catch (e: Exception) {
+            Log.w(TAG, "Simple Earn flexible redeem for $asset skipped/failed: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Converts any asset directly into USDT via official Binance Convert API (/sapi/v1/convert).
+     * Bypasses the $5.00 MIN_NOTIONAL barrier of the spot order book!
+     */
+    suspend fun convertAssetToUsdt(fromAsset: String, fromAmount: Double): Result<BinanceConvertResult> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || apiSecret.isBlank()) return@withContext Result.failure(IllegalStateException("Binance API Keys not configured."))
+        val assetClean = fromAsset.uppercase().removeSuffix("USDT")
+        if (assetClean.equals("USDT", ignoreCase = true)) {
+            return@withContext Result.failure(IllegalArgumentException("Cannot convert USDT to USDT."))
+        }
+        return@withContext try {
+            if (timeOffsetMs == 0L) syncServerTime()
+            val stepDecimals = getSymbolPrecision(assetClean + "USDT")
+            val formattedAmt = String.format(Locale.US, "%.${stepDecimals}f", fromAmount)
+
+            // Step 1: Request Quote
+            val quoteParams = mapOf(
+                "fromAsset" to assetClean,
+                "toAsset" to "USDT",
+                "fromAmount" to formattedAmt
+            )
+            val quoteReq = buildSignedRequest("/sapi/v1/convert/getQuote", quoteParams, method = "POST")
+            val quoteStr = executeCall(quoteReq)
+            val quoteJson = JSONObject(quoteStr)
+            val quoteId = quoteJson.getString("quoteId")
+            val toAmount = quoteJson.optString("toAmount", "0.0").toDoubleOrNull() ?: 0.0
+
+            // Step 2: Accept Quote to Execute Instant Zero-Fee Conversion
+            val acceptParams = mapOf("quoteId" to quoteId)
+            val acceptReq = buildSignedRequest("/sapi/v1/convert/acceptQuote", acceptParams, method = "POST")
+            val acceptStr = executeCall(acceptReq)
+            val acceptJson = JSONObject(acceptStr)
+            val orderId = acceptJson.optString("orderId", quoteId)
+            val orderStatus = acceptJson.optString("orderStatus", "SUCCESS")
+
+            Log.i(TAG, "✅ Binance Convert executed for $formattedAmt $assetClean -> $toAmount USDT (orderId=$orderId, status=$orderStatus)")
+            Result.success(
+                BinanceConvertResult(
+                    quoteId = quoteId,
+                    orderId = orderId,
+                    fromAsset = assetClean,
+                    toAsset = "USDT",
+                    fromAmount = fromAmount,
+                    toAmount = toAmount,
+                    orderStatus = orderStatus
+                )
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Binance Convert failed for $fromAsset ($fromAmount): ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Smart institutional liquidation:
+     * 1. Unlocks/redeems flexible simple earn if locked.
+     * 2. Attempts spot MARKET SELL order.
+     * 3. If blocked by MIN_NOTIONAL (<$5.00) or error -1013/-2010, falls back to Binance Convert.
+     * 4. If Convert fails, falls back to Small Asset / Dust-to-BNB conversion.
+     */
+    suspend fun smartLiquidateToUsdt(asset: String, amount: Double, estimatedPrice: Double): Result<String> = withContext(Dispatchers.IO) {
+        val cleanAsset = asset.uppercase().removeSuffix("USDT")
+        val symbol = "${cleanAsset}USDT"
+        
+        // Step 1: Preemptively redeem any Soft Staking / Flexible Earn balance
+        try {
+            redeemFlexibleSimpleEarn(cleanAsset, amount)
+        } catch (e: Exception) {
+            Log.d(TAG, "Flexible earn pre-redeem notice: ${e.message}")
+        }
+
+        val notionalEst = amount * estimatedPrice
+        // If notional is safely >= $5.10, try standard Spot Market Sell first
+        if (notionalEst >= 5.10) {
+            val spotRes = placeOrder(
+                symbol = symbol,
+                side = "SELL",
+                type = "MARKET",
+                quantity = amount
+            )
+            if (spotRes.isSuccess) {
+                return@withContext Result.success("Executed Spot MARKET SELL for $amount $cleanAsset (~$${String.format(Locale.US, "%.2f", notionalEst)} USDT)")
+            }
+            Log.w(TAG, "Spot sell rejected (${spotRes.exceptionOrNull()?.message}). Escalating to Binance Convert.")
+        }
+
+        // Step 2: Try Binance Convert (Zero fee, no $5.00 MIN_NOTIONAL barrier)
+        val convertRes = convertAssetToUsdt(cleanAsset, amount)
+        if (convertRes.isSuccess) {
+            val conv = convertRes.getOrThrow()
+            return@withContext Result.success("Liquidated via Binance Convert: ${conv.fromAmount} $cleanAsset -> ${String.format(Locale.US, "%.2f", conv.toAmount)} USDT")
+        }
+
+        // Step 3: Sweep to BNB via Dust Conversion
+        val dustRes = convertSmallBalancesToBnb(listOf(cleanAsset))
+        if (dustRes.isSuccess) {
+            val d = dustRes.getOrThrow()
+            return@withContext Result.success("Swept small balance into BNB via Dust Conversion: ${d.totalTransferredBnb} BNB credited.")
+        }
+
+        return@withContext Result.failure(IllegalStateException("All liquidation routes exhausted for $cleanAsset ($amount tokens)."))
+    }
+
     suspend fun placeOrder(
         symbol: String,
         side: String,
@@ -998,5 +1129,15 @@ data class BinanceDustConversionResult(
     val totalServiceChargeBnb: Double,
     val convertedAssets: List<String>,
     val tranId: Long
+)
+
+data class BinanceConvertResult(
+    val quoteId: String,
+    val orderId: String,
+    val fromAsset: String,
+    val toAsset: String,
+    val fromAmount: Double,
+    val toAmount: Double,
+    val orderStatus: String
 )
 

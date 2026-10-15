@@ -586,13 +586,13 @@ class AppViewModel(
     private val _institutionalRiskStatus = MutableStateFlow<InstitutionalRiskStatusResponse?>(null)
     val institutionalRiskStatus: StateFlow<InstitutionalRiskStatusResponse?> = _institutionalRiskStatus.asStateFlow()
 
-    private val _isAutoProfitSellOnBinanceEnabled = MutableStateFlow(false)
+    private val _isAutoProfitSellOnBinanceEnabled = MutableStateFlow(true)
     val isAutoProfitSellOnBinanceEnabled: StateFlow<Boolean> = _isAutoProfitSellOnBinanceEnabled.asStateFlow()
 
     private val _lastBinanceProfitHarvestEvent = MutableStateFlow<String?>(null)
     val lastBinanceProfitHarvestEvent: StateFlow<String?> = _lastBinanceProfitHarvestEvent.asStateFlow()
 
-    private val _customProfitHarvestThresholdPct = MutableStateFlow(5.0)
+    private val _customProfitHarvestThresholdPct = MutableStateFlow(0.50)
     val customProfitHarvestThresholdPct: StateFlow<Double> = _customProfitHarvestThresholdPct.asStateFlow()
 
     private val _lastBinanceRealitySyncTime = MutableStateFlow(0L)
@@ -824,11 +824,7 @@ class AppViewModel(
         LuminaSmallAccountScalpingEngine.updateLoopActive(true)
         scalpLoopJob?.cancel()
         scalpLoopJob = viewModelScope.launch {
-            val symbols = listOf(
-                "BTCUSDT", "ETHUSDT", "SOLUSDT", "SUIUSDT", "INJUSDT",
-                "RENDERUSDT", "LINKUSDT", "AVAXUSDT", "TIAUSDT", "FETUSDT",
-                "NEARUSDT", "BNBUSDT"
-            )
+            val symbols = LuminaMultiSymbolUniverseEngine.UNIVERSE_SPECIFICATIONS.map { it.first }
             var idx = 0
             while (_isScalpLoopActive.value) {
                 val sym = symbols[idx % symbols.size]
@@ -873,6 +869,13 @@ class AppViewModel(
                     "TIAUSDT" -> 4.80
                     "FETUSDT" -> 1.35
                     "NEARUSDT" -> 4.90
+                    "LTCUSDT" -> 75.00
+                    "XRPUSDT" -> 0.58
+                    "ADAUSDT" -> 0.38
+                    "DOTUSDT" -> 5.50
+                    "MATICUSDT" -> 0.45
+                    "DOGEUSDT" -> 0.12
+                    "PEPEUSDT" -> 0.000010
                     else -> 10.0
                 }
                 LuminaSmallAccountScalpingEngine.updatePhase(ScalpingCyclePhase.EXECUTING_BUY, sym, basePrice)
@@ -1926,22 +1929,48 @@ class AppViewModel(
                 continue
             }
 
-            // 6. Strategy-Adaptive Momentum Stagnation Timeout (Fast Capital Recycling)
+            // 6. Multi-Stage Invalidation, Adaptive Stagnation & Hard Max Holding Cap
             val strat = pos.strategyName.lowercase(Locale.US)
             val adaptiveTimeoutMinutes = when {
-                strat.contains("scalp") -> 25.0
-                strat.contains("mean_reversion") || strat.contains("range") || strat.contains("chop") -> 45.0
-                strat.contains("breakout") || strat.contains("squeeze") -> 75.0
-                else -> 120.0
+                strat.contains("scalp") -> 20.0
+                strat.contains("mean_reversion") || strat.contains("range") || strat.contains("chop") -> 40.0
+                strat.contains("breakout") || strat.contains("squeeze") -> 60.0
+                else -> 90.0
             }
             val holdingMinutes = (System.currentTimeMillis() - pos.openedAt) / 60000.0
-            if (holdingMinutes >= adaptiveTimeoutMinutes && Math.abs(gainPct) <= 0.35) {
+
+            // 6a. Early Thesis Invalidation: If holding > 20 mins and in loss > 1.2%, cut loss early rather than holding indefinitely
+            if (holdingMinutes >= 20.0 && gainPct <= -1.2) {
+                closePositionWithReview(
+                    position = pos,
+                    exitPrice = livePrice,
+                    exitType = "THESIS_INVALIDATION",
+                    isOperatorInitiated = false,
+                    operatorAction = "Early Thesis Invalidation (${holdingMinutes.toInt()}m holding, ${String.format(Locale.US, "%.2f", gainPct)}% loss). Cutting loss early."
+                )
+                continue
+            }
+
+            // 6b. Adaptive Stagnation: If momentum has stalled past strategy limit and gain is below target
+            if (holdingMinutes >= adaptiveTimeoutMinutes && gainPct < 1.0) {
                 closePositionWithReview(
                     position = pos,
                     exitPrice = livePrice,
                     exitType = "STALE_MOMENTUM_ROTATE",
                     isOperatorInitiated = false,
                     operatorAction = "Adaptive Stagnation Timeout (${holdingMinutes.toInt()}m on ${pos.strategyName}). Capital recycled."
+                )
+                continue
+            }
+
+            // 6c. Hard Maximum Holding Cap (120 minutes max): Never hold intraday crypto positions dead in consolidation for 4+ hours!
+            if (holdingMinutes >= 120.0) {
+                closePositionWithReview(
+                    position = pos,
+                    exitPrice = livePrice,
+                    exitType = "MAX_HOLDING_CAP_EXIT",
+                    isOperatorInitiated = false,
+                    operatorAction = "Max Duration Cap Exceeded (${holdingMinutes.toInt()}m). Liquidating to free position slots."
                 )
                 continue
             }
@@ -2208,19 +2237,82 @@ class AppViewModel(
         if (safeQty <= 0.0) return
 
         try {
-            val orderRes = BinanceConnector.placeOrder(
-                symbol = sym,
-                side = "SELL",
-                type = "MARKET",
-                quantity = safeQty
+            val smartRes = BinanceConnector.smartLiquidateToUsdt(
+                asset = sym,
+                amount = safeQty,
+                estimatedPrice = exitPrice
             )
-            orderRes.onSuccess { order ->
-                android.util.Log.i("AppViewModel", "Binance SELL order executed for $sym: orderId=${order.orderId}, executedQty=${order.executedQty}")
+            smartRes.onSuccess { outcome ->
+                android.util.Log.i("AppViewModel", "Binance Liquidation succeeded for $sym: $outcome")
+                _autopilotThoughts.value = _autopilotThoughts.value + "💱 [EXCHANGE LIQUIDATION] $sym: $outcome."
             }.onFailure { err ->
-                android.util.Log.w("AppViewModel", "Binance SELL order dispatched (fallback/paper active): ${err.message}")
+                android.util.Log.w("AppViewModel", "Binance Liquidation fallback active: ${err.message}")
             }
         } catch (e: Exception) {
             android.util.Log.e("AppViewModel", "Failed to place exchange sell order for $sym: ${e.message}")
+        }
+    }
+
+    /**
+     * Emergency One-Click Recovery & Liquidation:
+     * Scans spot and flexible earn accounts for trapped small positions (e.g. RENDER, INJ, ETH, BNB),
+     * redeems any soft staking/earn lock, liquidates to USDT via Binance Convert / Dust Sweep,
+     * updates Room database positions to CLOSED, and returns all capital to USDT.
+     */
+    fun emergencyLiquidateTrappedPositions() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _autopilotThoughts.value = _autopilotThoughts.value + "🚨 [EMERGENCY LIQUIDATION INITIATED] Recovering trapped spot assets (RENDER, INJ, ETH, BNB) into USDT..."
+            
+            val openPositions = repository.getAllPositionsDirect().filter { it.status == "OPEN" }
+            val balances = BinanceConnector.fetchAccountBalances().getOrDefault(emptyList())
+
+            val targetAssets = (openPositions.map { it.symbol.removeSuffix("USDT") } +
+                    balances.filter { it.asset != "USDT" && (it.free > 0.0 || it.locked > 0.0) }.map { it.asset } +
+                    listOf("RENDER", "INJ", "ETH", "BNB"))
+                .distinct()
+                .filter { !it.equals("USDT", ignoreCase = true) }
+
+            var recoveredCount = 0
+            for (asset in targetAssets) {
+                val bal = balances.firstOrNull { it.asset.equals(asset, ignoreCase = true) }
+                val pos = openPositions.firstOrNull { it.symbol.contains(asset, ignoreCase = true) }
+                val qty = when {
+                    bal != null && (bal.free > 0.0 || bal.locked > 0.0) -> if (bal.free > 0.0) bal.free else bal.locked
+                    pos != null -> pos.amountOwned
+                    asset.equals("RENDER", ignoreCase = true) -> 2.5
+                    asset.equals("INJ", ignoreCase = true) -> 0.62
+                    asset.equals("ETH", ignoreCase = true) -> 0.0021
+                    asset.equals("BNB", ignoreCase = true) -> 0.00697
+                    else -> 0.0
+                }
+
+                if (qty <= 0.0) continue
+
+                val estPrice = BinanceConnector.fetchMarketPrice("${asset}USDT").getOrNull() ?: (pos?.currentPrice ?: 1.0)
+                val res = BinanceConnector.smartLiquidateToUsdt(asset, qty, estPrice)
+                if (res.isSuccess) {
+                    recoveredCount++
+                    _autopilotThoughts.value = _autopilotThoughts.value + "✅ [RECOVERED] $asset: ${res.getOrNull()}"
+                }
+
+                // If open position exists in Room DB, mark it closed with review
+                if (pos != null) {
+                    closePositionWithReview(
+                        position = pos,
+                        exitPrice = estPrice,
+                        exitType = "EMERGENCY_RECOVERY_LIQUIDATE",
+                        isOperatorInitiated = true,
+                        operatorAction = "Emergency recovery of trapped position via Convert/Dust sweep"
+                    )
+                }
+            }
+
+            fetchLiveBinanceBalances()
+            val msg = if (recoveredCount > 0)
+                "Recovered $recoveredCount trapped assets into USDT! Capital returned to liquid balance."
+                else "Emergency liquidation cycle completed. Wallet balances synchronized."
+            triggerPositionAlert(title = "Emergency Recovery", message = msg, severity = "SUCCESS")
+            _autopilotThoughts.value = _autopilotThoughts.value + "🎯 [EMERGENCY RECOVERY DONE] $msg"
         }
     }
 

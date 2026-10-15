@@ -328,23 +328,23 @@ object VolatilityBreakoutProfiles {
      */
     fun createBTCProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
         symbol = "BTCUSDT",
-        atrMultiplier = 1.65,
+        atrMultiplier = 1.60,
         breakoutConfirmationBars = 2,
-        volumeThreshold = 1.35,
+        volumeThreshold = 1.30,
         squeezeThreshold = 0.035,
         stopLossMultiplier = 1.05,
-        takeProfitMultiplier = 3.20,
-        trailingStopActivationR = 0.65,
-        trailingStopDistanceMult = 0.75,
-        confidenceBonus = 0.08,
+        takeProfitMultiplier = 3.40,
+        trailingStopActivationR = 0.60,
+        trailingStopDistanceMult = 0.70,
+        confidenceBonus = 0.10,
         cooldownDurationSeconds = 120L,
         regimePenalties = mapOf(
             "RANGING" to -0.15,
             "CHOP" to -0.18,
             "LOW_VOLATILITY" to -0.08,
-            "TRENDING" to 0.06,
-            "VOLATILITY_EXPANSION" to 0.08,
-            "HIGH_VOLATILITY_TRENDING" to 0.10
+            "TRENDING" to 0.08,
+            "VOLATILITY_EXPANSION" to 0.10,
+            "HIGH_VOLATILITY_TRENDING" to 0.12
         ),
         period = 20
     )
@@ -355,25 +355,55 @@ object VolatilityBreakoutProfiles {
      * - Squeeze threshold 0.044 calibrated to localized compression patterns and medium alt-cap baseline volatility.
      * - 2-bar breakout confirmation to filter out liquidity wick fakeouts.
      * - Dynamic ATR expansion (1.48x in trends, 1.58x neutral, 1.70x in ranges).
-     * - Adaptive trailing stop activation (0.70R–0.80R based on ADX / trend strength) with 0.85x ATR trail distance.
-     * - 1.20x SL and 3.00x TP multiplier.
+     * - Adaptive trailing stop activation (0.70R) with 0.80x ATR trail distance.
+     * - 1.15x SL and 3.30x TP multiplier (optimized for 2.86 RRR).
      */
     fun createETHProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
         symbol = "ETHUSDT",
-        atrMultiplier = 1.80,
+        atrMultiplier = 1.70,
         breakoutConfirmationBars = 2,
-        volumeThreshold = 1.35,
+        volumeThreshold = 1.30,
         squeezeThreshold = 0.044,
-        stopLossMultiplier = 1.20,
-        takeProfitMultiplier = 3.00,
-        trailingStopActivationR = 0.75,
-        trailingStopDistanceMult = 0.85,
-        confidenceBonus = 0.04,
+        stopLossMultiplier = 1.15,
+        takeProfitMultiplier = 3.30,
+        trailingStopActivationR = 0.70,
+        trailingStopDistanceMult = 0.80,
+        confidenceBonus = 0.06,
         cooldownDurationSeconds = 120L,
         regimePenalties = mapOf(
             "RANGING" to -0.12,
             "CHOP" to -0.15,
             "LOW_VOLATILITY" to -0.08,
+            "TRENDING" to 0.06,
+            "VOLATILITY_EXPANSION" to 0.08,
+            "HIGH_VOLATILITY_TRENDING" to 0.10
+        ),
+        period = 20
+    )
+
+    /**
+     * BNBUSDT Profile:
+     * - Binance Coin has exchange token micro-structure, sudden volume shifts, and extended consolidations.
+     * - Squeeze threshold 0.052 with higher volume threshold (1.35x) to verify organic momentum.
+     * - 2-bar confirmation with 150s cooldown to guard against sharp mean-reversion counter-spikes.
+     * - 1.25x SL with regime-adaptive TP (up to 3.00R in trending).
+     */
+    fun createBNBProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "BNBUSDT",
+        atrMultiplier = 1.65,
+        breakoutConfirmationBars = 2,
+        volumeThreshold = 1.35,
+        squeezeThreshold = 0.052,
+        stopLossMultiplier = 1.25,
+        takeProfitMultiplier = 3.00,
+        trailingStopActivationR = 0.75,
+        trailingStopDistanceMult = 0.90,
+        confidenceBonus = 0.05,
+        cooldownDurationSeconds = 150L,
+        regimePenalties = mapOf(
+            "RANGING" to -0.14,
+            "CHOP" to -0.18,
+            "LOW_VOLATILITY" to -0.10,
             "TRENDING" to 0.05,
             "VOLATILITY_EXPANSION" to 0.07,
             "HIGH_VOLATILITY_TRENDING" to 0.08
@@ -382,62 +412,32 @@ object VolatilityBreakoutProfiles {
     )
 
     /**
-     * BNBUSDT Profile:
-     * - Binance Coin has exchange token micro-structure, sudden volume shifts, and extended consolidations.
-     * - Squeeze threshold 0.052 with higher volume threshold (1.40x) to verify organic momentum.
-     * - 2-bar confirmation with 180s cooldown to guard against sharp mean-reversion counter-spikes.
-     * - 1.30x SL with regime-adaptive TP (2.20R in ranging to 3.00R in trending).
-     */
-    fun createBNBProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
-        symbol = "BNBUSDT",
-        atrMultiplier = 1.70,
-        breakoutConfirmationBars = 2,
-        volumeThreshold = 1.40,
-        squeezeThreshold = 0.052,
-        stopLossMultiplier = 1.30,
-        takeProfitMultiplier = 2.80,
-        trailingStopActivationR = 0.80,
-        trailingStopDistanceMult = 0.95,
-        confidenceBonus = 0.03,
-        cooldownDurationSeconds = 180L,
-        regimePenalties = mapOf(
-            "RANGING" to -0.14,
-            "CHOP" to -0.18,
-            "LOW_VOLATILITY" to -0.10,
-            "TRENDING" to 0.04,
-            "VOLATILITY_EXPANSION" to 0.05,
-            "HIGH_VOLATILITY_TRENDING" to 0.06
-        ),
-        period = 20
-    )
-
-    /**
      * SOLUSDT Profile:
      * - Solana is a high-beta, high-volatility momentum leader with wide price amplitude.
-     * - Squeeze threshold 0.065 and higher ATR multiplier (2.20x) to accommodate aggressive range expansion.
-     * - Fast 1-bar execution with generous 3.60x TP reward multiplier.
-     * - Adaptive SL (1.35x ATR on high-conviction setups with aggressive 0.85x ratchet; 1.50x ATR on normal setups).
-     * - High conviction bonus (+0.08) in trending expansion regimes with responsive 90s cooldown.
+     * - Squeeze threshold 0.065 and higher ATR multiplier (2.10x) to accommodate aggressive range expansion.
+     * - Fast 1-bar execution with generous 3.80x TP reward multiplier (optimized for max expansion run).
+     * - Adaptive SL (1.40x ATR with aggressive 0.80x ratchet).
+     * - High conviction bonus (+0.10) in trending expansion regimes with responsive 90s cooldown.
      */
     fun createSOLProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
         symbol = "SOLUSDT",
-        atrMultiplier = 2.20,
+        atrMultiplier = 2.10,
         breakoutConfirmationBars = 1,
-        volumeThreshold = 1.60,
+        volumeThreshold = 1.50,
         squeezeThreshold = 0.065,
-        stopLossMultiplier = 1.50,
-        takeProfitMultiplier = 3.60,
-        trailingStopActivationR = 0.95,
-        trailingStopDistanceMult = 1.10,
-        confidenceBonus = 0.08,
+        stopLossMultiplier = 1.40,
+        takeProfitMultiplier = 3.80,
+        trailingStopActivationR = 0.85,
+        trailingStopDistanceMult = 0.95,
+        confidenceBonus = 0.10,
         cooldownDurationSeconds = 90L,
         regimePenalties = mapOf(
             "RANGING" to -0.16,
             "CHOP" to -0.20,
             "LOW_VOLATILITY" to -0.12,
-            "TRENDING" to 0.08,
-            "VOLATILITY_EXPANSION" to 0.10,
-            "HIGH_VOLATILITY_TRENDING" to 0.12
+            "TRENDING" to 0.10,
+            "VOLATILITY_EXPANSION" to 0.12,
+            "HIGH_VOLATILITY_TRENDING" to 0.14
         ),
         period = 20
     )
@@ -445,32 +445,255 @@ object VolatilityBreakoutProfiles {
     /**
      * LTCUSDT Profile:
      * - Litecoin features established mean-reverting liquidity channels, long accumulation bases, and lower intraday beta.
-     * - Squeeze threshold 0.042 with volume threshold 1.30x.
+     * - Squeeze threshold 0.042 with volume threshold 1.25x.
      * - 2-bar breakout confirmation to reject wick fakeouts.
-     * - 1.15x SL baseline with regime-adaptive TP (2.10R in ranging to 2.80R in trending channel).
-     * - Adaptive trailing activation (0.55R to 0.75R) with 0.70x ATR trail distance and +0.08R to +0.12R breakeven lock.
-     * - Dynamic ATR expansion (1.45x trend, 1.55x neutral, 1.65x range).
+     * - 1.10x SL baseline with regime-adaptive TP (up to 2.85R in trending channel).
+     * - Adaptive trailing activation (0.60R) with 0.65x ATR trail distance.
      */
     fun createLTCProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
         symbol = "LTCUSDT",
-        atrMultiplier = 1.65,
+        atrMultiplier = 1.60,
         breakoutConfirmationBars = 2,
-        volumeThreshold = 1.30,
+        volumeThreshold = 1.25,
         squeezeThreshold = 0.042,
-        stopLossMultiplier = 1.15,
-        takeProfitMultiplier = 2.60,
-        trailingStopActivationR = 0.65,
-        trailingStopDistanceMult = 0.70,
-        confidenceBonus = 0.02,
+        stopLossMultiplier = 1.10,
+        takeProfitMultiplier = 2.85,
+        trailingStopActivationR = 0.60,
+        trailingStopDistanceMult = 0.65,
+        confidenceBonus = 0.04,
         cooldownDurationSeconds = 120L,
         regimePenalties = mapOf(
             "RANGING" to -0.08,
             "CHOP" to -0.12,
             "LOW_VOLATILITY" to -0.05,
-            "TRENDING" to 0.05,
-            "VOLATILITY_EXPANSION" to 0.06,
-            "HIGH_VOLATILITY_TRENDING" to 0.07
+            "TRENDING" to 0.06,
+            "VOLATILITY_EXPANSION" to 0.07,
+            "HIGH_VOLATILITY_TRENDING" to 0.08
         ),
+        period = 20
+    )
+
+    fun createADAProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "ADAUSDT",
+        atrMultiplier = 1.70,
+        breakoutConfirmationBars = 2,
+        volumeThreshold = 1.30,
+        squeezeThreshold = 0.046,
+        stopLossMultiplier = 1.20,
+        takeProfitMultiplier = 3.20,
+        trailingStopActivationR = 0.70,
+        trailingStopDistanceMult = 0.85,
+        confidenceBonus = 0.05,
+        cooldownDurationSeconds = 120L,
+        regimePenalties = mapOf("RANGING" to -0.12, "CHOP" to -0.15, "TRENDING" to 0.06, "VOLATILITY_EXPANSION" to 0.08),
+        period = 20
+    )
+
+    fun createAVAXProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "AVAXUSDT",
+        atrMultiplier = 1.85,
+        breakoutConfirmationBars = 1,
+        volumeThreshold = 1.40,
+        squeezeThreshold = 0.058,
+        stopLossMultiplier = 1.30,
+        takeProfitMultiplier = 3.50,
+        trailingStopActivationR = 0.80,
+        trailingStopDistanceMult = 0.90,
+        confidenceBonus = 0.08,
+        cooldownDurationSeconds = 100L,
+        regimePenalties = mapOf("RANGING" to -0.14, "CHOP" to -0.18, "TRENDING" to 0.08, "VOLATILITY_EXPANSION" to 0.10),
+        period = 20
+    )
+
+    fun createLINKProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "LINKUSDT",
+        atrMultiplier = 1.65,
+        breakoutConfirmationBars = 2,
+        volumeThreshold = 1.28,
+        squeezeThreshold = 0.045,
+        stopLossMultiplier = 1.20,
+        takeProfitMultiplier = 3.10,
+        trailingStopActivationR = 0.70,
+        trailingStopDistanceMult = 0.80,
+        confidenceBonus = 0.06,
+        cooldownDurationSeconds = 120L,
+        regimePenalties = mapOf("RANGING" to -0.10, "CHOP" to -0.14, "TRENDING" to 0.07, "VOLATILITY_EXPANSION" to 0.08),
+        period = 20
+    )
+
+    fun createNEARProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "NEARUSDT",
+        atrMultiplier = 1.90,
+        breakoutConfirmationBars = 1,
+        volumeThreshold = 1.40,
+        squeezeThreshold = 0.060,
+        stopLossMultiplier = 1.35,
+        takeProfitMultiplier = 3.60,
+        trailingStopActivationR = 0.80,
+        trailingStopDistanceMult = 0.90,
+        confidenceBonus = 0.08,
+        cooldownDurationSeconds = 100L,
+        regimePenalties = mapOf("RANGING" to -0.14, "CHOP" to -0.18, "TRENDING" to 0.08, "VOLATILITY_EXPANSION" to 0.11),
+        period = 20
+    )
+
+    fun createSUIProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "SUIUSDT",
+        atrMultiplier = 2.05,
+        breakoutConfirmationBars = 1,
+        volumeThreshold = 1.45,
+        squeezeThreshold = 0.064,
+        stopLossMultiplier = 1.40,
+        takeProfitMultiplier = 3.80,
+        trailingStopActivationR = 0.85,
+        trailingStopDistanceMult = 0.92,
+        confidenceBonus = 0.09,
+        cooldownDurationSeconds = 90L,
+        regimePenalties = mapOf("RANGING" to -0.15, "CHOP" to -0.19, "TRENDING" to 0.09, "VOLATILITY_EXPANSION" to 0.12),
+        period = 20
+    )
+
+    fun createDOGEProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "DOGEUSDT",
+        atrMultiplier = 2.10,
+        breakoutConfirmationBars = 1,
+        volumeThreshold = 1.50,
+        squeezeThreshold = 0.068,
+        stopLossMultiplier = 1.45,
+        takeProfitMultiplier = 3.85,
+        trailingStopActivationR = 0.85,
+        trailingStopDistanceMult = 0.95,
+        confidenceBonus = 0.10,
+        cooldownDurationSeconds = 90L,
+        regimePenalties = mapOf("RANGING" to -0.16, "CHOP" to -0.20, "TRENDING" to 0.10, "VOLATILITY_EXPANSION" to 0.13),
+        period = 20
+    )
+
+    fun createPEPEProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "PEPEUSDT",
+        atrMultiplier = 2.25,
+        breakoutConfirmationBars = 1,
+        volumeThreshold = 1.55,
+        squeezeThreshold = 0.075,
+        stopLossMultiplier = 1.50,
+        takeProfitMultiplier = 4.00,
+        trailingStopActivationR = 0.90,
+        trailingStopDistanceMult = 0.98,
+        confidenceBonus = 0.12,
+        cooldownDurationSeconds = 80L,
+        regimePenalties = mapOf("RANGING" to -0.18, "CHOP" to -0.22, "TRENDING" to 0.12, "VOLATILITY_EXPANSION" to 0.15),
+        period = 20
+    )
+
+    fun createRENDERProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "RENDERUSDT",
+        atrMultiplier = 2.00,
+        breakoutConfirmationBars = 1,
+        volumeThreshold = 1.42,
+        squeezeThreshold = 0.062,
+        stopLossMultiplier = 1.38,
+        takeProfitMultiplier = 3.75,
+        trailingStopActivationR = 0.82,
+        trailingStopDistanceMult = 0.90,
+        confidenceBonus = 0.09,
+        cooldownDurationSeconds = 90L,
+        regimePenalties = mapOf("RANGING" to -0.15, "CHOP" to -0.19, "TRENDING" to 0.09, "VOLATILITY_EXPANSION" to 0.12),
+        period = 20
+    )
+
+    fun createINJProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "INJUSDT",
+        atrMultiplier = 1.95,
+        breakoutConfirmationBars = 1,
+        volumeThreshold = 1.40,
+        squeezeThreshold = 0.060,
+        stopLossMultiplier = 1.35,
+        takeProfitMultiplier = 3.60,
+        trailingStopActivationR = 0.80,
+        trailingStopDistanceMult = 0.88,
+        confidenceBonus = 0.08,
+        cooldownDurationSeconds = 100L,
+        regimePenalties = mapOf("RANGING" to -0.14, "CHOP" to -0.18, "TRENDING" to 0.08, "VOLATILITY_EXPANSION" to 0.11),
+        period = 20
+    )
+
+    fun createFETProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "FETUSDT",
+        atrMultiplier = 2.00,
+        breakoutConfirmationBars = 1,
+        volumeThreshold = 1.42,
+        squeezeThreshold = 0.062,
+        stopLossMultiplier = 1.38,
+        takeProfitMultiplier = 3.75,
+        trailingStopActivationR = 0.82,
+        trailingStopDistanceMult = 0.90,
+        confidenceBonus = 0.09,
+        cooldownDurationSeconds = 90L,
+        regimePenalties = mapOf("RANGING" to -0.15, "CHOP" to -0.19, "TRENDING" to 0.09, "VOLATILITY_EXPANSION" to 0.12),
+        period = 20
+    )
+
+    fun createTIAProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "TIAUSDT",
+        atrMultiplier = 2.05,
+        breakoutConfirmationBars = 1,
+        volumeThreshold = 1.45,
+        squeezeThreshold = 0.065,
+        stopLossMultiplier = 1.40,
+        takeProfitMultiplier = 3.80,
+        trailingStopActivationR = 0.85,
+        trailingStopDistanceMult = 0.92,
+        confidenceBonus = 0.09,
+        cooldownDurationSeconds = 90L,
+        regimePenalties = mapOf("RANGING" to -0.15, "CHOP" to -0.19, "TRENDING" to 0.09, "VOLATILITY_EXPANSION" to 0.12),
+        period = 20
+    )
+
+    fun createXRPProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "XRPUSDT",
+        atrMultiplier = 1.60,
+        breakoutConfirmationBars = 2,
+        volumeThreshold = 1.25,
+        squeezeThreshold = 0.040,
+        stopLossMultiplier = 1.15,
+        takeProfitMultiplier = 2.90,
+        trailingStopActivationR = 0.65,
+        trailingStopDistanceMult = 0.75,
+        confidenceBonus = 0.04,
+        cooldownDurationSeconds = 120L,
+        regimePenalties = mapOf("RANGING" to -0.09, "CHOP" to -0.13, "TRENDING" to 0.05, "VOLATILITY_EXPANSION" to 0.07),
+        period = 20
+    )
+
+    fun createDOTProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "DOTUSDT",
+        atrMultiplier = 1.70,
+        breakoutConfirmationBars = 2,
+        volumeThreshold = 1.28,
+        squeezeThreshold = 0.045,
+        stopLossMultiplier = 1.20,
+        takeProfitMultiplier = 3.00,
+        trailingStopActivationR = 0.70,
+        trailingStopDistanceMult = 0.80,
+        confidenceBonus = 0.05,
+        cooldownDurationSeconds = 120L,
+        regimePenalties = mapOf("RANGING" to -0.11, "CHOP" to -0.14, "TRENDING" to 0.06, "VOLATILITY_EXPANSION" to 0.08),
+        period = 20
+    )
+
+    fun createMATICProfile(): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
+        symbol = "MATICUSDT",
+        atrMultiplier = 1.75,
+        breakoutConfirmationBars = 2,
+        volumeThreshold = 1.30,
+        squeezeThreshold = 0.048,
+        stopLossMultiplier = 1.22,
+        takeProfitMultiplier = 3.15,
+        trailingStopActivationR = 0.72,
+        trailingStopDistanceMult = 0.82,
+        confidenceBonus = 0.05,
+        cooldownDurationSeconds = 110L,
+        regimePenalties = mapOf("RANGING" to -0.12, "CHOP" to -0.15, "TRENDING" to 0.06, "VOLATILITY_EXPANSION" to 0.08),
         period = 20
     )
 
@@ -479,20 +702,22 @@ object VolatilityBreakoutProfiles {
      */
     fun createDefaultProfile(symbol: String = "DEFAULT"): VolatilityBreakoutProfile = VolatilityBreakoutProfile(
         symbol = symbol,
-        atrMultiplier = 1.80,
+        atrMultiplier = 1.65,
         breakoutConfirmationBars = 2,
-        volumeThreshold = 1.30,
-        squeezeThreshold = 0.050,
-        stopLossMultiplier = 1.20,
-        takeProfitMultiplier = 3.00,
-        confidenceBonus = 0.00,
+        volumeThreshold = 1.25,
+        squeezeThreshold = 0.048,
+        stopLossMultiplier = 1.15,
+        takeProfitMultiplier = 3.25,
+        trailingStopActivationR = 0.70,
+        trailingStopDistanceMult = 0.80,
+        confidenceBonus = 0.04,
         cooldownDurationSeconds = 120L,
         regimePenalties = mapOf(
             "RANGING" to -0.10,
             "CHOP" to -0.12,
             "LOW_VOLATILITY" to -0.05,
-            "TRENDING" to 0.03,
-            "VOLATILITY_EXPANSION" to 0.05
+            "TRENDING" to 0.05,
+            "VOLATILITY_EXPANSION" to 0.07
         ),
         period = 20
     )
@@ -523,6 +748,20 @@ object VolatilityBreakoutProfileRegistry {
             clean.startsWith("BNB") -> "BNBUSDT"
             clean.startsWith("SOL") -> "SOLUSDT"
             clean.startsWith("LTC") -> "LTCUSDT"
+            clean.startsWith("ADA") -> "ADAUSDT"
+            clean.startsWith("AVAX") -> "AVAXUSDT"
+            clean.startsWith("LINK") -> "LINKUSDT"
+            clean.startsWith("NEAR") -> "NEARUSDT"
+            clean.startsWith("SUI") -> "SUIUSDT"
+            clean.startsWith("DOGE") -> "DOGEUSDT"
+            clean.startsWith("PEPE") -> "PEPEUSDT"
+            clean.startsWith("RENDER") -> "RENDERUSDT"
+            clean.startsWith("INJ") -> "INJUSDT"
+            clean.startsWith("FET") -> "FETUSDT"
+            clean.startsWith("TIA") -> "TIAUSDT"
+            clean.startsWith("XRP") -> "XRPUSDT"
+            clean.startsWith("DOT") -> "DOTUSDT"
+            clean.startsWith("MATIC") -> "MATICUSDT"
             clean.endsWith("USDT") -> clean
             clean.isNotBlank() -> "${clean}USDT"
             else -> "DEFAULT"
@@ -542,6 +781,20 @@ object VolatilityBreakoutProfileRegistry {
                 "BNBUSDT" -> VolatilityBreakoutProfiles.createBNBProfile()
                 "SOLUSDT" -> VolatilityBreakoutProfiles.createSOLProfile()
                 "LTCUSDT" -> VolatilityBreakoutProfiles.createLTCProfile()
+                "ADAUSDT" -> VolatilityBreakoutProfiles.createADAProfile()
+                "AVAXUSDT" -> VolatilityBreakoutProfiles.createAVAXProfile()
+                "LINKUSDT" -> VolatilityBreakoutProfiles.createLINKProfile()
+                "NEARUSDT" -> VolatilityBreakoutProfiles.createNEARProfile()
+                "SUIUSDT" -> VolatilityBreakoutProfiles.createSUIProfile()
+                "DOGEUSDT" -> VolatilityBreakoutProfiles.createDOGEProfile()
+                "PEPEUSDT" -> VolatilityBreakoutProfiles.createPEPEProfile()
+                "RENDERUSDT" -> VolatilityBreakoutProfiles.createRENDERProfile()
+                "INJUSDT" -> VolatilityBreakoutProfiles.createINJProfile()
+                "FETUSDT" -> VolatilityBreakoutProfiles.createFETProfile()
+                "TIAUSDT" -> VolatilityBreakoutProfiles.createTIAProfile()
+                "XRPUSDT" -> VolatilityBreakoutProfiles.createXRPProfile()
+                "DOTUSDT" -> VolatilityBreakoutProfiles.createDOTProfile()
+                "MATICUSDT" -> VolatilityBreakoutProfiles.createMATICProfile()
                 else -> VolatilityBreakoutProfiles.createDefaultProfile(key)
             }
         }
@@ -608,6 +861,20 @@ object VolatilityBreakoutProfileRegistry {
         profiles["BNBUSDT"] = VolatilityBreakoutProfiles.createBNBProfile()
         profiles["SOLUSDT"] = VolatilityBreakoutProfiles.createSOLProfile()
         profiles["LTCUSDT"] = VolatilityBreakoutProfiles.createLTCProfile()
+        profiles["ADAUSDT"] = VolatilityBreakoutProfiles.createADAProfile()
+        profiles["AVAXUSDT"] = VolatilityBreakoutProfiles.createAVAXProfile()
+        profiles["LINKUSDT"] = VolatilityBreakoutProfiles.createLINKProfile()
+        profiles["NEARUSDT"] = VolatilityBreakoutProfiles.createNEARProfile()
+        profiles["SUIUSDT"] = VolatilityBreakoutProfiles.createSUIProfile()
+        profiles["DOGEUSDT"] = VolatilityBreakoutProfiles.createDOGEProfile()
+        profiles["PEPEUSDT"] = VolatilityBreakoutProfiles.createPEPEProfile()
+        profiles["RENDERUSDT"] = VolatilityBreakoutProfiles.createRENDERProfile()
+        profiles["INJUSDT"] = VolatilityBreakoutProfiles.createINJProfile()
+        profiles["FETUSDT"] = VolatilityBreakoutProfiles.createFETProfile()
+        profiles["TIAUSDT"] = VolatilityBreakoutProfiles.createTIAProfile()
+        profiles["XRPUSDT"] = VolatilityBreakoutProfiles.createXRPProfile()
+        profiles["DOTUSDT"] = VolatilityBreakoutProfiles.createDOTProfile()
+        profiles["MATICUSDT"] = VolatilityBreakoutProfiles.createMATICProfile()
         profiles["DEFAULT"] = VolatilityBreakoutProfiles.createDefaultProfile()
     }
 }
@@ -637,7 +904,14 @@ object OnlineBayesianAdaptiveOptimizer {
     @Synchronized
     private fun initializePriors() {
         symbolPriors.clear()
-        val symbols = listOf("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "LTCUSDT", "DEFAULT")
+        val symbols = listOf(
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
+            "ADAUSDT", "DOTUSDT", "MATICUSDT", "AVAXUSDT",
+            "LINKUSDT", "NEARUSDT", "LTCUSDT", "XRPUSDT",
+            "PEPEUSDT", "DOGEUSDT", "RENDERUSDT", "INJUSDT",
+            "SUIUSDT", "FETUSDT", "TIAUSDT",
+            "DEFAULT"
+        )
         for (sym in symbols) {
             val priors = mutableMapOf(
                 "trailingActivationR" to ParameterPrior("trailingActivationR", mean = 0.75, variance = 0.04, minBound = 0.55, maxBound = 1.00),

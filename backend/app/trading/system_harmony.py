@@ -299,7 +299,13 @@ class SystemHarmonyEngine:
         resolved_successfully_count = 0
         deadlocks_or_unhandled = 0
 
-        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "AVAXUSDT"]
+        symbols = [
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
+            "ADAUSDT", "DOTUSDT", "MATICUSDT", "AVAXUSDT",
+            "LINKUSDT", "NEARUSDT", "LTCUSDT", "XRPUSDT",
+            "PEPEUSDT", "DOGEUSDT", "RENDERUSDT", "INJUSDT",
+            "SUIUSDT", "FETUSDT", "TIAUSDT"
+        ]
         strategies = ["Breakout Momentum", "Mean Reversion", "Trend Following", "Volatility Breakout"]
 
         for i in range(1, n_scenarios + 1):

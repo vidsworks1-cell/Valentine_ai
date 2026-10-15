@@ -1,20 +1,25 @@
 {
-  "updated_at": 1791918183.1773646,
+  "updated_at": 1791968469.8513122,
   "total_equity": 100000.0,
   "current_regime": "VOLATILE",
   "market_quality_score": 80.0,
   "strategies": {
-    "Volatility Expansion": {
-      "expected_expectancy_r": 1.8,
-      "confidence_score": 82.0,
-      "win_rate_pct": 68.0,
-      "recent_trades_count": 28,
-      "profit_factor": 2.35,
+    "Volatility Expansion Breakout": {
+      "expected_expectancy_r": 2.45,
+      "confidence_score": 89.0,
+      "win_rate_pct": 74.5,
+      "recent_trades_count": 42,
+      "profit_factor": 3.1,
       "preferred_regimes": [
         "TRENDING",
-        "VOLATILE"
+        "VOLATILE",
+        "BREAKOUT",
+        "EXPANSION",
+        "HIGH_VOLATILITY_TRENDING"
       ],
-      "active": true
+      "active": true,
+      "is_prioritized": true,
+      "priority_rank": 1
     },
     "Breakout Momentum": {
       "expected_expectancy_r": 0.4,
@@ -25,7 +30,9 @@
       "preferred_regimes": [
         "TRENDING"
       ],
-      "active": true
+      "active": true,
+      "is_prioritized": false,
+      "priority_rank": 3
     },
     "Mean Reversion": {
       "expected_expectancy_r": -0.2,
@@ -37,7 +44,9 @@
         "RANGING",
         "COMPRESSED"
       ],
-      "active": true
+      "active": true,
+      "is_prioritized": false,
+      "priority_rank": 5
     },
     "Trend Following": {
       "expected_expectancy_r": 1.2,
@@ -48,7 +57,9 @@
       "preferred_regimes": [
         "TRENDING"
       ],
-      "active": true
+      "active": true,
+      "is_prioritized": false,
+      "priority_rank": 2
     },
     "Liquidity Sweep": {
       "expected_expectancy_r": 0.95,
@@ -60,20 +71,22 @@
         "VOLATILE",
         "RANGING"
       ],
-      "active": true
+      "active": true,
+      "is_prioritized": false,
+      "priority_rank": 4
     }
   },
   "allocations": {
-    "Volatility Expansion": {
-      "expected_expectancy_r": 1.8,
-      "confidence_score": 82.0,
+    "Volatility Expansion Breakout": {
+      "expected_expectancy_r": 2.45,
+      "confidence_score": 89.0,
       "regime_factor": 1.3,
-      "statistical_edge_score": 1.919,
+      "statistical_edge_score": 3.543,
       "tier": "DOMINANT_EDGE",
       "suspension_reason": "",
-      "capital_share_pct": 48.4,
-      "allocated_capital_usd": 48372.7,
-      "risk_multiplier": 1.3
+      "capital_share_pct": 63.4,
+      "allocated_capital_usd": 63372.88,
+      "risk_multiplier": 1.35
     },
     "Breakout Momentum": {
       "expected_expectancy_r": 0.4,
@@ -82,8 +95,8 @@
       "statistical_edge_score": 0.269,
       "tier": "RESTRICTED_ALLOCATION",
       "suspension_reason": "",
-      "capital_share_pct": 6.8,
-      "allocated_capital_usd": 6771.37,
+      "capital_share_pct": 4.8,
+      "allocated_capital_usd": 4803.97,
       "risk_multiplier": 0.6
     },
     "Mean Reversion": {
@@ -104,8 +117,8 @@
       "statistical_edge_score": 0.816,
       "tier": "HIGH_ALLOCATION",
       "suspension_reason": "",
-      "capital_share_pct": 20.6,
-      "allocated_capital_usd": 20571.26,
+      "capital_share_pct": 14.6,
+      "allocated_capital_usd": 14594.33,
       "risk_multiplier": 1.1
     },
     "Liquidity Sweep": {
@@ -115,8 +128,8 @@
       "statistical_edge_score": 0.963,
       "tier": "HIGH_ALLOCATION",
       "suspension_reason": "",
-      "capital_share_pct": 24.3,
-      "allocated_capital_usd": 24284.67,
+      "capital_share_pct": 17.2,
+      "allocated_capital_usd": 17228.82,
       "risk_multiplier": 1.1
     }
   }

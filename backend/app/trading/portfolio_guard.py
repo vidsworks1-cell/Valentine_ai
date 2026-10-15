@@ -73,8 +73,8 @@ class PortfolioGuard:
 
     # Correlation Clusters Mapping
     CORRELATION_CLUSTERS = {
-        "LAYER_1": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "AVAXUSDT", "BNBUSDT", "SUIUSDT"],
-        "DEFI": ["UNIUSDT", "AAVEUSDT", "MKRUSDT", "LINKUSDT", "PENDLEUSDT"],
+        "LAYER_1": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "AVAXUSDT", "BNBUSDT", "SUIUSDT", "ADAUSDT", "DOTUSDT", "MATICUSDT", "NEARUSDT", "LTCUSDT", "TIAUSDT", "XRPUSDT"],
+        "DEFI": ["UNIUSDT", "AAVEUSDT", "MKRUSDT", "LINKUSDT", "PENDLEUSDT", "INJUSDT"],
         "AI_TOKENS": ["TAOUSDT", "FETUSDT", "NEARUSDT", "RENDERUSDT"],
         "MEMES": ["DOGEUSDT", "PEPEUSDT", "SHIBUSDT", "WIFUSDT", "BONKUSDT"]
     }
@@ -584,12 +584,26 @@ class PortfolioGuard:
         total_corr = 0.0
         pairs_count = 0
 
-        # Baseline pairwise correlation lookup
+        # Baseline pairwise correlation lookup across multi-tier universe
         corr_baseline = {
             ("BTCUSDT", "ETHUSDT"): 0.88,
             ("BTCUSDT", "SOLUSDT"): 0.82,
             ("ETHUSDT", "SOLUSDT"): 0.85,
             ("BTCUSDT", "BNBUSDT"): 0.80,
+            ("BTCUSDT", "ADAUSDT"): 0.78,
+            ("BTCUSDT", "AVAXUSDT"): 0.81,
+            ("BTCUSDT", "LINKUSDT"): 0.77,
+            ("BTCUSDT", "NEARUSDT"): 0.79,
+            ("BTCUSDT", "SUIUSDT"): 0.74,
+            ("BTCUSDT", "DOTUSDT"): 0.76,
+            ("BTCUSDT", "LTCUSDT"): 0.75,
+            ("BTCUSDT", "DOGEUSDT"): 0.70,
+            ("BTCUSDT", "PEPEUSDT"): 0.68,
+            ("BTCUSDT", "INJUSDT"): 0.76,
+            ("BTCUSDT", "RENDERUSDT"): 0.77,
+            ("BTCUSDT", "FETUSDT"): 0.75,
+            ("BTCUSDT", "TIAUSDT"): 0.73,
+            ("BTCUSDT", "XRPUSDT"): 0.72,
         }
 
         for i, sym1 in enumerate(symbols):

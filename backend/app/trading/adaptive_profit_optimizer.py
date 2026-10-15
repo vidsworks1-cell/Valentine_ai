@@ -82,24 +82,31 @@ class AdaptiveProfitOptimizer:
         unrealized_pnl_pct = ((current_price - entry) / entry * 100.0) if side == "BUY" else ((entry - current_price) / entry * 100.0)
         target_distance_pct = abs((tp - entry) / entry * 100.0)
 
-        # 1. TP Extension: Price reached >= 75% of initial TP with accelerating momentum and high volume
+        # Strategy specific calibration
+        strat = position.get("strategy", position.get("entry_strategy", ""))
+        is_veb = "volatility expansion" in strat.lower()
+        req_progress = 0.70 if is_veb else 0.75
+        req_rvol = 1.35 if is_veb else 1.60
+        max_extensions = 3 if is_veb else 2
+
+        # 1. TP Extension: Price reached >= req_progress of initial TP with accelerating momentum and high volume
         progress_to_tp = (unrealized_pnl_pct / target_distance_pct) if target_distance_pct > 0 else 0.0
 
-        if progress_to_tp >= 0.75 and momentum_accelerating and rvol >= 1.6:
-            # Trend is exceptionally strong: extend TP by 1.0x ATR to let winners run
-            extension_amount = atr * 1.2
+        if progress_to_tp >= req_progress and momentum_accelerating and rvol >= req_rvol:
+            # Trend is exceptionally strong: extend TP by 1.2x ATR to let winners run
+            extension_amount = atr * (1.35 if is_veb else 1.2)
             if side == "BUY":
                 extended_tp = round(tp + extension_amount, 4)
-                raised_trail = round(max(current_trail, entry + (atr * 0.5)), 4)
+                raised_trail = round(max(current_trail, entry + (atr * 0.6)), 4)
             else:
                 extended_tp = round(tp - extension_amount, 4)
-                raised_trail = round(min(current_trail, entry - (atr * 0.5)), 4)
+                raised_trail = round(min(current_trail, entry - (atr * 0.6)), 4)
 
-            # Prevent infinite extension if already extended twice
+            # Prevent infinite extension if already reached extension limit
             ext_count = int(position.get("tp_extensions_count", 0))
-            if ext_count < 2:
+            if ext_count < max_extensions:
                 msg = (
-                    f"🚀 [TP EXTENSION] {symbol} {side} momentum accelerating (+{unrealized_pnl_pct:.2f}%, RVOL {rvol:.1f}). "
+                    f"🚀 [TP EXTENSION - {strat or 'VEB'}] {symbol} {side} momentum accelerating (+{unrealized_pnl_pct:.2f}%, RVOL {rvol:.1f}). "
                     f"Extended TP from ${tp:.2f} to ${extended_tp:.2f} to let outlier winner run. Lock trail at ${raised_trail:.2f}."
                 )
                 logger.info(msg)
@@ -110,14 +117,16 @@ class AdaptiveProfitOptimizer:
                     rationale=msg
                 )
 
-        # 2. Tighten Trailing Stop: In profit (> 1.2R), but momentum begins decelerating or RSI extreme
-        if unrealized_pnl_pct >= (atr / entry * 100.0 * 1.2) and (not momentum_accelerating or rsi > 78.0 or rsi < 22.0):
-            # Tighten trail to lock in 70% of peak gains
+        # 2. Tighten Trailing Stop: In profit (> 0.9R for VEB, > 1.2R standard), but momentum begins decelerating or RSI extreme
+        profit_r_trigger = 0.9 if is_veb else 1.2
+        if unrealized_pnl_pct >= (atr / entry * 100.0 * profit_r_trigger) and (not momentum_accelerating or rsi > 78.0 or rsi < 22.0):
+            # Tighten trail to lock in 75% (VEB) or 72% of peak gains
+            trail_pct = 0.75 if is_veb else 0.72
             if side == "BUY":
                 peak_p = float(position.get("highest_price", current_price))
-                tight_trail = round(entry + ((peak_p - entry) * 0.72), 4)
+                tight_trail = round(entry + ((peak_p - entry) * trail_pct), 4)
                 if tight_trail > current_trail:
-                    msg = f"🛡️ [TIGHTEN TRAIL] Momentum decelerating on {symbol} near peak ${peak_p:.2f}. Raised trail to ${tight_trail:.2f}."
+                    msg = f"🛡️ [TIGHTEN TRAIL - {strat or 'VEB'}] Momentum decelerating on {symbol} near peak ${peak_p:.2f}. Raised trail to ${tight_trail:.2f}."
                     logger.info(msg)
                     return AdaptiveProfitDecision(
                         action="TIGHTEN_TRAIL",
