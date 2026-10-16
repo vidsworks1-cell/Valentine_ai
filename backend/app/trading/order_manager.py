@@ -720,6 +720,54 @@ class OrderManager:
                     
                     logger.info(f"Binance order placed successfully: {binance_res}")
                     binance_order_id = str(binance_res.get("orderId", ""))
+
+                    # Upgrade 2: Maker Fill Watchdog & Timeout (45s Cancel / Re-quote)
+                    # If Post-Only Limit order is resting in book (status == 'NEW' or 'PARTIALLY_FILLED'), monitor for fills
+                    initial_status = str(binance_res.get("status", "NEW")).upper()
+                    if order_routing == "LIMIT" and initial_status in ["NEW", "PARTIALLY_FILLED"]:
+                        logger.info(f"⏳ [MAKER FILL WATCHDOG] Order {binance_order_id} ({opportunity['symbol']} {opportunity['side']}) posted as Maker. Monitoring for fill (45s timeout)...")
+                        watchdog_start = time.time()
+                        is_filled = False
+                        while (time.time() - watchdog_start) < 45.0:
+                            await asyncio.sleep(2.0)
+                            poll_res = await connector.get_order(trading_mode, opportunity["symbol"], binance_order_id)
+                            curr_status = str(poll_res.get("status", "")).upper()
+                            if curr_status == "FILLED":
+                                binance_res = poll_res
+                                is_filled = True
+                                logger.info(f"✅ [MAKER FILL WATCHDOG] Order {binance_order_id} completely FILLED on book within {time.time()-watchdog_start:.1f}s!")
+                                break
+                            elif curr_status in ["CANCELED", "REJECTED", "EXPIRED"]:
+                                logger.warning(f"⚠️ [MAKER FILL WATCHDOG] Order {binance_order_id} ended with exchange status: {curr_status}.")
+                                return
+                            
+                            # Market drift protection: if price drifted > 0.35% away from our limit, cancel & recycle capital
+                            from app.trading.price_cache import PriceCache
+                            pc = await PriceCache.get_instance()
+                            curr_px = pc.get_price(opportunity["symbol"]) or price
+                            drift_pct = (curr_px - price) / price * 100.0 if opportunity["side"] == "BUY" else (price - curr_px) / price * 100.0
+                            if drift_pct >= 0.35:
+                                logger.warning(f"⏱️ [MAKER FILL WATCHDOG] Market price drifted +{drift_pct:.2f}% away from Limit order. Cancelling order {binance_order_id} to release USDT...")
+                                await connector.cancel_order(trading_mode, opportunity["symbol"], binance_order_id)
+                                return
+                        
+                        if not is_filled:
+                            # 45s Timeout reached: query one last time
+                            final_poll = await connector.get_order(trading_mode, opportunity["symbol"], binance_order_id)
+                            if str(final_poll.get("status", "")).upper() == "FILLED":
+                                binance_res = final_poll
+                            else:
+                                logger.warning(f"⏱️ [MAKER FILL WATCHDOG TIMEOUT] Order {binance_order_id} unfilled after 45s. Cancelling order to recycle capital...")
+                                await connector.cancel_order(trading_mode, opportunity["symbol"], binance_order_id)
+                                exec_qty = float(final_poll.get("executedQty", 0.0))
+                                if exec_qty > 0.0:
+                                    logger.info(f"Retaining partially filled quantity of {exec_qty} units.")
+                                    position_size = exec_qty
+                                    binance_res = final_poll
+                                else:
+                                    logger.info(f"Order cancelled with 0 fills. Free capital unlocked for next opportunity.")
+                                    return
+
                     # Update entry price with executed price if available
                     if "fills" in binance_res and binance_res["fills"]:
                         total_qty = 0.0

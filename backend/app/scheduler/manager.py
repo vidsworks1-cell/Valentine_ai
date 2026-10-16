@@ -27,6 +27,7 @@ class LayeredSchedulerManager:
         self.reconciliation_engine = ExchangeReconciliationEngine.get_instance()
         self.running = False
         self._recon_task: Optional[asyncio.Task] = None
+        self._maintenance_task: Optional[asyncio.Task] = None
         
         # Core safeguards and modes - restored from persistent config if available
         self.global_trading_mode: str = "PAPER"  # OFF, PAPER, TESTNET, LIVE
@@ -120,6 +121,42 @@ class LayeredSchedulerManager:
             except Exception as e:
                 logger.error(f"Error during periodic exchange reconciliation: {e}")
 
+    async def _dust_and_fee_maintenance_loop(self):
+        """
+        Background maintenance daemon running every 6 hours:
+        1. Upgrade 3: Ensures BNB balance has ~$1.00 buffer for 25% fee discount.
+        2. Upgrade 4: Automatically sweeps sub-dollar dust balances into BNB.
+        """
+        logger.info("Starting scheduled Dust Sweep & BNB Fee Discount maintenance daemon (every 6 hours)...")
+        # Initial delayed check 30s after startup
+        await asyncio.sleep(30.0)
+        while self.running:
+            try:
+                if self.global_trading_mode in ["LIVE", "TESTNET"]:
+                    from app.services.binance_connector import BinanceConnector
+                    from app.trading.dust_recovery_engine import DustRecoveryEngine
+                    
+                    connector = BinanceConnector.get_instance()
+                    # 1. Maintain BNB balance for 25% discount
+                    await connector.ensure_bnb_balance_for_fees(
+                        min_bnb_value_usdt=0.50,
+                        replenish_amount_usdt=1.00,
+                        mode=self.global_trading_mode
+                    )
+                    
+                    # 2. Sweep accumulated micro-dust into BNB
+                    await DustRecoveryEngine.get_instance().convert_accumulated_dust(self.global_trading_mode)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in dust & fee maintenance loop: {e}")
+            
+            # Sleep 6 hours (21600 seconds)
+            try:
+                await asyncio.sleep(6 * 3600.0)
+            except asyncio.CancelledError:
+                break
+
     async def start_all(self):
         """Starts all operational background layers."""
         if self.running:
@@ -144,8 +181,9 @@ class LayeredSchedulerManager:
             logger.error(f"Initial reconciliation failed during startup: {re_err}")
             
         self._recon_task = asyncio.create_task(self._reconciliation_loop())
+        self._maintenance_task = asyncio.create_task(self._dust_and_fee_maintenance_loop())
         
-        logger.info("All layers (L2, L3, L4) and Reconciliation Daemon are actively running.")
+        logger.info("All layers (L2, L3, L4), Reconciliation Daemon, and 6h Dust/BNB Fee Sweeper are actively running.")
 
     async def stop_all(self):
         """Gracefully terminates background threads across all layers."""
@@ -163,6 +201,15 @@ class LayeredSchedulerManager:
             except asyncio.CancelledError:
                 pass
             self._recon_task = None
+
+        # Stop 6h Maintenance Task
+        if self._maintenance_task:
+            self._maintenance_task.cancel()
+            try:
+                await self._maintenance_task
+            except asyncio.CancelledError:
+                pass
+            self._maintenance_task = None
 
         # Stop Layer 3 Scanner
         await self.ai_engine.stop()

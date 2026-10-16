@@ -2401,6 +2401,16 @@ async def convert_dust_now(trading_mode: str = "LIVE"):
     from app.trading.dust_recovery_engine import DustRecoveryEngine
     return await DustRecoveryEngine.get_instance().convert_accumulated_dust(trading_mode)
 
+@router.post("/bnb-fee-replenish")
+async def replenish_bnb_fees(trading_mode: str = "LIVE"):
+    """Replenishes BNB balance (~$1.00 USDT) via zero-fee Binance Convert to lock in 25% trading fee discount."""
+    from app.services.binance_connector import BinanceConnector
+    return await BinanceConnector.get_instance().ensure_bnb_balance_for_fees(
+        min_bnb_value_usdt=0.50,
+        replenish_amount_usdt=1.00,
+        mode=trading_mode
+    )
+
 @router.post("/emergency-liquidate-all")
 async def emergency_liquidate_all(trading_mode: str = "LIVE"):
     """Emergency endpoint: Redeems soft-staking and converts trapped small balances (e.g. RENDER, INJ, ETH, BNB) to USDT."""

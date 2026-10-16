@@ -284,27 +284,41 @@ class PositionManager:
                             "peak_move_atr": round(peak_in_atr, 2)
                         }
 
-                        # A. Breakeven Protection Guard (Locks in Entry + 0.35% Fee & Slippage Buffer)
-                        if (move_in_atr >= be_trigger_atr or peak_in_atr >= be_trigger_atr):
-                            be_level = _round_price(entry * 1.0035 if side == "BUY" else entry * 0.9965)
+                        # A. Breakeven Protection Guard & Auto-Breakeven Ratchet (+0.20% Profit Lock)
+                        # Calculates percentage moves to guarantee micro-account fee protection
+                        favorable_move_pct = (favorable_move / entry * 100.0) if entry > 0 else 0.0
+                        peak_move_pct = (peak_move / entry * 100.0) if entry > 0 else 0.0
+
+                        # Upgrade 1: Auto-Breakeven Ratchet (+0.20% Profit Lock)
+                        # Triggers when favorable move reaches >= +0.80% OR ATR regime trigger is hit
+                        is_ratchet_hit = (favorable_move_pct >= 0.80 or peak_move_pct >= 0.80)
+                        is_atr_be_hit = (move_in_atr >= be_trigger_atr or peak_in_atr >= be_trigger_atr)
+
+                        if is_ratchet_hit or is_atr_be_hit:
+                            # If ATR hit, lock +0.35%; if ratchet hit, lock at least +0.20% net profit
+                            pct_buffer = 0.0035 if is_atr_be_hit else 0.0020
+                            be_level = _round_price(entry * (1.0 + pct_buffer) if side == "BUY" else entry * (1.0 - pct_buffer))
+                            current_sl = float(pos.get("trailing_stop", 0.0))
                             
-                            if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < be_level:
+                            if side == "BUY" and current_sl < be_level:
                                 pos["trailing_stop"] = be_level
                                 if not pos.get("breakeven_activated", False):
                                     pos["breakeven_activated"] = True
                                     pos["breakeven_price"] = be_level
                                     logger.info(
-                                        f"🛡️ [REGIME BREAKEVEN PROTECTION] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                        f"Breakeven locked at {be_level} (Entry: {entry}). Current Move: {move_in_atr:.2f} ATR."
+                                        f"🛡️ [AUTO-BREAKEVEN RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +0.80% threshold)! "
+                                        f"Stop-Loss ratcheted to {be_level} (+{pct_buffer*100:.2f}% locked, exchange fees 100% covered). Free-roll active!"
                                     )
-                            elif side == "SELL" and (float(pos.get("trailing_stop", 0.0)) > be_level or float(pos.get("trailing_stop", 0.0)) == 0.0):
+                            elif side == "SELL" and (current_sl > be_level or current_sl == 0.0):
                                 pos["trailing_stop"] = be_level
                                 if not pos.get("breakeven_activated", False):
                                     pos["breakeven_activated"] = True
                                     pos["breakeven_price"] = be_level
                                     logger.info(
-                                        f"🛡️ [REGIME BREAKEVEN PROTECTION] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                        f"Breakeven locked at {be_level} (Entry: {entry}). Current Move: {move_in_atr:.2f} ATR."
+                                        f"🛡️ [AUTO-BREAKEVEN RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +0.80% threshold)! "
+                                        f"Stop-Loss ratcheted to {be_level} (+{pct_buffer*100:.2f}% locked, exchange fees 100% covered). Free-roll active!"
                                     )
 
                         # B. Regime-Adaptive Dynamic Trailing Stop Adjustment
@@ -372,23 +386,38 @@ class PositionManager:
                                     stage["hit"] = True
                                     close_pct = stage["percentage"]
                                     
-                                    # If it's the final stage (or last stage of defined levels), trigger a full exit
-                                    if stage == stages[-1]:
-                                        await self._close_position(trade_id, current_price, "FINAL_TAKE_PROFIT_STAGE")
-                                        stage_triggered = True
-                                        break
+                                    # For small accounts (position notional < $10.50), orders cannot be split below Binance's $5.00 MIN_NOTIONAL.
+                                    # On TP1, lock in Breakeven (+0.35% net profit); on TP2/Final, close 100% full position in one legal order!
+                                    pos_notional = float(pos.get("position_size", 0.0)) * current_price
+                                    if pos_notional < 10.50:
+                                        if stage == stages[0]:
+                                            be_level = _round_price(entry * 1.0035 if side == "BUY" else entry * 0.9965)
+                                            if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < be_level:
+                                                pos["trailing_stop"] = be_level
+                                                pos["breakeven_activated"] = True
+                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $10.50). Locked Breakeven at {be_level} (+0.35% net) without splitting below Binance $5 limit.")
+                                        else:
+                                            await self._close_position(trade_id, current_price, stage["label"])
+                                            stage_triggered = True
+                                            break
                                     else:
-                                        close_size = round(size * close_pct, 4)
-                                        if close_size > 0 and float(pos.get("position_size", 0.0)) > close_size:
-                                            await self._partial_close_position(trade_id, current_price, close_size, stage["label"])
-                                            # Reduce active position size
-                                            pos["position_size"] = round(float(pos.get("position_size", 0.0)) - close_size, 4)
-                                            
-                                            # Lock in profits: raise stop loss to entry (break-even)
-                                            if side == "BUY":
-                                                pos["trailing_stop"] = max(float(pos.get("trailing_stop", 0.0)), entry)
-                                            else:
-                                                pos["trailing_stop"] = min(float(pos.get("trailing_stop", 0.0)), entry)
+                                        # If it's the final stage (or last stage of defined levels), trigger a full exit
+                                        if stage == stages[-1]:
+                                            await self._close_position(trade_id, current_price, "FINAL_TAKE_PROFIT_STAGE")
+                                            stage_triggered = True
+                                            break
+                                        else:
+                                            close_size = round(size * close_pct, 4)
+                                            if close_size > 0 and float(pos.get("position_size", 0.0)) > close_size:
+                                                await self._partial_close_position(trade_id, current_price, close_size, stage["label"])
+                                                # Reduce active position size
+                                                pos["position_size"] = round(float(pos.get("position_size", 0.0)) - close_size, 4)
+                                                
+                                                # Lock in profits: raise stop loss to entry (break-even)
+                                                if side == "BUY":
+                                                    pos["trailing_stop"] = max(float(pos.get("trailing_stop", 0.0)), entry)
+                                                else:
+                                                    pos["trailing_stop"] = min(float(pos.get("trailing_stop", 0.0)), entry)
                         
                         if stage_triggered:
                             continue

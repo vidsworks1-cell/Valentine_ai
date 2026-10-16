@@ -667,6 +667,63 @@ class BinanceConnector:
         }
         return await self._request("DELETE", "/api/v3/order", mode, params=params, signed=True)
 
+    async def get_order(self, mode: str, symbol: str, order_id: Any) -> Dict[str, Any]:
+        """Queries status of an existing order on Binance (/api/v3/order)."""
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "PAPER":
+            return {"status": "FILLED", "orderId": str(order_id), "symbol": symbol.upper()}
+        params = {
+            "symbol": symbol.upper(),
+            "orderId": str(order_id)
+        }
+        return await self._request("GET", "/api/v3/order", mode_upper, params=params, signed=True)
+
+    async def ensure_bnb_balance_for_fees(
+        self,
+        min_bnb_value_usdt: float = 0.50,
+        replenish_amount_usdt: float = 1.00,
+        mode: str = "LIVE"
+    ) -> Dict[str, Any]:
+        """
+        Upgrade 3: Auto-Maintain ~$1.00 in BNB (Lock in 25% Binance Fee Discount).
+        Checks if free BNB balance is below min_bnb_value_usdt.
+        If so, and free USDT >= replenish_amount_usdt + 5.00, converts replenish_amount_usdt
+        directly to BNB via zero-fee Binance Convert API (/sapi/v1/convert).
+        """
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "PAPER":
+            return {"status": "SKIPPED_PAPER", "msg": "BNB fee maintenance skipped in paper mode."}
+        try:
+            free_bnb = await self.get_free_asset_balance("BNB", mode_upper)
+            free_usdt = await self.get_free_asset_balance("USDT", mode_upper)
+            
+            from app.trading.price_cache import PriceCache
+            cache = await PriceCache.get_instance()
+            bnb_price = cache.get_price("BNBUSDT") or 600.0
+            
+            bnb_val_usdt = free_bnb * bnb_price
+            if bnb_val_usdt < min_bnb_value_usdt:
+                if free_usdt >= (replenish_amount_usdt + 5.00):
+                    logger.info(f"💎 [BNB FEE REBATE ENGINE] BNB value (${bnb_val_usdt:.2f}) < threshold (${min_bnb_value_usdt:.2f}). Converting {replenish_amount_usdt} USDT to BNB to guarantee 25% fee discount...")
+                    quote = await self._request("POST", "/sapi/v1/convert/getQuote", mode_upper, params={
+                        "fromAsset": "USDT",
+                        "toAsset": "BNB",
+                        "fromAmount": str(replenish_amount_usdt)
+                    }, signed=True)
+                    if isinstance(quote, dict) and "quoteId" in quote:
+                        res = await self._request("POST", "/sapi/v1/convert/acceptQuote", mode_upper, params={"quoteId": quote["quoteId"]}, signed=True)
+                        logger.info(f"✅ [BNB FEE REBATE ENGINE] Successfully replenished BNB balance: {res}")
+                        return {"status": "SUCCESS", "converted_usdt": replenish_amount_usdt, "result": res}
+                    else:
+                        logger.warning(f"Could not get quote for USDT->BNB convert: {quote}")
+                        return {"status": "QUOTE_FAILED", "quote": quote}
+                else:
+                    return {"status": "INSUFFICIENT_USDT_BUFFER", "free_usdt": free_usdt, "msg": "Free USDT buffer too low to deduct 1.00 USDT without impacting $5 min order size."}
+            return {"status": "SUFFICIENT_BNB", "bnb_val_usdt": bnb_val_usdt}
+        except Exception as e:
+            logger.error(f"Error in ensure_bnb_balance_for_fees: {e}")
+            return {"status": "ERROR", "error": str(e)}
+
     async def _mock_request(self, method: str, path: str, mode: str, params: Dict[str, Any]) -> Any:
         """High-fidelity simulation fallback when in PAPER mode."""
         mode_upper = (mode or "PAPER").upper()
@@ -735,6 +792,19 @@ class BinanceConnector:
                     "timeInForce": "GTC",
                     "type": "LIMIT",
                     "side": "BUY"
+                }
+            elif method.upper() == "GET":
+                return {
+                    "symbol": params.get("symbol", "BTCUSDT"),
+                    "orderId": params.get("orderId", "481516234"),
+                    "price": "91500.00",
+                    "origQty": "0.01",
+                    "executedQty": "0.01",
+                    "cummulativeQuoteQty": "915.00",
+                    "status": "FILLED",
+                    "type": "LIMIT",
+                    "side": "BUY",
+                    "fills": [{"price": "91500.00", "qty": "0.01", "commission": "0.000005", "commissionAsset": "BNB"}]
                 }
             else: # POST
                 order_id = int(time.time() * 1000) % 1000000000
