@@ -229,24 +229,17 @@ class AiReasoningEngine:
                         squeeze_info = VolatilitySqueezeDetector.get_instance().detect_squeeze(symbol, price)
                         squeeze_state = squeeze_info["squeeze_state"]
 
-                        # 1. Regime Classification - Prioritizing Volatility Expansion Breakout
-                        if squeeze_state == "SQUEEZE_FIRING":
-                            market_regime = "VOLATILE"
-                            strategy = "Volatility Expansion Breakout"
-                        elif squeeze_state == "SQUEEZE_ACTIVE":
-                            if squeeze_info.get("compression_score", 0.0) >= 45.0 or squeeze_info.get("rvol", 1.0) >= 1.15:
-                                market_regime = "VOLATILE"
-                                strategy = "Volatility Expansion Breakout"
-                            else:
-                                market_regime = "RANGING"
-                                strategy = "Mean Reversion"
-                        elif relative_volatility > 0.012:
-                            market_regime = "VOLATILE"
-                            # Prioritize Volatility Expansion Breakout on early organic volume expansion
-                            strategy = "Volatility Expansion Breakout" if squeeze_info.get("rvol", 1.0) >= 1.18 else "Breakout Momentum"
-                        elif tally % 3 == 0:
+                        # 1. Regime Classification & Strategy Mapping (Regime-Gated Breakouts)
+                        # In RANGING or VOLATILE chop, Breakouts are disabled; Mean Reversion is prioritized!
+                        if squeeze_state == "SQUEEZE_FIRING" and squeeze_info.get("rvol", 1.0) >= 1.45:
                             market_regime = "TRENDING"
-                            strategy = "Volatility Expansion Breakout" if squeeze_info.get("rvol", 1.0) >= 1.22 else "Breakout Momentum"
+                            strategy = "Volatility Expansion Breakout"
+                        elif relative_volatility > 0.015:
+                            market_regime = "VOLATILE"
+                            strategy = "Mean Reversion"  # In volatile chop, trade mean reversion dips into support
+                        elif tally % 3 == 0 and squeeze_info.get("rvol", 1.0) >= 1.30:
+                            market_regime = "TRENDING"
+                            strategy = "Breakout Momentum"
                         else:
                             market_regime = "RANGING"
                             strategy = "Mean Reversion"
@@ -362,7 +355,7 @@ class AiReasoningEngine:
                         ctx.add_trace("Phase1Guards", "PASS")
 
                         base_confidence = 0.82
-                        regime_confluence_bonus = 0.05 if (market_regime == "TRENDING" and strategy == "Breakout Momentum") or (market_regime == "RANGING" and strategy == "Mean Reversion") else -0.03
+                        regime_confluence_bonus = 0.05 if (market_regime == "TRENDING" and strategy in ["Breakout Momentum", "Volatility Expansion Breakout"]) or (market_regime in ["RANGING", "VOLATILE"] and strategy == "Mean Reversion") else -0.05
                         volatility_quality_bonus = 0.03 if (0.008 <= relative_volatility <= 0.013) else -0.02
                         squeeze_bonus = 0.06 if squeeze_state == "SQUEEZE_FIRING" else (-0.03 if squeeze_state == "SQUEEZE_ACTIVE" else 0.0)
                         

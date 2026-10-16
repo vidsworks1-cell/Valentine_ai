@@ -448,6 +448,9 @@ class BinanceConnector:
                 min_notional = 5.0
                 prec = 4
 
+                price_prec = 4
+                tick_size = 0.0001
+
                 for f in s.get("filters", []):
                     f_type = f.get("filterType", "")
                     if f_type == "LOT_SIZE":
@@ -458,6 +461,13 @@ class BinanceConnector:
                             prec = len(step_str.split(".")[1])
                         else:
                             prec = 0
+                    elif f_type == "PRICE_FILTER":
+                        tick_size = float(f.get("tickSize", 0.0001))
+                        tick_str = str(f.get("tickSize", "0.0001")).rstrip("0")
+                        if "." in tick_str:
+                            price_prec = len(tick_str.split(".")[1])
+                        else:
+                            price_prec = 0
                     elif f_type in ["NOTIONAL", "MIN_NOTIONAL"]:
                         min_notional = float(f.get("minNotional", f.get("notional", 5.0)))
 
@@ -465,7 +475,9 @@ class BinanceConnector:
                     "step_size": step_size,
                     "min_qty": min_qty,
                     "min_notional": min_notional,
-                    "precision": prec
+                    "precision": prec,
+                    "price_precision": price_prec,
+                    "tick_size": tick_size
                 }
             self._filters_cache_time = now
             if sym_upper in self._filters_cache:
@@ -633,11 +645,17 @@ class BinanceConnector:
         else:
             raise ValueError("Either quantity or quote_order_qty must be provided and > 0")
 
-        if order_type.upper() == "LIMIT":
+        if order_type.upper() in ["LIMIT", "LIMIT_MAKER"]:
             if price is None:
                 raise ValueError("Price is required for LIMIT orders")
-            params["price"] = str(price)
-            params["timeInForce"] = time_in_force
+            if isinstance(price, float):
+                sym_filters = getattr(self, "_filters_cache", {}).get(symbol.upper(), {})
+                p_prec = sym_filters.get("price_precision", 4)
+                params["price"] = f"{price:.{p_prec}f}"
+            else:
+                params["price"] = str(price)
+            if order_type.upper() == "LIMIT":
+                params["timeInForce"] = time_in_force
 
         return await self._request("POST", "/api/v3/order", mode, params=params, signed=True)
 

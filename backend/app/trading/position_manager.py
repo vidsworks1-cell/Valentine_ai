@@ -10,6 +10,21 @@ from app.api.schemas import TradeUpdate, AuditLogCreate
 
 logger = logging.getLogger("lumina.trading.position_manager")
 
+def _round_price(price: float) -> float:
+    """Rounds price to appropriate significant precision to avoid catastrophic sub-dollar truncation."""
+    if price <= 0.0:
+        return 0.0
+    if price < 0.00001:
+        return round(price, 10)
+    elif price < 0.001:
+        return round(price, 8)
+    elif price < 1.0:
+        return round(price, 6)
+    elif price < 10.0:
+        return round(price, 4)
+    else:
+        return round(price, 2)
+
 class PositionManager:
     """Layer 4 Position and Trailing Stop Manager."""
     _instance: Optional['PositionManager'] = None
@@ -96,20 +111,22 @@ class PositionManager:
         if "stop_loss" not in position_details or position_details["stop_loss"] is None:
             position_details["stop_loss"] = float(position_details.get("trailing_stop", 0.0))
 
-        # Spacing based on final take profit, or default to an estimate if not present
-        total_dist = abs(tp - entry) if tp > 0 else (entry * 0.05)
+        # Spacing based on final take profit, enforcing a minimum distance (1.5%) to ensure profits exceed fees
+        min_tp_dist = entry * 0.015 if entry > 0 else 0.05
+        raw_dist = abs(tp - entry) if tp > 0 else (entry * 0.05)
+        total_dist = max(raw_dist, min_tp_dist)
         
         if side == "BUY":
             position_details["tp_stages"] = [
-                {"level": round(entry + total_dist * 0.35, 2), "percentage": 0.30, "hit": False, "label": "Partial TP1 (30%)"},
-                {"level": round(entry + total_dist * 0.70, 2), "percentage": 0.30, "hit": False, "label": "Partial TP2 (30%)"},
-                {"level": round(tp if tp > 0 else entry + total_dist, 2), "percentage": 0.40, "hit": False, "label": "Final TP (40%)"}
+                {"level": _round_price(entry + total_dist * 0.35), "percentage": 0.30, "hit": False, "label": "Partial TP1 (30%)"},
+                {"level": _round_price(entry + total_dist * 0.70), "percentage": 0.30, "hit": False, "label": "Partial TP2 (30%)"},
+                {"level": _round_price(tp if tp > 0 else entry + total_dist), "percentage": 0.40, "hit": False, "label": "Final TP (40%)"}
             ]
         else:
             position_details["tp_stages"] = [
-                {"level": round(entry - total_dist * 0.35, 2), "percentage": 0.30, "hit": False, "label": "Partial TP1 (30%)"},
-                {"level": round(entry - total_dist * 0.70, 2), "percentage": 0.30, "hit": False, "label": "Partial TP2 (30%)"},
-                {"level": round(tp if tp > 0 else entry - total_dist, 2), "percentage": 0.40, "hit": False, "label": "Final TP (40%)"}
+                {"level": _round_price(entry - total_dist * 0.35), "percentage": 0.30, "hit": False, "label": "Partial TP1 (30%)"},
+                {"level": _round_price(entry - total_dist * 0.70), "percentage": 0.30, "hit": False, "label": "Partial TP2 (30%)"},
+                {"level": _round_price(tp if tp > 0 else entry - total_dist), "percentage": 0.40, "hit": False, "label": "Final TP (40%)"}
             ]
             
         if "opened_at" not in position_details:
@@ -223,7 +240,7 @@ class PositionManager:
 
                         # If BTC shock detected and position is an altcoin BUY, lock breakeven immediately
                         if btc_shock_detected and symbol != "BTCUSDT" and side == "BUY":
-                            be_level = round(entry * 1.0005, 2)
+                            be_level = _round_price(entry * 1.0005)
                             if pos.get("trailing_stop", 0.0) < be_level:
                                 pos["trailing_stop"] = be_level
                                 logger.warning(f"🚨 [CORRELATED MACRO SHOCK GUARD] Rapid BTC selloff ({btc_drop_pct:.2f}% drop)! Tightened trailing stop on {symbol} to breakeven ({be_level}) to prevent systemic drawdown cascade.")
@@ -267,9 +284,9 @@ class PositionManager:
                             "peak_move_atr": round(peak_in_atr, 2)
                         }
 
-                        # A. Breakeven Protection Guard (Locks in Entry + 0.1% Fee Buffer)
+                        # A. Breakeven Protection Guard (Locks in Entry + 0.35% Fee & Slippage Buffer)
                         if (move_in_atr >= be_trigger_atr or peak_in_atr >= be_trigger_atr):
-                            be_level = round(entry * 1.001 if side == "BUY" else entry * 0.999, 2)
+                            be_level = _round_price(entry * 1.0035 if side == "BUY" else entry * 0.9965)
                             
                             if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < be_level:
                                 pos["trailing_stop"] = be_level
@@ -292,9 +309,9 @@ class PositionManager:
 
                         # B. Regime-Adaptive Dynamic Trailing Stop Adjustment
                         if peak_in_atr >= trail_activation_atr:
-                            trail_dist = round(trail_mult * atr, 2)
+                            trail_dist = trail_mult * atr
                             if side == "BUY":
-                                target_sl = round(float(pos.get("highest_price", entry)) - trail_dist, 2)
+                                target_sl = _round_price(float(pos.get("highest_price", entry)) - trail_dist)
                                 if target_sl > float(pos.get("trailing_stop", 0.0)) and target_sl < current_price:
                                     old_sl = pos.get("trailing_stop", 0.0)
                                     pos["trailing_stop"] = target_sl
@@ -304,7 +321,7 @@ class PositionManager:
                                         f"SL raised from {old_sl} to {target_sl} (Highest: {pos.get('highest_price', entry)}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
                                     )
                             elif side == "SELL":
-                                target_sl = round(float(pos.get("lowest_price", entry)) + trail_dist, 2)
+                                target_sl = _round_price(float(pos.get("lowest_price", entry)) + trail_dist)
                                 if (target_sl < float(pos.get("trailing_stop", 0.0)) or float(pos.get("trailing_stop", 0.0)) == 0.0) and target_sl > current_price:
                                     old_sl = pos.get("trailing_stop", 0.0)
                                     pos["trailing_stop"] = target_sl
@@ -830,6 +847,19 @@ class PositionManager:
                         ThesisPersistenceEngine.get_instance().close_or_invalidate_thesis(symbol, outcome_type)
                     except Exception as tpe_err:
                         logger.error(f"Failed to conclude thesis in ThesisPersistenceEngine: {tpe_err}")
+
+                    # Enforce 300s post-trade cooldown on closed symbol to prevent rapid churn
+                    try:
+                        from app.ai.reasoning import AiReasoningEngine
+                        AiReasoningEngine.get_instance().set_cooldown(
+                            symbol=symbol,
+                            side="ALL",
+                            category="POST_TRADE_COOLDOWN",
+                            duration_seconds=300.0,
+                            reason=f"Post-trade cooldown after {outcome_type} ({outcome}) to prevent rapid churn."
+                        )
+                    except Exception as cd_err:
+                        logger.debug(f"Failed to set post-trade cooldown: {cd_err}")
 
                     asyncio.create_task(SelfAdaptationEngine.get_instance().analyze_performance())
                     asyncio.create_task(TradeJournalEngine.get_instance().journal_closed_trade(trade_id))

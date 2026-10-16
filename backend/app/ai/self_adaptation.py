@@ -1711,6 +1711,8 @@ class SelfAdaptationEngine:
             st_status = s_stats.get("status", "ACTIVE")
             win_rate = s_stats.get("win_rate_pct", 50.0)
             exp_r = s_stats.get("expectancy_r", 0.0)
+            raw_exp_r = s_stats.get("expectancy_r", 0.0)
+            shrunk_exp_r = s_stats.get("shrunk_expectancy_r", raw_exp_r)
             sample_gate = s_stats.get("sample_gate", "HIGH_TRUST_GATE")
             total_strat_trades = s_stats.get("total_trades", 0)
             recent_sample = s_stats.get("recent_sample", 0)
@@ -1798,8 +1800,14 @@ class SelfAdaptationEngine:
                     st_mod -= 0.02
 
             # C. MULTI-TIERED PROBATION SPECTRUM HANDLING & STRATEGY SUBSTITUTION HIERARCHY
+            is_breakout_in_chop = (regime.upper() in ["RANGING", "VOLATILE"] and ("BREAKOUT" in strategy.upper() or "EXPANSION" in strategy.upper()))
+            should_substitute = (
+                st_status in ["DISABLED", "PROBATION_RECOVERY", "RESTRICTED"]
+                or (total_strat_trades >= 4 and (shrunk_exp_r < -0.10 or win_rate <= 30.0))
+                or is_breakout_in_chop
+            )
             if not regime_handled:
-                if st_status in ["DISABLED", "PROBATION_RECOVERY"] or (total_strat_trades >= 10 and win_rate <= 20.0 and exp_r < -0.30):
+                if should_substitute:
                     # Tier 3: Attempt Strategy Substitution & Parameter Retuning prior to suppression
                     sub_info = self.get_best_substitute_strategy(regime, [strategy], setup)
                     if sub_info:
@@ -1822,14 +1830,19 @@ class SelfAdaptationEngine:
 
                         # Evolution Trade Tracking Telemetry
                         setup["is_evolution_trade"] = True
+                        evo_reason = (
+                            f"Breakout strategy gated in {regime} regime" if is_breakout_in_chop
+                            else f"Strategy '{strategy}' underperformance (Win rate {win_rate:.1f}%, Shrunk Exp {shrunk_exp_r:+.2f}R, Raw {raw_exp_r:+.2f}R)"
+                        )
                         evolution_info = {
                             "trade_id": setup.get("trade_id") or f"evo_{int(datetime.now(timezone.utc).timestamp() * 1000)}",
                             "original_strategy": strategy,
                             "replacement_strategy": sub_name,
-                            "replacement_reason": f"Strategy '{strategy}' underperformance (Win rate {win_rate:.1f}%, Expectancy {exp_r:+.2f}R)",
+                            "replacement_reason": evo_reason,
                             "composite_rank_score": comp_score,
                             "regime": regime,
-                            "original_expectancy_r": exp_r,
+                            "original_expectancy_r": raw_exp_r,
+                            "original_shrunk_expectancy_r": shrunk_exp_r,
                             "replacement_expected_r": sub_exp,
                             "timestamp": datetime.now(timezone.utc).isoformat()
                         }
@@ -1837,9 +1850,10 @@ class SelfAdaptationEngine:
                         self.record_evolution_trade_entry(evolution_info)
 
                         evolution_msg = (
-                            f"🔄 [STRATEGY EVOLUTION & SUBSTITUTION] Struggling strategy '{strategy}' (Win rate {win_rate:.1f}%, Expectancy {exp_r:+.2f}R across {total_strat_trades} trades) "
-                            f"automatically substituted with top regime strategy '{sub_name}' (Composite Rank Score: {comp_score}/100, +{sub_exp:+.2f}R expectancy, {sub_wr:.1f}% win rate in '{regime}' market via {sub_src}). "
-                            f"Retuned parameters & set risk allocation to 0.35x micro-trial. Opportunity preserved!"
+                            f"🔄 [STRATEGY EVOLUTION & SUBSTITUTION] Strategy '{strategy}' "
+                            f"(Win rate {win_rate:.1f}%, Shrunk Exp: {shrunk_exp_r:+.2f}R, Raw: {raw_exp_r:+.2f}R across {total_strat_trades} trades | Regime: {regime}) "
+                            f"automatically substituted with optimal regime strategy '{sub_name}' (Composite Rank: {comp_score}/100, +{sub_exp:+.2f}R expectancy, {sub_wr:.1f}% WR via {sub_src}). "
+                            f"Retuned parameters & set risk allocation to 0.35x micro-trial. Capital directed to high-probability setup!"
                         )
                         logger.info(evolution_msg)
                         reasons.append(evolution_msg)

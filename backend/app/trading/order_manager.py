@@ -314,14 +314,9 @@ class OrderManager:
                 market_regime = opportunity.get("market_regime", "TRENDING").upper()
                 strategy_used = opportunity.get("strategy_used", "")
 
-                if squeeze_state == "SQUEEZE_ACTIVE" or market_regime == "RANGING":
-                    order_routing = "LIMIT"
-                elif squeeze_state == "SQUEEZE_FIRING" or market_regime == "VOLATILE" or "BREAKOUT" in strategy_used.upper():
-                    order_routing = "MARKET"
-                else:
-                    order_routing = "LIMIT"
-
-                logger.info(f"⚡ [HYBRID ROUTING] Symbol {symbol} mapped to {order_routing} order routing (Regime: {market_regime}, Squeeze: {squeeze_state})")
+                # Upgrade 1: Maker Limit Orders on Entry (Save 50%-75% in Fees)
+                order_routing = "LIMIT"
+                logger.info(f"⚡ [MAKER ROUTING] Symbol {symbol} mapped to Post-Only {order_routing} order routing to capture Maker fee rebate and eliminate spread drag (Regime: {market_regime}, Strategy: {strategy_used})")
 
                 # PIPELINE STEP 3: Portfolio Guard (FINAL AUTHORITY)
                 from app.trading.portfolio_guard import PortfolioGuard
@@ -617,14 +612,31 @@ class OrderManager:
                         "price": price if order_routing == "LIMIT" else None,
                         "mode": trading_mode
                     }
+                    time_in_force = "GTX" if order_routing == "LIMIT" else "GTC"
                     binance_res = await connector.create_order(
                         mode=trading_mode,
                         symbol=opportunity["symbol"],
                         side=opportunity["side"],
                         order_type=order_routing,
                         quantity=position_size,
-                        price=price if order_routing == "LIMIT" else None
+                        price=price if order_routing == "LIMIT" else None,
+                        time_in_force=time_in_force
                     )
+                    # If GTX Post-Only would immediately cross spread, adjust 1 tick into book to guarantee Maker execution
+                    if isinstance(binance_res, dict) and binance_res.get("code") == -2010 and "match and take" in str(binance_res.get("msg", "")).lower():
+                        adj_factor = 0.9998 if opportunity["side"] == "BUY" else 1.0002
+                        from app.trading.position_manager import _round_price
+                        maker_adj_price = _round_price(price * adj_factor)
+                        logger.info(f"🔄 [MAKER POST-ONLY RETRY] Limit price crossed spread. Adjusting price from {price} to {maker_adj_price} to post as Maker.")
+                        binance_res = await connector.create_order(
+                            mode=trading_mode,
+                            symbol=opportunity["symbol"],
+                            side=opportunity["side"],
+                            order_type="LIMIT",
+                            quantity=position_size,
+                            price=maker_adj_price,
+                            time_in_force="GTX"
+                        )
                     order_latency_ms = max(1.0, (time.time() * 1000.0) - order_submit_start_ms)
                     
                     if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
