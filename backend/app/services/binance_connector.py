@@ -704,7 +704,7 @@ class BinanceConnector:
             free_bnb = await self.get_free_asset_balance("BNB", mode_upper)
             free_usdt = await self.get_free_asset_balance("USDT", mode_upper)
             
-            from app.trading.price_cache import PriceCache
+            from app.workers.price_cache import PriceCache
             cache = await PriceCache.get_instance()
             bnb_price = cache.get_price("BNBUSDT") or 600.0
             

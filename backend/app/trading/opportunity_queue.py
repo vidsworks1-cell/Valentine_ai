@@ -253,7 +253,7 @@ class OpportunityQueueEngine:
         """
         symbol = candidate.symbol
         try:
-            from app.trading.price_cache import PriceCache
+            from app.workers.price_cache import PriceCache
             from app.trading.order_manager import OrderManager
             from app.scheduler.manager import LayeredSchedulerManager
 

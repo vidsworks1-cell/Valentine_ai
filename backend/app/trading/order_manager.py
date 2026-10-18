@@ -773,7 +773,7 @@ class OrderManager:
                                 return
                             
                             # Market drift protection: if price drifted > 0.35% away from our limit, cancel & recycle capital
-                            from app.trading.price_cache import PriceCache
+                            from app.workers.price_cache import PriceCache
                             pc = await PriceCache.get_instance()
                             curr_px = pc.get_price(opportunity["symbol"]) or price
                             drift_pct = (curr_px - price) / price * 100.0 if opportunity["side"] == "BUY" else (price - curr_px) / price * 100.0

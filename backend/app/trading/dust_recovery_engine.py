@@ -265,7 +265,7 @@ class DustRecoveryEngine:
             service_charge_bnb = float(res.get("totalServiceCharge", 0.0001))
 
             # Estimate BNB price
-            from app.trading.price_cache import PriceCache
+            from app.workers.price_cache import PriceCache
             cache = await PriceCache.get_instance()
             bnb_price = cache.get_price("BNBUSDT") or 620.0
             recovered_usdt = round(total_transferred_bnb * bnb_price, 2)
