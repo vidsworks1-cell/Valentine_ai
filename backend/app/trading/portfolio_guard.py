@@ -345,10 +345,40 @@ class PortfolioGuard:
                         self._record_rejected_opportunity(opportunity, msg, incoming_conf)
                         return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
 
-                    if (tp1_hit or pos_thesis >= 0.78 or pos_pnl >= 0.0 or incoming_conf >= 0.80):
+                    # 3. Anti-Averaging-Down Guard: NEVER scale into or average down into an underwater position!
+                    # Pyramiding is strictly reserved for winning trades to compound alpha while trailing stops.
+                    entry = float(existing_pos.get("entry_price", 0.0))
+                    current_market_price = float(opportunity.get("entry_price", opportunity.get("price", 0.0)))
+                    if entry > 0 and current_market_price > 0:
+                        if existing_side == "BUY":
+                            unrealized_pnl_pct = ((current_market_price - entry) / entry) * 100.0
+                        else:
+                            unrealized_pnl_pct = ((entry - current_market_price) / entry) * 100.0
+                    else:
+                        unrealized_pnl_pct = pos_pnl
+
+                    if unrealized_pnl_pct < 0.0 or pos_pnl < 0.0:
+                        msg = (
+                            f"🛑 [ANTI-DCA GUARD] Scale-in strictly rejected for {symbol}: Position is underwater "
+                            f"(Unrealized PnL: {unrealized_pnl_pct:.2f}%, Realized PnL: ${pos_pnl:.2f}). "
+                            f"Never average down into a losing position, regardless of conviction ({incoming_conf:.2f})."
+                        )
+                        logger.warning(msg)
+                        self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                        return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
+                    # 4. Scale-in qualification: Must be in confirmed profit (>= +0.80% or TP1 hit) AND supported by high conviction
+                    is_in_solid_profit = (tp1_hit or unrealized_pnl_pct >= 0.80)
+                    is_high_conviction = (pos_thesis >= 0.78 or incoming_conf >= 0.80)
+
+                    if is_in_solid_profit and is_high_conviction:
                         scale_risk = proposed_scale_risk
                         self._total_scale_ins_executed += 1
-                        msg = f"🚀 [PYRAMID SCALE-IN] Approved 50% scale-in allocation ({scale_risk*100:.2f}% risk, Scale-in #{scale_ins_count+1}/{self.MAX_SCALE_INS_PER_POSITION}) for active {symbol} position."
+                        msg = (
+                            f"🚀 [PYRAMID SCALE-IN] Approved 50% scale-in allocation ({scale_risk*100:.2f}% risk, "
+                            f"Scale-in #{scale_ins_count+1}/{self.MAX_SCALE_INS_PER_POSITION}) for winning {symbol} position "
+                            f"(Unrealized PnL: +{unrealized_pnl_pct:.2f}%, TP1 hit: {tp1_hit}, Conviction: {incoming_conf:.2f})."
+                        )
                         logger.info(msg)
                         return PortfolioDecision(
                             approved=True,
@@ -358,8 +388,8 @@ class PortfolioGuard:
                         )
                     else:
                         msg = (
-                            f"[POSITION EXPOSURE GUARD] Active {existing_side} position for {symbol} is already open and does not meet pyramid scale-in criteria "
-                            f"(TP1 hit: {tp1_hit}, PnL: ${pos_pnl:.2f}, thesis: {pos_thesis:.2f}, incoming conviction: {incoming_conf:.2f} < 0.80)."
+                            f"[POSITION EXPOSURE GUARD] Active {existing_side} position for {symbol} does not meet pyramid scale-in criteria "
+                            f"(TP1 hit: {tp1_hit}, Unrealized PnL: +{unrealized_pnl_pct:.2f}% [req >= +0.80%], thesis: {pos_thesis:.2f}, conviction: {incoming_conf:.2f} [req >= 0.80])."
                         )
                         logger.warning(msg)
                         self._record_rejected_opportunity(opportunity, msg, incoming_conf)
