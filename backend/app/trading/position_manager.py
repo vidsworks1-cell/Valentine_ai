@@ -568,6 +568,16 @@ class PositionManager:
             if legal_close_qty < min_qty:
                 legal_close_qty = min_qty
 
+            min_notional = float(filters.get("min_notional", 5.0))
+            if (legal_close_qty * exit_price) < min_notional:
+                logger.warning(
+                    f"⚠️ [MICRO-ACCOUNT NOTIONAL GUARD] Partial close value (${legal_close_qty * exit_price:.2f}) "
+                    f"is below Binance minimum notional (${min_notional:.2f}). "
+                    f"Escalating to full position close to prevent order rejection and cleanly recover capital into USDT."
+                )
+                await self._close_position(trade_id, exit_price, f"{stage_label}_FULL_CLOSE")
+                return
+
             formatted_close_qty = connector.format_quantity_for_symbol(symbol, legal_close_qty, prec)
             logger.info(f"Placing real Binance Spot partial close order for {symbol} ({opposite_side} qty: {formatted_close_qty}, prec: {prec}) in {trading_mode} mode...")
             binance_res = await connector.create_order(

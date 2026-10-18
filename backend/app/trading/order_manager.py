@@ -367,23 +367,29 @@ class OrderManager:
 
                 # Handle Opposite Direction Signal Partial Close & Hedge
                 if pg_decision.action_type == "OPPOSITE_REBALANCE_HEDGE" and pg_decision.swap_trade_id:
-                    logger.info(f"🔄 [OPPOSITE REBALANCE EXECUTING] Partially closing active opposite trade #{pg_decision.swap_trade_id} ({symbol}) by 50% and executing {side} hedge")
+                    logger.info(f"🔄 [OPPOSITE REBALANCE EXECUTING] Managing active opposite trade #{pg_decision.swap_trade_id} ({symbol})")
                     try:
                         from app.trading.position_manager import PositionManager
                         pm = PositionManager.get_instance()
                         target_pos = next((p for p in pm.get_active_positions(trading_mode=trading_mode) if p.get("trade_id") == pg_decision.swap_trade_id or p.get("id") == pg_decision.swap_trade_id), None)
                         if target_pos:
-                            half_sz = round(target_pos.get("position_size", 0.0) * 0.5, 6)
-                            if half_sz > 0:
+                            pos_sz = float(target_pos.get("position_size", 0.0))
+                            half_sz = round(pos_sz * 0.5, 6)
+                            half_notional = half_sz * price
+                            # Micro-Account Guard: Binance Spot minimum order is $5.00!
+                            # If 50% notional is < $5.05, close 100% of the active long to fully recover cash.
+                            if half_notional < 5.05 or (pos_sz * price) < 10.50:
+                                logger.info(f"🛡️ [MICRO-ACCOUNT OPPOSITE REBALANCE] 50% size ({half_sz} units = ${half_notional:.2f}) is below Binance $5.00 MIN_NOTIONAL. Fully closing active position #{pg_decision.swap_trade_id} to recycle full capital to USDT.")
+                                await pm._close_position(pg_decision.swap_trade_id, price, "OPPOSITE_SIGNAL_FULL_CLOSE")
+                            elif half_sz > 0:
                                 await pm._partial_close_position(pg_decision.swap_trade_id, price, half_sz, "OPPOSITE_SIGNAL_REBALANCE")
-                                await AuditService.create_audit_log(db, AuditLogCreate(
-                                    level="INFO",
-                                    category="PORTFOLIO_INTELLIGENCE",
-                                    message=f"🔄 [OPPOSITE REBALANCE EXECUTED] Closed 50% ({half_sz}) of active {symbol} position to derisk",
-                                    details=pg_decision.reason
-                                ))
+
+                            # In Spot trading, naked shorting is impossible; closing/derisking the long completes the action
+                            if trading_mode in ["TESTNET", "LIVE"] and side == "SELL":
+                                logger.info(f"ℹ️ [SPOT REBALANCE COMPLETE] Long position derisked. Naked SELL order suppressed on Binance Spot.")
+                                return
                     except Exception as rebal_err:
-                        logger.error(f"Failed to execute opposite signal partial rebalance: {rebal_err}")
+                        logger.error(f"Failed to execute opposite signal rebalance: {rebal_err}")
 
                 # Handle Alpha Position Swap Action (Close stagnant position before entering superior setup)
                 if pg_decision.action_type == "SWAP_POSITION" and pg_decision.swap_trade_id:
@@ -505,24 +511,39 @@ class OrderManager:
                 factor = 10 ** prec
                 position_size = round(position_size, prec)
 
-                # In LIVE/TESTNET Binance Spot BUY: enforce min notional >= (min_notional_req + 0.05) USDT
-                if trading_mode in ["TESTNET", "LIVE"] and opportunity["side"].upper() == "BUY":
+                # In LIVE/TESTNET Binance Spot: enforce min notional >= (min_notional_req + 0.05) USDT
+                if trading_mode in ["TESTNET", "LIVE"]:
                     notional_val = position_size * price
                     target_min_notional = max(5.05, min_notional_req + 0.05)
                     if notional_val < target_min_notional:
-                        min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
-                        min_required_cost = min_target_qty * price
-                        if balance >= min_required_cost:
-                            position_size = min_target_qty
-                            logger.info(f"⚡ [BINANCE SPOT NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} USDT) to satisfy Binance Spot MIN_NOTIONAL (${min_notional_req:.2f}).")
+                        if opportunity["side"].upper() == "BUY":
+                            min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
+                            min_required_cost = min_target_qty * price
+                            if balance >= min_required_cost:
+                                position_size = min_target_qty
+                                logger.info(f"⚡ [BINANCE SPOT NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} USDT) to satisfy Binance Spot MIN_NOTIONAL (${min_notional_req:.2f}).")
+                            else:
+                                logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) is insufficient for minimum Binance Spot trade of {min_target_qty} {opportunity['symbol']} (${min_required_cost:.2f} USDT). Preserving cash buffer.")
+                                ExecutionStateTracker.get_instance().transition(
+                                    symbol=opportunity["symbol"],
+                                    state=ExecutionState.REJECTED,
+                                    side=opportunity["side"],
+                                    stage="RISK_SIZING",
+                                    reason=f"Available balance (${balance:.2f} USDT) insufficient for minimum Binance Spot notional ($5.00 USDT)",
+                                    price=price,
+                                    quantity=position_size,
+                                    trading_mode=trading_mode
+                                )
+                                return
                         else:
-                            logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) is insufficient for minimum Binance Spot trade of {min_target_qty} {opportunity['symbol']} (${min_required_cost:.2f} USDT). Preserving cash buffer.")
+                            # For SELL on Spot: if notional is below $5.00, reject immediately to prevent Binance filter rejection
+                            logger.warning(f"⚠️ [BINANCE SPOT NOTIONAL FILTER] {symbol} SELL notional (${notional_val:.2f}) is below Binance minimum ${target_min_notional:.2f}. Suppressed.")
                             ExecutionStateTracker.get_instance().transition(
                                 symbol=opportunity["symbol"],
                                 state=ExecutionState.REJECTED,
                                 side=opportunity["side"],
                                 stage="RISK_SIZING",
-                                reason=f"Available balance (${balance:.2f} USDT) insufficient for minimum Binance Spot notional ($5.00 USDT)",
+                                reason=f"SELL notional (${notional_val:.2f}) below Binance Spot minimum ($5.00 USDT)",
                                 price=price,
                                 quantity=position_size,
                                 trading_mode=trading_mode
@@ -612,17 +633,16 @@ class OrderManager:
                         "price": price if order_routing == "LIMIT" else None,
                         "mode": trading_mode
                     }
-                    time_in_force = "GTX" if order_routing == "LIMIT" else "GTC"
+                    time_in_force = "GTC"
                     binance_res = await connector.create_order(
                         mode=trading_mode,
                         symbol=opportunity["symbol"],
                         side=opportunity["side"],
-                        order_type=order_routing,
+                        order_type="LIMIT_MAKER" if order_routing == "LIMIT" else "MARKET",
                         quantity=position_size,
-                        price=price if order_routing == "LIMIT" else None,
-                        time_in_force=time_in_force
+                        price=price if order_routing == "LIMIT" else None
                     )
-                    # If GTX Post-Only would immediately cross spread, adjust 1 tick into book to guarantee Maker execution
+                    # If LIMIT_MAKER would immediately cross spread, adjust 1 tick into book to guarantee Maker execution
                     if isinstance(binance_res, dict) and binance_res.get("code") == -2010 and "match and take" in str(binance_res.get("msg", "")).lower():
                         adj_factor = 0.9998 if opportunity["side"] == "BUY" else 1.0002
                         from app.trading.position_manager import _round_price
@@ -632,11 +652,22 @@ class OrderManager:
                             mode=trading_mode,
                             symbol=opportunity["symbol"],
                             side=opportunity["side"],
-                            order_type="LIMIT",
+                            order_type="LIMIT_MAKER",
                             quantity=position_size,
-                            price=maker_adj_price,
-                            time_in_force="GTX"
+                            price=maker_adj_price
                         )
+                        # If still crossed, fall back to standard LIMIT with GTC
+                        if isinstance(binance_res, dict) and binance_res.get("code") == -2010:
+                            logger.info(f"🔄 [SPREAD DRIFT FALLBACK] Placing standard LIMIT (GTC) order to capture entry at {price}.")
+                            binance_res = await connector.create_order(
+                                mode=trading_mode,
+                                symbol=opportunity["symbol"],
+                                side=opportunity["side"],
+                                order_type="LIMIT",
+                                quantity=position_size,
+                                price=price,
+                                time_in_force="GTC"
+                            )
                     order_latency_ms = max(1.0, (time.time() * 1000.0) - order_submit_start_ms)
                     
                     if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):

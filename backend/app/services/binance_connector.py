@@ -654,8 +654,15 @@ class BinanceConnector:
                 params["price"] = f"{price:.{p_prec}f}"
             else:
                 params["price"] = str(price)
-            if order_type.upper() == "LIMIT":
-                params["timeInForce"] = time_in_force
+
+            # Binance Spot API compatibility:
+            # On Binance Spot (/api/v3/order), Post-Only Maker orders require type="LIMIT_MAKER" with NO timeInForce parameter.
+            # Normal LIMIT orders accept timeInForce: GTC, IOC, FOK (GTX is invalid on Spot).
+            if order_type.upper() == "LIMIT_MAKER" or str(time_in_force).upper() == "GTX":
+                params["type"] = "LIMIT_MAKER"
+                params.pop("timeInForce", None)
+            elif order_type.upper() == "LIMIT":
+                params["timeInForce"] = time_in_force if time_in_force in ["GTC", "IOC", "FOK"] else "GTC"
 
         return await self._request("POST", "/api/v3/order", mode, params=params, signed=True)
 
