@@ -19,6 +19,10 @@ except ImportError:
             BINANCE_TESTNET_SECRET_KEY: str = ""
             BINANCE_TESTNET_API_SECRET: str = ""
             BINANCE_TESTNET: bool = False
+            BINANCE_VENUE: str = "SPOT" # "SPOT" or "FUTURES"
+            TRADING_VENUE: str = "SPOT"
+            BINANCE_FUTURES_LEVERAGE: int = 2
+            BINANCE_FUTURES_MARGIN_TYPE: str = "ISOLATED"
         def SettingsConfigDict(**kwargs): return kwargs
 
 class Settings(BaseSettings):
@@ -39,6 +43,10 @@ class Settings(BaseSettings):
     BINANCE_TESTNET_SECRET_KEY: str = ""
     BINANCE_TESTNET_API_SECRET: str = ""
     BINANCE_TESTNET: bool = False
+    BINANCE_VENUE: str = "SPOT" # "SPOT" or "FUTURES"
+    TRADING_VENUE: str = "SPOT"
+    BINANCE_FUTURES_LEVERAGE: int = 2
+    BINANCE_FUTURES_MARGIN_TYPE: str = "ISOLATED"
     
     model_config = SettingsConfigDict(
         env_file=".env",

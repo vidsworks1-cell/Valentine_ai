@@ -70,6 +70,10 @@ class PortfolioGuard:
     MAX_CLUSTER_POSITIONS = 2   # Max 2 simultaneous positions per correlation cluster
     MAX_SECTOR_RISK_CAP_PCT = 3.5 # Max 3.5% portfolio risk per sector cluster
     MAX_SCALE_INS_PER_POSITION = 2 # Max 2 scale-ins per position (3 entries max total)
+    MIN_SWAP_HOLD_TIME_SEC = 3600.0   # Must hold for at least 60 minutes before even considering an Alpha Swap
+    SWAP_GLOBAL_COOLDOWN_SEC = 7200.0 # Max 1 swap per 2 hours to eliminate position churn and fee bleed
+    MIN_SWAP_CONVICTION_DELTA = 0.15  # Incoming setup must have >= 15% conviction edge over stagnant position
+    MIN_INCOMING_CONVICTION_FOR_SWAP = 0.88 # Incoming setup must be exceptional (>= 88%) to justify replacing a position
 
     # Correlation Clusters Mapping
     CORRELATION_CLUSTERS = {
@@ -84,6 +88,7 @@ class PortfolioGuard:
         self._circuit_breaker_date = None
         self._slippage_feedback: Dict[str, List[Dict[str, Any]]] = {}
         self._total_swaps_executed = 0
+        self._last_swap_timestamp = 0.0
         self._total_scale_ins_executed = 0
         self._total_hedges_executed = 0
 
@@ -483,25 +488,74 @@ class PortfolioGuard:
                 pass
 
             if open_count >= effective_max_open:
+                now_ts = time.time()
+                # 1. Anti-Churn Cooldown: Max 1 Alpha Swap per 2 hours across entire portfolio
+                time_since_last_swap = now_ts - getattr(self, "_last_swap_timestamp", 0.0)
+                if time_since_last_swap < self.SWAP_GLOBAL_COOLDOWN_SEC:
+                    rem_cd = int(self.SWAP_GLOBAL_COOLDOWN_SEC - time_since_last_swap)
+                    msg = (
+                        f"🛡️ [ANTI-CHURN GUARD] Alpha Swap blocked: Cooldown active ({rem_cd}s remaining). "
+                        f"Preventing rapid turnover and fee bleed on active positions."
+                    )
+                    logger.warning(msg)
+                    self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                    try:
+                        from app.trading.opportunity_queue import OpportunityQueueEngine
+                        asyncio.create_task(OpportunityQueueEngine.get_instance().enqueue_opportunity(opportunity, reason=msg))
+                    except Exception as qe:
+                        logger.error(f"Error enqueuing opportunity into OpportunityQueue: {qe}")
+                    return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
+                # 2. Minimum Conviction Hurdle: Incoming setup must be exceptional (>= 88%)
+                if incoming_conf < self.MIN_INCOMING_CONVICTION_FOR_SWAP:
+                    msg = (
+                        f"🛡️ [ANTI-CHURN GUARD] Alpha Swap rejected: Incoming setup conviction ({incoming_conf*100:.1f}%) "
+                        f"below exceptional swap hurdle ({self.MIN_INCOMING_CONVICTION_FOR_SWAP*100:.0f}%). Active positions protected."
+                    )
+                    logger.warning(msg)
+                    self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                    try:
+                        from app.trading.opportunity_queue import OpportunityQueueEngine
+                        asyncio.create_task(OpportunityQueueEngine.get_instance().enqueue_opportunity(opportunity, reason=msg))
+                    except Exception as qe:
+                        logger.error(f"Error enqueuing opportunity into OpportunityQueue: {qe}")
+                    return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
+
                 lowest_pos = None
                 lowest_conviction = 1.0
 
                 for p in active_positions:
                     p_thesis = float(p.get("thesis_strength", 0.75))
-                    p_opened_at = p.get("opened_at", time.time())
-                    p_age_sec = time.time() - p_opened_at
-                    effective_score = p_thesis - (0.05 if p_age_sec > 3600 else 0.0)
+                    p_opened_at = float(p.get("opened_at", now_ts))
+                    p_age_sec = now_ts - p_opened_at
+                    
+                    # Minimum Holding Lock: CANNOT swap out a position opened less than 60 minutes ago!
+                    # Give setups time to breathe and play out. Never churn fresh trades!
+                    if p_age_sec < self.MIN_SWAP_HOLD_TIME_SEC:
+                        continue
+
+                    # Profit Protection: Never swap out a trade that is in solid profit (>= +0.50%)
+                    entry_p = float(p.get("entry_price", 0.0))
+                    side_p = p.get("side", "BUY").upper()
+                    cur_p = float(p.get("current_price", entry_p))
+                    pnl_pct = ((cur_p - entry_p) / entry_p * 100.0) if entry_p > 0 and side_p == "BUY" else 0.0
+                    if pnl_pct >= 0.50:
+                        continue
+
+                    effective_score = p_thesis - (0.08 if p_age_sec > 7200 else 0.0)
                     if effective_score < lowest_conviction:
                         lowest_conviction = effective_score
                         lowest_pos = p
 
-                if lowest_pos and (incoming_conf - lowest_conviction) >= 0.06:
+                if lowest_pos and (incoming_conf - lowest_conviction) >= self.MIN_SWAP_CONVICTION_DELTA:
                     swap_id = lowest_pos.get("trade_id", lowest_pos.get("id"))
                     swap_sym = lowest_pos.get("symbol", "UNKNOWN")
                     self._total_swaps_executed += 1
+                    self._last_swap_timestamp = now_ts
                     msg = (
-                        f"🔄 [ALPHA SWAP] Max open positions reached ({self.MAX_OPEN_POSITIONS}). "
-                        f"Replacing stagnant {swap_sym} (Conviction: {lowest_conviction:.2f}) with superior setup {symbol} (Conviction: {incoming_conf:.2f})."
+                        f"🔄 [ALPHA SWAP] Max open positions reached ({effective_max_open}). "
+                        f"Replacing truly stagnant {swap_sym} (Held for {(now_ts - float(lowest_pos.get('opened_at', now_ts)))/60:.0f}m, Conviction: {lowest_conviction:.2f}) "
+                        f"with superior setup {symbol} (Conviction: {incoming_conf:.2f} >= +{self.MIN_SWAP_CONVICTION_DELTA*100:.0f}% edge)."
                     )
                     logger.info(msg)
                     return PortfolioDecision(
@@ -513,7 +567,11 @@ class PortfolioGuard:
                         swap_symbol=swap_sym
                     )
                 else:
-                    msg = f"[PORTFOLIO GUARD] Maximum open positions reached ({self.MAX_OPEN_POSITIONS}). Candidate buffered in Opportunity Queue for next capital release."
+                    msg = (
+                        f"[PORTFOLIO GUARD] Maximum open positions reached ({effective_max_open}). "
+                        f"All active positions are protected by 60m Minimum Holding Lock or profit buffer. "
+                        f"Candidate buffered in Opportunity Queue."
+                    )
                     logger.warning(msg)
                     self._record_rejected_opportunity(opportunity, msg, incoming_conf)
                     try:

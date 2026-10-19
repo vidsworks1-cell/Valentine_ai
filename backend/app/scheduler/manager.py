@@ -31,6 +31,7 @@ class LayeredSchedulerManager:
         
         # Core safeguards and modes - restored from persistent config if available
         self.global_trading_mode: str = "PAPER"  # OFF, PAPER, TESTNET, LIVE
+        self.trading_venue: str = os.getenv("TRADING_VENUE", os.getenv("BINANCE_VENUE", "SPOT")).upper() # SPOT or FUTURES
         self.emergency_stop_active: bool = False
         self.load_persistent_config()
 
@@ -40,7 +41,11 @@ class LayeredSchedulerManager:
         if env_mode and env_mode.upper() in ["OFF", "PAPER", "TESTNET", "LIVE"]:
             self.global_trading_mode = env_mode.upper()
             logger.info(f"Loaded global trading mode from environment: {self.global_trading_mode}")
-            return
+
+        env_venue = os.getenv("TRADING_VENUE") or os.getenv("BINANCE_VENUE")
+        if env_venue and env_venue.upper() in ["SPOT", "FUTURES"]:
+            self.trading_venue = env_venue.upper()
+            logger.info(f"Loaded trading venue from environment: {self.trading_venue}")
 
         if os.path.exists(CONFIG_FILE_PATH):
             try:
@@ -50,6 +55,10 @@ class LayeredSchedulerManager:
                     if saved_mode and str(saved_mode).upper() in ["OFF", "PAPER", "TESTNET", "LIVE"]:
                         self.global_trading_mode = str(saved_mode).upper()
                         logger.info(f"💾 Loaded persistent global trading mode: {self.global_trading_mode} from '{CONFIG_FILE_PATH}'")
+                    saved_venue = cfg.get("trading_venue")
+                    if saved_venue and str(saved_venue).upper() in ["SPOT", "FUTURES"]:
+                        self.trading_venue = str(saved_venue).upper()
+                        logger.info(f"💾 Loaded persistent trading venue: {self.trading_venue} from '{CONFIG_FILE_PATH}'")
                     if "emergency_stop_active" in cfg:
                         self.emergency_stop_active = bool(cfg.get("emergency_stop_active"))
             except Exception as e:
@@ -61,12 +70,13 @@ class LayeredSchedulerManager:
             os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
             cfg_data = {
                 "global_trading_mode": self.global_trading_mode,
+                "trading_venue": self.trading_venue,
                 "emergency_stop_active": self.emergency_stop_active,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }
             with open(CONFIG_FILE_PATH, "w") as f:
                 json.dump(cfg_data, f, indent=2)
-            logger.info(f"💾 Saved persistent global trading mode '{self.global_trading_mode}' to '{CONFIG_FILE_PATH}'")
+            logger.info(f"💾 Saved persistent global trading mode '{self.global_trading_mode}' and venue '{self.trading_venue}' to '{CONFIG_FILE_PATH}'")
         except Exception as e:
             logger.error(f"Failed saving persistent config to {CONFIG_FILE_PATH}: {e}")
 
@@ -78,6 +88,16 @@ class LayeredSchedulerManager:
         self.global_trading_mode = mode_upper
         self.save_persistent_config()
         return self.global_trading_mode
+
+    def set_trading_venue(self, venue: str) -> str:
+        """Sets trading venue (SPOT or FUTURES) in memory and persists to storage."""
+        venue_upper = venue.upper()
+        if venue_upper not in ["SPOT", "FUTURES"]:
+            raise ValueError(f"Invalid trading venue: {venue}. Allowed: SPOT, FUTURES")
+        self.trading_venue = venue_upper
+        self.save_persistent_config()
+        logger.info(f"🔄 [VENUE SWITCH] Switched Lumina trading venue to: {self.trading_venue}")
+        return self.trading_venue
 
     @classmethod
     async def get_instance(cls) -> 'LayeredSchedulerManager':

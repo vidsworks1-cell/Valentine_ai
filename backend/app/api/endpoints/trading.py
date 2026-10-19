@@ -135,6 +135,38 @@ async def _set_global_trading_mode(mode: str):
         "global_trading_mode": manager.global_trading_mode
     }
 
+@router.get("/venue")
+async def get_trading_venue():
+    """Fetches system-wide trading venue: SPOT or FUTURES."""
+    manager = await LayeredSchedulerManager.get_instance()
+    return {
+        "status": "SUCCESS",
+        "trading_venue": manager.trading_venue
+    }
+
+@router.post("/venue/{venue}")
+@router.post("/venue")
+async def update_trading_venue(venue: str):
+    """Sets system-wide trading venue (SPOT or FUTURES) and immediately reconciles state."""
+    venue_upper = venue.upper()
+    if venue_upper not in ["SPOT", "FUTURES"]:
+        raise HTTPException(status_code=400, detail="Invalid trading venue. Allowed: SPOT, FUTURES")
+        
+    manager = await LayeredSchedulerManager.get_instance()
+    manager.set_trading_venue(venue_upper)
+    
+    # Trigger reconciliation for the new venue
+    try:
+        await manager.reconciliation_engine.reconcile_state()
+    except Exception as re_err:
+        logger.warning(f"Immediate reconciliation upon venue switch warning: {re_err}")
+    
+    return {
+        "status": "SUCCESS",
+        "trading_venue": manager.trading_venue,
+        "message": f"Successfully switched Lumina trading venue to {manager.trading_venue}"
+    }
+
 @router.post("/emergency/reset")
 async def reset_emergency_stop():
     """Resets the system emergency block, allowing the trade execution flow to resume."""

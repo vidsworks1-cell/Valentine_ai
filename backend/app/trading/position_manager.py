@@ -559,34 +559,57 @@ class PositionManager:
         if trading_mode in ["TESTNET", "LIVE"]:
             opposite_side = "SELL" if side == "BUY" else "BUY"
             connector = BinanceConnector.get_instance()
-            filters = await connector.get_symbol_lot_size_filters(symbol, trading_mode)
-            prec = filters.get("precision", 4)
-            step_size = float(filters.get("step_size", 10 ** (-prec)))
-            min_qty = float(filters.get("min_qty", step_size))
+            trading_venue = getattr(scheduler, "trading_venue", "SPOT").upper()
 
-            legal_close_qty = math.floor(close_size / step_size) * step_size
-            if legal_close_qty < min_qty:
-                legal_close_qty = min_qty
+            if trading_venue == "FUTURES":
+                filters = await connector.get_futures_symbol_filters(symbol, trading_mode)
+                prec = filters.get("precision", 3)
+                step_size = float(filters.get("step_size", 0.001))
+                min_qty = float(filters.get("min_qty", step_size))
 
-            min_notional = float(filters.get("min_notional", 5.0))
-            if (legal_close_qty * exit_price) < min_notional:
-                logger.warning(
-                    f"⚠️ [MICRO-ACCOUNT NOTIONAL GUARD] Partial close value (${legal_close_qty * exit_price:.2f}) "
-                    f"is below Binance minimum notional (${min_notional:.2f}). "
-                    f"Escalating to full position close to prevent order rejection and cleanly recover capital into USDT."
+                legal_close_qty = math.floor(close_size / step_size) * step_size
+                if legal_close_qty < min_qty:
+                    legal_close_qty = min_qty
+
+                formatted_close_qty = connector.format_quantity_for_symbol(symbol, legal_close_qty, prec)
+                logger.info(f"🚀 [BINANCE FUTURES PARTIAL CLOSE] Placing real Binance Futures partial close for {symbol} ({opposite_side} qty: {formatted_close_qty}, reduce_only=True) in {trading_mode} mode...")
+                binance_res = await connector.create_futures_order(
+                    mode=trading_mode,
+                    symbol=symbol,
+                    side=opposite_side,
+                    order_type="MARKET",
+                    quantity=formatted_close_qty,
+                    reduce_only=True
                 )
-                await self._close_position(trade_id, exit_price, f"{stage_label}_FULL_CLOSE")
-                return
+            else:
+                filters = await connector.get_symbol_lot_size_filters(symbol, trading_mode)
+                prec = filters.get("precision", 4)
+                step_size = float(filters.get("step_size", 10 ** (-prec)))
+                min_qty = float(filters.get("min_qty", step_size))
 
-            formatted_close_qty = connector.format_quantity_for_symbol(symbol, legal_close_qty, prec)
-            logger.info(f"Placing real Binance Spot partial close order for {symbol} ({opposite_side} qty: {formatted_close_qty}, prec: {prec}) in {trading_mode} mode...")
-            binance_res = await connector.create_order(
-                mode=trading_mode,
-                symbol=symbol,
-                side=opposite_side,
-                order_type="MARKET",
-                quantity=formatted_close_qty
-            )
+                legal_close_qty = math.floor(close_size / step_size) * step_size
+                if legal_close_qty < min_qty:
+                    legal_close_qty = min_qty
+
+                min_notional = float(filters.get("min_notional", 5.0))
+                if (legal_close_qty * exit_price) < min_notional:
+                    logger.warning(
+                        f"⚠️ [MICRO-ACCOUNT NOTIONAL GUARD] Partial close value (${legal_close_qty * exit_price:.2f}) "
+                        f"is below Binance minimum notional (${min_notional:.2f}). "
+                        f"Escalating to full position close to prevent order rejection and cleanly recover capital into USDT."
+                    )
+                    await self._close_position(trade_id, exit_price, f"{stage_label}_FULL_CLOSE")
+                    return
+
+                formatted_close_qty = connector.format_quantity_for_symbol(symbol, legal_close_qty, prec)
+                logger.info(f"Placing real Binance Spot partial close order for {symbol} ({opposite_side} qty: {formatted_close_qty}, prec: {prec}) in {trading_mode} mode...")
+                binance_res = await connector.create_order(
+                    mode=trading_mode,
+                    symbol=symbol,
+                    side=opposite_side,
+                    order_type="MARKET",
+                    quantity=formatted_close_qty
+                )
             
             if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
                 logger.error(f"❌ BINANCE PARTIAL CLOSE ORDER FAILED: {binance_res}")
@@ -692,32 +715,54 @@ class PositionManager:
         if trading_mode in ["TESTNET", "LIVE"]:
             opposite_side = "SELL" if side == "BUY" else "BUY"
             connector = BinanceConnector.get_instance()
-            filters = await connector.get_symbol_lot_size_filters(symbol, trading_mode)
-            prec = filters.get("precision", 4)
-            step_size = float(filters.get("step_size", 10 ** (-prec)))
-            min_qty = float(filters.get("min_qty", step_size))
+            trading_venue = getattr(scheduler, "trading_venue", "SPOT").upper()
 
-            # Smart Exit Engine: Query Binance for actual free balance before selling
-            sell_qty = size
-            if opposite_side == "SELL":
-                actual_free = await connector.get_free_asset_balance(base_asset, trading_mode)
-                if actual_free > 0.0:
-                    legal_qty = math.floor(actual_free / step_size) * step_size
-                    if legal_qty >= min_qty:
-                        logger.info(f"🔍 [SMART EXIT ENGINE] Binance reports {actual_free} {base_asset} free. Maximum legal sell qty calculated as {legal_qty} (DB record had {size}).")
-                        sell_qty = legal_qty
-                    else:
-                        logger.warning(f"⚠️ [SMART EXIT ENGINE] Actual free {actual_free} {base_asset} below min_qty {min_qty}. Using internal size {size}.")
+            if trading_venue == "FUTURES":
+                filters = await connector.get_futures_symbol_filters(symbol, trading_mode)
+                prec = filters.get("precision", 3)
+                step_size = float(filters.get("step_size", 0.001))
+                legal_qty = math.floor(size / step_size) * step_size
+                close_qty = round(legal_qty, prec)
+                logger.info(f"🚀 [BINANCE FUTURES CLOSE] Placing real Binance Futures close order for {symbol} ({opposite_side} qty: {close_qty}, reduce_only=True, exit: {exit_reason}) in {trading_mode} mode...")
+                binance_res = await connector.create_futures_order(
+                    mode=trading_mode,
+                    symbol=symbol,
+                    side=opposite_side,
+                    order_type="MARKET",
+                    quantity=close_qty,
+                    reduce_only=True
+                )
+                if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
+                    logger.error(f"❌ BINANCE FUTURES CLOSE ORDER FAILED for {symbol}: {binance_res}")
+                else:
+                    logger.info(f"✅ [BINANCE FUTURES CLOSED] Contract position for {symbol} cleanly liquidated into USDT: {binance_res}")
+            else:
+                filters = await connector.get_symbol_lot_size_filters(symbol, trading_mode)
+                prec = filters.get("precision", 4)
+                step_size = float(filters.get("step_size", 10 ** (-prec)))
+                min_qty = float(filters.get("min_qty", step_size))
 
-            close_qty = connector.format_quantity_for_symbol(symbol, sell_qty, prec)
-            logger.info(f"Placing real Binance Spot close order for {symbol} ({opposite_side} qty: {close_qty}, precision: {prec}) in {trading_mode} mode...")
-            binance_res = await connector.create_order(
-                mode=trading_mode,
-                symbol=symbol,
-                side=opposite_side,
-                order_type="MARKET",
-                quantity=close_qty
-            )
+                # Smart Exit Engine: Query Binance for actual free balance before selling
+                sell_qty = size
+                if opposite_side == "SELL":
+                    actual_free = await connector.get_free_asset_balance(base_asset, trading_mode)
+                    if actual_free > 0.0:
+                        legal_qty = math.floor(actual_free / step_size) * step_size
+                        if legal_qty >= min_qty:
+                            logger.info(f"🔍 [SMART EXIT ENGINE] Binance reports {actual_free} {base_asset} free. Maximum legal sell qty calculated as {legal_qty} (DB record had {size}).")
+                            sell_qty = legal_qty
+                        else:
+                            logger.warning(f"⚠️ [SMART EXIT ENGINE] Actual free {actual_free} {base_asset} below min_qty {min_qty}. Using internal size {size}.")
+
+                close_qty = connector.format_quantity_for_symbol(symbol, sell_qty, prec)
+                logger.info(f"Placing real Binance Spot close order for {symbol} ({opposite_side} qty: {close_qty}, precision: {prec}) in {trading_mode} mode...")
+                binance_res = await connector.create_order(
+                    mode=trading_mode,
+                    symbol=symbol,
+                    side=opposite_side,
+                    order_type="MARKET",
+                    quantity=close_qty
+                )
             
             if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
                 err_msg = str(binance_res.get("msg", "")) + " " + str(binance_res.get("raw_response", ""))

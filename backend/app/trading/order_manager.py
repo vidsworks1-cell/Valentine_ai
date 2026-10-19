@@ -171,108 +171,159 @@ class OrderManager:
             try:
                 trading_mode = scheduler.global_trading_mode
                 
-                # 1. Fetch relevant Wallet Balance based on trading mode
+                trading_venue = getattr(scheduler, "trading_venue", "SPOT").upper()
+                
+                # 1. Fetch relevant Wallet Balance based on trading mode and venue
                 if trading_mode in ["TESTNET", "LIVE"]:
                     connector = BinanceConnector.get_instance()
-                    equity_status = await connector.get_spot_equity_and_earn_status(trading_mode)
 
-                    # Check for query failure
-                    if equity_status.get("error"):
-                        err_msg = equity_status["error"]
-                        logger.error(f"❌ [/api/v3/account ERROR] Failed to fetch live Binance balance: {err_msg}")
-                        ExecutionStateTracker.get_instance().transition(
-                            symbol=symbol,
-                            state=ExecutionState.REJECTED,
-                            side=side,
-                            stage="BALANCE_VERIFICATION",
-                            reason=f"Failed to query /api/v3/account: {err_msg}",
-                            price=float(opportunity.get("entry_price", 0.0)),
-                            trading_mode=trading_mode
-                        )
-                        return
-
-                    free_spot_usdt = float(equity_status.get("free_usdt", 0.0))
-                    total_ldusdt = float(equity_status.get("total_ldusdt", 0.0))
-
-                    # Guard A: Detect whether funds are held as LDUSDT (Binance Simple Earn)
-                    # If free Spot USDT is zero and only LDUSDT exists, stop execution immediately.
-                    if free_spot_usdt <= 0.0 and total_ldusdt > 0.0:
-                        earn_msg = "Funds are in Binance Simple Earn. Redeem to Spot before trading."
-                        logger.error(f"🛑 [SIMPLE EARN DETECTED] {earn_msg} (Held in Simple Earn: ${total_ldusdt:.2f} LDUSDT, Spot: ${free_spot_usdt:.2f} USDT)")
-                        ExecutionStateTracker.get_instance().transition(
-                            symbol=symbol,
-                            state=ExecutionState.REJECTED,
-                            side=side,
-                            stage="SIMPLE_EARN_GUARD",
-                            reason=earn_msg,
-                            price=float(opportunity.get("entry_price", 0.0)),
-                            trading_mode=trading_mode
-                        )
-                        try:
-                            await AuditService.create_audit_log(db, AuditLogCreate(
-                                level="WARNING",
-                                category="RISK_ENGINE",
-                                message=earn_msg,
-                                details=f"Spot USDT is $0.00 while ${total_ldusdt:.2f} LDUSDT is held in Binance Simple Earn. Sizing and order submission halted."
-                            ))
-                        except Exception:
-                            pass
-                        return
-
-                    # Guard B: Never continue to position sizing or order submission when free Spot USDT is insufficient (< 5.0 USDT minimum notional)
-                    if free_spot_usdt < 5.0:
-                        insufficient_msg = f"Insufficient free Spot USDT balance (${free_spot_usdt:.2f} USDT). Minimum Binance Spot order requires at least $5.00 USDT."
-                        logger.warning(f"🛑 [INSUFFICIENT BALANCE] {insufficient_msg}")
-                        ExecutionStateTracker.get_instance().transition(
-                            symbol=symbol,
-                            state=ExecutionState.REJECTED,
-                            side=side,
-                            stage="BALANCE_VERIFICATION",
-                            reason=insufficient_msg,
-                            price=float(opportunity.get("entry_price", 0.0)),
-                            trading_mode=trading_mode
-                        )
-                        try:
-                            await AuditService.create_audit_log(db, AuditLogCreate(
-                                level="WARNING",
-                                category="RISK_ENGINE",
-                                message="Insufficient free Spot USDT balance",
-                                details=insufficient_msg
-                            ))
-                        except Exception:
-                            pass
-                        return
-
-                    # Verified live Spot USDT equity: zero hardcoded/simulated balances
-                    balance = free_spot_usdt
-                    logger.info(f"✅ [LIVE BALANCE VERIFIED] Using live Binance Spot USDT equity: ${balance:.2f} (Simple Earn LDUSDT: ${total_ldusdt:.2f})")
-
-                    # Spot Trading Safety Guard: In Binance Spot, a new SELL order requires holding the base asset
-                    balances = await connector.get_wallet_balances(trading_mode)
-                    if isinstance(balances, list) and opportunity.get("side", "").upper() == "SELL":
-                        base_asset = symbol.replace("USDT", "").replace("USDC", "").replace("FDUSD", "").upper()
-                        base_free = next((float(b["free"]) for b in balances if b["asset"] == base_asset), 0.0)
-                        if base_free <= 0.00001:
-                            logger.warning(f"⚠️ [SPOT SHORT NOT SUPPORTED] Rejected {symbol} SELL order: Spot account holds 0 {base_asset}. (Binance Spot only allows BUY to enter and SELL to exit held assets).")
+                    if trading_venue == "FUTURES":
+                        equity_status = await connector.get_futures_equity_status(trading_mode)
+                        if equity_status.get("error"):
+                            err_msg = equity_status["error"]
+                            logger.error(f"❌ [/fapi/v2/account ERROR] Failed to fetch live Binance Futures balance: {err_msg}")
                             ExecutionStateTracker.get_instance().transition(
                                 symbol=symbol,
                                 state=ExecutionState.REJECTED,
                                 side=side,
-                                stage="SPOT_SHORT_GUARD",
-                                reason=f"Binance Spot account holds 0 {base_asset}",
+                                stage="BALANCE_VERIFICATION",
+                                reason=f"Failed to query /fapi/v2/account: {err_msg}",
+                                price=float(opportunity.get("entry_price", 0.0)),
+                                trading_mode=trading_mode
+                            )
+                            return
+
+                        available_margin = float(equity_status.get("available_usdt", 0.0))
+                        total_wallet = float(equity_status.get("wallet_balance_usdt", 0.0))
+                        unrealized_pnl = float(equity_status.get("unrealized_pnl", 0.0))
+
+                        if available_margin < 2.0:
+                            insufficient_msg = f"Insufficient available Futures USDT margin (${available_margin:.2f} USDT). Minimum margin is $2.00 USDT."
+                            logger.warning(f"🛑 [INSUFFICIENT BALANCE] {insufficient_msg}")
+                            ExecutionStateTracker.get_instance().transition(
+                                symbol=symbol,
+                                state=ExecutionState.REJECTED,
+                                side=side,
+                                stage="BALANCE_VERIFICATION",
+                                reason=insufficient_msg,
                                 price=float(opportunity.get("entry_price", 0.0)),
                                 trading_mode=trading_mode
                             )
                             try:
                                 await AuditService.create_audit_log(db, AuditLogCreate(
                                     level="WARNING",
-                                    category="TRADING",
-                                    message=f"Spot shorting suppressed for {symbol}",
-                                    details=f"Binance Spot mode cannot open naked short without {base_asset} balance."
+                                    category="RISK_ENGINE",
+                                    message="Insufficient available Futures USDT margin",
+                                    details=insufficient_msg
                                 ))
                             except Exception:
                                 pass
                             return
+
+                        balance = available_margin
+                        logger.info(f"✅ [FUTURES BALANCE VERIFIED] Available Futures USDT margin: ${balance:.2f} (Total Wallet: ${total_wallet:.2f}, Unrealized PnL: ${unrealized_pnl:.2f})")
+                        logger.info(f"⚡ [FUTURES CONTRACT READY] Venue: FUTURES | Symbol: {symbol} | Side: {side} (Two-way Long/Short trading fully enabled)")
+
+                    else:
+                        equity_status = await connector.get_spot_equity_and_earn_status(trading_mode)
+
+                        # Check for query failure
+                        if equity_status.get("error"):
+                            err_msg = equity_status["error"]
+                            logger.error(f"❌ [/api/v3/account ERROR] Failed to fetch live Binance balance: {err_msg}")
+                            ExecutionStateTracker.get_instance().transition(
+                                symbol=symbol,
+                                state=ExecutionState.REJECTED,
+                                side=side,
+                                stage="BALANCE_VERIFICATION",
+                                reason=f"Failed to query /api/v3/account: {err_msg}",
+                                price=float(opportunity.get("entry_price", 0.0)),
+                                trading_mode=trading_mode
+                            )
+                            return
+
+                        free_spot_usdt = float(equity_status.get("free_usdt", 0.0))
+                        total_ldusdt = float(equity_status.get("total_ldusdt", 0.0))
+
+                        # Guard A: Detect whether funds are held as LDUSDT (Binance Simple Earn)
+                        # If free Spot USDT is zero and only LDUSDT exists, stop execution immediately.
+                        if free_spot_usdt <= 0.0 and total_ldusdt > 0.0:
+                            earn_msg = "Funds are in Binance Simple Earn. Redeem to Spot before trading."
+                            logger.error(f"🛑 [SIMPLE EARN DETECTED] {earn_msg} (Held in Simple Earn: ${total_ldusdt:.2f} LDUSDT, Spot: ${free_spot_usdt:.2f} USDT)")
+                            ExecutionStateTracker.get_instance().transition(
+                                symbol=symbol,
+                                state=ExecutionState.REJECTED,
+                                side=side,
+                                stage="SIMPLE_EARN_GUARD",
+                                reason=earn_msg,
+                                price=float(opportunity.get("entry_price", 0.0)),
+                                trading_mode=trading_mode
+                            )
+                            try:
+                                await AuditService.create_audit_log(db, AuditLogCreate(
+                                    level="WARNING",
+                                    category="RISK_ENGINE",
+                                    message=earn_msg,
+                                    details=f"Spot USDT is $0.00 while ${total_ldusdt:.2f} LDUSDT is held in Binance Simple Earn. Sizing and order submission halted."
+                                ))
+                            except Exception:
+                                pass
+                            return
+
+                        # Guard B: Never continue to position sizing or order submission when free Spot USDT is insufficient (< 5.0 USDT minimum notional)
+                        if free_spot_usdt < 5.0:
+                            insufficient_msg = f"Insufficient free Spot USDT balance (${free_spot_usdt:.2f} USDT). Minimum Binance Spot order requires at least $5.00 USDT."
+                            logger.warning(f"🛑 [INSUFFICIENT BALANCE] {insufficient_msg}")
+                            ExecutionStateTracker.get_instance().transition(
+                                symbol=symbol,
+                                state=ExecutionState.REJECTED,
+                                side=side,
+                                stage="BALANCE_VERIFICATION",
+                                reason=insufficient_msg,
+                                price=float(opportunity.get("entry_price", 0.0)),
+                                trading_mode=trading_mode
+                            )
+                            try:
+                                await AuditService.create_audit_log(db, AuditLogCreate(
+                                    level="WARNING",
+                                    category="RISK_ENGINE",
+                                    message="Insufficient free Spot USDT balance",
+                                    details=insufficient_msg
+                                ))
+                            except Exception:
+                                pass
+                            return
+
+                        # Verified live Spot USDT equity: zero hardcoded/simulated balances
+                        balance = free_spot_usdt
+                        logger.info(f"✅ [LIVE BALANCE VERIFIED] Using live Binance Spot USDT equity: ${balance:.2f} (Simple Earn LDUSDT: ${total_ldusdt:.2f})")
+
+                        # Spot Trading Safety Guard: In Binance Spot, a new SELL order requires holding the base asset
+                        balances = await connector.get_wallet_balances(trading_mode)
+                        if isinstance(balances, list) and opportunity.get("side", "").upper() == "SELL":
+                            base_asset = symbol.replace("USDT", "").replace("USDC", "").replace("FDUSD", "").upper()
+                            base_free = next((float(b["free"]) for b in balances if b["asset"] == base_asset), 0.0)
+                            if base_free <= 0.00001:
+                                logger.warning(f"⚠️ [SPOT SHORT NOT SUPPORTED] Rejected {symbol} SELL order: Spot account holds 0 {base_asset}. (Binance Spot only allows BUY to enter and SELL to exit held assets).")
+                                ExecutionStateTracker.get_instance().transition(
+                                    symbol=symbol,
+                                    state=ExecutionState.REJECTED,
+                                    side=side,
+                                    stage="SPOT_SHORT_GUARD",
+                                    reason=f"Binance Spot account holds 0 {base_asset}",
+                                    price=float(opportunity.get("entry_price", 0.0)),
+                                    trading_mode=trading_mode
+                                )
+                                try:
+                                    await AuditService.create_audit_log(db, AuditLogCreate(
+                                        level="WARNING",
+                                        category="TRADING",
+                                        message=f"Spot shorting suppressed for {symbol}",
+                                        details=f"Binance Spot mode cannot open naked short without {base_asset} balance."
+                                    ))
+                                except Exception:
+                                    pass
+                                return
                 else:
                     wallet = await PaperTradingService.get_wallet(db, "lumina_default")
                     if not wallet:
@@ -503,76 +554,113 @@ class OrderManager:
                         logger.error(f"Failed to log risk rejected audit event: {ae}")
                     return
 
-                # Dynamically resolve Binance Spot LOT_SIZE step sizes and MIN_NOTIONAL
+                # Dynamically resolve Binance LOT_SIZE step sizes and MIN_NOTIONAL based on venue
                 connector = BinanceConnector.get_instance()
-                filters = await connector.get_symbol_lot_size_filters(opportunity["symbol"], trading_mode)
-                prec = filters.get("precision", 4)
-                min_notional_req = float(filters.get("min_notional", 5.0))
-                factor = 10 ** prec
-                position_size = round(position_size, prec)
+                if trading_venue == "FUTURES":
+                    filters = await connector.get_futures_symbol_filters(opportunity["symbol"], trading_mode)
+                    prec = filters.get("precision", 3)
+                    min_notional_req = float(filters.get("min_notional", 5.0))
+                    factor = 10 ** prec
+                    position_size = round(position_size, prec)
 
-                # In LIVE/TESTNET Binance Spot: enforce min notional >= (min_notional_req + 0.05) USDT
-                if trading_mode in ["TESTNET", "LIVE"]:
-                    notional_val = position_size * price
-                    target_min_notional = max(5.05, min_notional_req + 0.05)
-                    if notional_val < target_min_notional:
-                        if opportunity["side"].upper() == "BUY":
+                    # In LIVE/TESTNET Binance Futures: Pre-configure ISOLATED margin and 2x leverage
+                    if trading_mode in ["TESTNET", "LIVE"]:
+                        try:
+                            await connector.set_futures_margin_type(opportunity["symbol"], "ISOLATED", trading_mode)
+                            await connector.set_futures_leverage(opportunity["symbol"], 2, trading_mode)
+                        except Exception as fset_err:
+                            logger.warning(f"Futures margin/leverage setup notice for {opportunity['symbol']}: {fset_err}")
+
+                        notional_val = position_size * price
+                        target_min_notional = max(5.05, min_notional_req + 0.05)
+                        if notional_val < target_min_notional:
                             min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
-                            min_required_cost = min_target_qty * price
-                            if balance >= min_required_cost:
+                            req_margin = (min_target_qty * price) / 2.0  # 2x leverage
+                            if balance >= req_margin:
                                 position_size = min_target_qty
-                                logger.info(f"⚡ [BINANCE SPOT NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} USDT) to satisfy Binance Spot MIN_NOTIONAL (${min_notional_req:.2f}).")
+                                logger.info(f"⚡ [BINANCE FUTURES NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at 2x) to satisfy Futures MIN_NOTIONAL (${min_notional_req:.2f}).")
                             else:
-                                logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) is insufficient for minimum Binance Spot trade of {min_target_qty} {opportunity['symbol']} (${min_required_cost:.2f} USDT). Preserving cash buffer.")
+                                logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available Futures margin (${balance:.2f} USDT) is insufficient for minimum trade margin of ${req_margin:.2f} USDT.")
                                 ExecutionStateTracker.get_instance().transition(
                                     symbol=opportunity["symbol"],
                                     state=ExecutionState.REJECTED,
                                     side=opportunity["side"],
                                     stage="RISK_SIZING",
-                                    reason=f"Available balance (${balance:.2f} USDT) insufficient for minimum Binance Spot notional ($5.00 USDT)",
+                                    reason=f"Available Futures margin (${balance:.2f} USDT) insufficient for minimum trade (${req_margin:.2f} margin required)",
                                     price=price,
                                     quantity=position_size,
                                     trading_mode=trading_mode
                                 )
                                 return
-                        else:
-                            # For SELL on Spot: if notional is below $5.00, reject immediately to prevent Binance filter rejection
-                            logger.warning(f"⚠️ [BINANCE SPOT NOTIONAL FILTER] {symbol} SELL notional (${notional_val:.2f}) is below Binance minimum ${target_min_notional:.2f}. Suppressed.")
-                            ExecutionStateTracker.get_instance().transition(
-                                symbol=opportunity["symbol"],
-                                state=ExecutionState.REJECTED,
-                                side=opportunity["side"],
-                                stage="RISK_SIZING",
-                                reason=f"SELL notional (${notional_val:.2f}) below Binance Spot minimum ($5.00 USDT)",
-                                price=price,
-                                quantity=position_size,
-                                trading_mode=trading_mode
-                            )
-                            return
+                else:
+                    filters = await connector.get_symbol_lot_size_filters(opportunity["symbol"], trading_mode)
+                    prec = filters.get("precision", 4)
+                    min_notional_req = float(filters.get("min_notional", 5.0))
+                    factor = 10 ** prec
+                    position_size = round(position_size, prec)
 
-                # Institutional Pre-BUY Fee Buffer Verification (0.8% fee + slippage buffer)
-                if opportunity["side"].upper() == "BUY":
-                    fee_buffer_mult = 1.008
-                    required_cost_with_fee = (position_size * price) * fee_buffer_mult
-                    if balance < required_cost_with_fee:
-                        max_affordable_notional = balance / fee_buffer_mult
-                        adjusted_qty = math.floor((max_affordable_notional / price) * factor) / float(factor)
-                        if (adjusted_qty * price) >= min_notional_req:
-                            logger.info(f"🛡️ [FEE BUFFER SIZING] Adjusted {opportunity['symbol']} BUY size from {position_size} to {adjusted_qty} to reserve 0.8% fee buffer from balance ${balance:.2f}.")
-                            position_size = adjusted_qty
-                        else:
-                            logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) cannot cover minimum notional (${min_notional_req:.2f}) with 0.8% fee buffer. Order safely rejected.")
-                            ExecutionStateTracker.get_instance().transition(
-                                symbol=opportunity["symbol"],
-                                state=ExecutionState.REJECTED,
-                                side=opportunity["side"],
-                                stage="FEE_BUFFER_CHECK",
-                                reason=f"Available balance (${balance:.2f} USDT) insufficient for minimum trade + 0.8% fee buffer",
-                                price=price,
-                                quantity=position_size,
-                                trading_mode=trading_mode
-                            )
-                            return
+                    # In LIVE/TESTNET Binance Spot: enforce min notional >= (min_notional_req + 0.05) USDT
+                    if trading_mode in ["TESTNET", "LIVE"]:
+                        notional_val = position_size * price
+                        target_min_notional = max(5.05, min_notional_req + 0.05)
+                        if notional_val < target_min_notional:
+                            if opportunity["side"].upper() == "BUY":
+                                min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
+                                min_required_cost = min_target_qty * price
+                                if balance >= min_required_cost:
+                                    position_size = min_target_qty
+                                    logger.info(f"⚡ [BINANCE SPOT NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} USDT) to satisfy Binance Spot MIN_NOTIONAL (${min_notional_req:.2f}).")
+                                else:
+                                    logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) is insufficient for minimum Binance Spot trade of {min_target_qty} {opportunity['symbol']} (${min_required_cost:.2f} USDT). Preserving cash buffer.")
+                                    ExecutionStateTracker.get_instance().transition(
+                                        symbol=opportunity["symbol"],
+                                        state=ExecutionState.REJECTED,
+                                        side=opportunity["side"],
+                                        stage="RISK_SIZING",
+                                        reason=f"Available balance (${balance:.2f} USDT) insufficient for minimum Binance Spot notional ($5.00 USDT)",
+                                        price=price,
+                                        quantity=position_size,
+                                        trading_mode=trading_mode
+                                    )
+                                    return
+                            else:
+                                # For SELL on Spot: if notional is below $5.00, reject immediately to prevent Binance filter rejection
+                                logger.warning(f"⚠️ [BINANCE SPOT NOTIONAL FILTER] {symbol} SELL notional (${notional_val:.2f}) is below Binance minimum ${target_min_notional:.2f}. Suppressed.")
+                                ExecutionStateTracker.get_instance().transition(
+                                    symbol=opportunity["symbol"],
+                                    state=ExecutionState.REJECTED,
+                                    side=opportunity["side"],
+                                    stage="RISK_SIZING",
+                                    reason=f"SELL notional (${notional_val:.2f}) below Binance Spot minimum ($5.00 USDT)",
+                                    price=price,
+                                    quantity=position_size,
+                                    trading_mode=trading_mode
+                                )
+                                return
+
+                    # Institutional Pre-BUY Fee Buffer Verification (0.8% fee + slippage buffer)
+                    if opportunity["side"].upper() == "BUY":
+                        fee_buffer_mult = 1.008
+                        required_cost_with_fee = (position_size * price) * fee_buffer_mult
+                        if balance < required_cost_with_fee:
+                            max_affordable_notional = balance / fee_buffer_mult
+                            adjusted_qty = math.floor((max_affordable_notional / price) * factor) / float(factor)
+                            if (adjusted_qty * price) >= min_notional_req:
+                                logger.info(f"🛡️ [FEE BUFFER SIZING] Adjusted {opportunity['symbol']} BUY size from {position_size} to {adjusted_qty} to reserve 0.8% fee buffer from balance ${balance:.2f}.")
+                                position_size = adjusted_qty
+                            else:
+                                logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available balance (${balance:.2f} USDT) cannot cover minimum notional (${min_notional_req:.2f}) with 0.8% fee buffer. Order safely rejected.")
+                                ExecutionStateTracker.get_instance().transition(
+                                    symbol=opportunity["symbol"],
+                                    state=ExecutionState.REJECTED,
+                                    side=opportunity["side"],
+                                    stage="FEE_BUFFER_CHECK",
+                                    reason=f"Available balance (${balance:.2f} USDT) insufficient for minimum trade + 0.8% fee buffer",
+                                    price=price,
+                                    quantity=position_size,
+                                    trading_mode=trading_mode
+                                )
+                                return
 
                 if position_size <= 0.0:
                     logger.warning(f"[STAGE: RISK] REJECTED. Position size for {opportunity['symbol']} calculated as {position_size} (balance ${balance:.2f} insufficient for minimum trade increment).")
@@ -612,62 +700,95 @@ class OrderManager:
 
                 if trading_mode in ["TESTNET", "LIVE"]:
                     connector = BinanceConnector.get_instance()
-                    filters = await connector.get_symbol_lot_size_filters(opportunity["symbol"], trading_mode)
-                    prec = filters.get("precision", 4)
-                    position_size = connector.format_quantity_for_symbol(opportunity["symbol"], position_size, prec)
+                    if trading_venue == "FUTURES":
+                        filters = await connector.get_futures_symbol_filters(opportunity["symbol"], trading_mode)
+                        prec = filters.get("precision", 3)
+                        position_size = connector.format_quantity_for_symbol(opportunity["symbol"], position_size, prec)
 
-                    logger.info(f"[STAGE: EXECUTION] Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}, precision: {prec}, type: {order_routing}) in {trading_mode} mode...")
-                    ExecutionStateTracker.get_instance().transition(
-                        symbol=opportunity["symbol"],
-                        state=ExecutionState.ORDER_SUBMITTED,
-                        side=opportunity["side"],
-                        price=price,
-                        quantity=position_size,
-                        trading_mode=trading_mode
-                    )
-                    req_payload = {
-                        "symbol": opportunity["symbol"],
-                        "side": opportunity["side"],
-                        "type": order_routing,
-                        "quantity": position_size,
-                        "price": price if order_routing == "LIMIT" else None,
-                        "mode": trading_mode
-                    }
-                    time_in_force = "GTC"
-                    binance_res = await connector.create_order(
-                        mode=trading_mode,
-                        symbol=opportunity["symbol"],
-                        side=opportunity["side"],
-                        order_type="LIMIT_MAKER" if order_routing == "LIMIT" else "MARKET",
-                        quantity=position_size,
-                        price=price if order_routing == "LIMIT" else None
-                    )
-                    # If LIMIT_MAKER would immediately cross spread, adjust 1 tick into book to guarantee Maker execution
-                    if isinstance(binance_res, dict) and binance_res.get("code") == -2010 and "match and take" in str(binance_res.get("msg", "")).lower():
-                        adj_factor = 0.9998 if opportunity["side"] == "BUY" else 1.0002
-                        from app.trading.position_manager import _round_price
-                        maker_adj_price = _round_price(price * adj_factor)
-                        logger.info(f"🔄 [MAKER POST-ONLY RETRY] Limit price crossed spread. Adjusting price from {price} to {maker_adj_price} to post as Maker.")
+                        logger.info(f"[STAGE: EXECUTION] Placing real Binance USDⓈ-M Futures order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}, precision: {prec}, routing: {order_routing}) in {trading_mode} mode...")
+                        ExecutionStateTracker.get_instance().transition(
+                            symbol=opportunity["symbol"],
+                            state=ExecutionState.ORDER_SUBMITTED,
+                            side=opportunity["side"],
+                            price=price,
+                            quantity=position_size,
+                            trading_mode=trading_mode
+                        )
+                        req_payload = {
+                            "symbol": opportunity["symbol"],
+                            "side": opportunity["side"],
+                            "type": "MARKET",
+                            "quantity": position_size,
+                            "price": price if order_routing == "LIMIT" else None,
+                            "mode": trading_mode,
+                            "venue": "FUTURES"
+                        }
+                        binance_res = await connector.create_futures_order(
+                            mode=trading_mode,
+                            symbol=opportunity["symbol"],
+                            side=opportunity["side"],
+                            order_type="MARKET",
+                            quantity=position_size,
+                            price=price if order_routing == "LIMIT" else None,
+                            reduce_only=False
+                        )
+                    else:
+                        filters = await connector.get_symbol_lot_size_filters(opportunity["symbol"], trading_mode)
+                        prec = filters.get("precision", 4)
+                        position_size = connector.format_quantity_for_symbol(opportunity["symbol"], position_size, prec)
+
+                        logger.info(f"[STAGE: EXECUTION] Placing real Binance Spot order for {opportunity['symbol']} ({opportunity['side']} qty: {position_size}, precision: {prec}, type: {order_routing}) in {trading_mode} mode...")
+                        ExecutionStateTracker.get_instance().transition(
+                            symbol=opportunity["symbol"],
+                            state=ExecutionState.ORDER_SUBMITTED,
+                            side=opportunity["side"],
+                            price=price,
+                            quantity=position_size,
+                            trading_mode=trading_mode
+                        )
+                        req_payload = {
+                            "symbol": opportunity["symbol"],
+                            "side": opportunity["side"],
+                            "type": order_routing,
+                            "quantity": position_size,
+                            "price": price if order_routing == "LIMIT" else None,
+                            "mode": trading_mode
+                        }
+                        time_in_force = "GTC"
                         binance_res = await connector.create_order(
                             mode=trading_mode,
                             symbol=opportunity["symbol"],
                             side=opportunity["side"],
-                            order_type="LIMIT_MAKER",
+                            order_type="LIMIT_MAKER" if order_routing == "LIMIT" else "MARKET",
                             quantity=position_size,
-                            price=maker_adj_price
+                            price=price if order_routing == "LIMIT" else None
                         )
-                        # If still crossed, fall back to standard LIMIT with GTC
-                        if isinstance(binance_res, dict) and binance_res.get("code") == -2010:
-                            logger.info(f"🔄 [SPREAD DRIFT FALLBACK] Placing standard LIMIT (GTC) order to capture entry at {price}.")
+                        # If LIMIT_MAKER would immediately cross spread, adjust 1 tick into book to guarantee Maker execution
+                        if isinstance(binance_res, dict) and binance_res.get("code") == -2010 and "match and take" in str(binance_res.get("msg", "")).lower():
+                            adj_factor = 0.9998 if opportunity["side"] == "BUY" else 1.0002
+                            from app.trading.position_manager import _round_price
+                            maker_adj_price = _round_price(price * adj_factor)
+                            logger.info(f"🔄 [MAKER POST-ONLY RETRY] Limit price crossed spread. Adjusting price from {price} to {maker_adj_price} to post as Maker.")
                             binance_res = await connector.create_order(
                                 mode=trading_mode,
                                 symbol=opportunity["symbol"],
                                 side=opportunity["side"],
-                                order_type="LIMIT",
+                                order_type="LIMIT_MAKER",
                                 quantity=position_size,
-                                price=price,
-                                time_in_force="GTC"
+                                price=maker_adj_price
                             )
+                            # If still crossed, fall back to standard LIMIT with GTC
+                            if isinstance(binance_res, dict) and binance_res.get("code") == -2010:
+                                logger.info(f"🔄 [SPREAD DRIFT FALLBACK] Placing standard LIMIT (GTC) order to capture entry at {price}.")
+                                binance_res = await connector.create_order(
+                                    mode=trading_mode,
+                                    symbol=opportunity["symbol"],
+                                    side=opportunity["side"],
+                                    order_type="LIMIT",
+                                    quantity=position_size,
+                                    price=price,
+                                    time_in_force="GTC"
+                                )
                     order_latency_ms = max(1.0, (time.time() * 1000.0) - order_submit_start_ms)
                     
                     if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):

@@ -69,38 +69,61 @@ class ExchangeReconciliationEngine:
             exchange_positions = simulated_exchange_positions
         elif active_mode in ["LIVE", "TESTNET"]:
             connector = BinanceConnector.get_instance()
+            trading_venue = getattr(scheduler, "trading_venue", "SPOT").upper()
             try:
-                balances_res = await connector.get_wallet_balances(active_mode)
-                if isinstance(balances_res, list):
-                    for b in balances_res:
-                        asset = b.get("asset", "").upper()
-                        if asset in self.QUOTE_AND_FIAT_ASSETS:
-                            continue
-                        
-                        free = float(b.get("free", 0.0))
-                        locked = float(b.get("locked", 0.0))
-                        total_qty = free + locked
-                        
-                        symbol = f"{asset}USDT"
-                        current_px = cache.get_price(symbol)
-                        notional_val = total_qty * current_px if current_px > 0 else 0.0
-                        
-                        # Only consider real actively traded positions (must have valid price and notional value >= $5.00)
-                        # Filter out dust, unlisted airdrops, and untracked micro-balances
-                        if current_px > 0 and notional_val >= 5.0 and total_qty > 0.0001:
-                            exchange_positions.append({
-                                "symbol": symbol,
-                                "side": "BUY",
-                                "position_size": total_qty,
-                                "entry_price": current_px,
-                                "stop_loss": current_px * 0.95,
-                                "take_profit": current_px * 1.10,
-                                "asset": asset
-                            })
+                if trading_venue == "FUTURES":
+                    positions_res = await connector.get_futures_position_risk(mode=active_mode)
+                    if isinstance(positions_res, list):
+                        for p in positions_res:
+                            pos_amt = float(p.get("positionAmt", 0.0))
+                            if abs(pos_amt) > 0.00001:
+                                sym = p.get("symbol", "").upper()
+                                entry_px = float(p.get("entryPrice", 0.0))
+                                mark_px = float(p.get("markPrice", entry_px))
+                                side = "BUY" if pos_amt > 0 else "SELL"
+                                exchange_positions.append({
+                                    "symbol": sym,
+                                    "side": side,
+                                    "position_size": abs(pos_amt),
+                                    "entry_price": entry_px if entry_px > 0 else mark_px,
+                                    "stop_loss": entry_px * (0.98 if side == "BUY" else 1.02),
+                                    "take_profit": entry_px * (1.04 if side == "BUY" else 0.96),
+                                    "asset": sym.replace("USDT", "")
+                                })
+                    else:
+                        logger.warning(f"[RECONCILIATION] Could not fetch futures position risk from Binance ({active_mode}): {positions_res}")
                 else:
-                    logger.warning(f"[RECONCILIATION] Could not fetch wallet balances from Binance ({active_mode}): {balances_res}")
+                    balances_res = await connector.get_wallet_balances(active_mode)
+                    if isinstance(balances_res, list):
+                        for b in balances_res:
+                            asset = b.get("asset", "").upper()
+                            if asset in self.QUOTE_AND_FIAT_ASSETS:
+                                continue
+                            
+                            free = float(b.get("free", 0.0))
+                            locked = float(b.get("locked", 0.0))
+                            total_qty = free + locked
+                            
+                            symbol = f"{asset}USDT"
+                            current_px = cache.get_price(symbol)
+                            notional_val = total_qty * current_px if current_px > 0 else 0.0
+                            
+                            # Only consider real actively traded positions (must have valid price and notional value >= $5.00)
+                            # Filter out dust, unlisted airdrops, and untracked micro-balances
+                            if current_px > 0 and notional_val >= 5.0 and total_qty > 0.0001:
+                                exchange_positions.append({
+                                    "symbol": symbol,
+                                    "side": "BUY",
+                                    "position_size": total_qty,
+                                    "entry_price": current_px,
+                                    "stop_loss": current_px * 0.95,
+                                    "take_profit": current_px * 1.10,
+                                    "asset": asset
+                                })
+                    else:
+                        logger.warning(f"[RECONCILIATION] Could not fetch wallet balances from Binance ({active_mode}): {balances_res}")
             except Exception as be:
-                logger.error(f"[RECONCILIATION] Error querying exchange balances for {active_mode}: {be}")
+                logger.error(f"[RECONCILIATION] Error querying exchange state for {active_mode} ({trading_venue}): {be}")
         else:
             # For PAPER mode, exchange positions match internal positions
             for pos in internal_positions:
