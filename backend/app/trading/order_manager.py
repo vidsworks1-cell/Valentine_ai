@@ -563,11 +563,18 @@ class OrderManager:
                     factor = 10 ** prec
                     position_size = round(position_size, prec)
 
-                    # In LIVE/TESTNET Binance Futures: Pre-configure ISOLATED margin and 2x leverage
+                    # In LIVE/TESTNET Binance Futures: Pre-configure ISOLATED margin and dynamic persona leverage (12x-15x)
+                    from app.trading.trading_persona import TradingPersonaPresetEngine
+                    active_persona = TradingPersonaPresetEngine.get_instance().get_active_persona()
+                    max_lev = int(active_persona.get("max_leverage", 15))
+                    min_lev = int(active_persona.get("min_leverage", 12))
+                    conf_score = float(opportunity.get("confidence_score", opportunity.get("confidence", 0.75)))
+                    target_leverage = max_lev if conf_score >= 0.76 else min_lev
+
                     if trading_mode in ["TESTNET", "LIVE"]:
                         try:
                             await connector.set_futures_margin_type(opportunity["symbol"], "ISOLATED", trading_mode)
-                            await connector.set_futures_leverage(opportunity["symbol"], 2, trading_mode)
+                            await connector.set_futures_leverage(opportunity["symbol"], target_leverage, trading_mode)
                         except Exception as fset_err:
                             logger.warning(f"Futures margin/leverage setup notice for {opportunity['symbol']}: {fset_err}")
 
@@ -575,12 +582,12 @@ class OrderManager:
                         target_min_notional = max(5.05, min_notional_req + 0.05)
                         if notional_val < target_min_notional:
                             min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
-                            req_margin = (min_target_qty * price) / 2.0  # 2x leverage
+                            req_margin = (min_target_qty * price) / float(target_leverage)
                             if balance >= req_margin:
                                 position_size = min_target_qty
-                                logger.info(f"⚡ [BINANCE FUTURES NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at 2x) to satisfy Futures MIN_NOTIONAL (${min_notional_req:.2f}).")
+                                logger.info(f"⚡ [BINANCE FUTURES NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at {target_leverage}x) to satisfy Futures MIN_NOTIONAL (${min_notional_req:.2f}).")
                             else:
-                                logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available Futures margin (${balance:.2f} USDT) is insufficient for minimum trade margin of ${req_margin:.2f} USDT.")
+                                logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available Futures margin (${balance:.2f} USDT) is insufficient for minimum trade margin of ${req_margin:.2f} USDT at {target_leverage}x.")
                                 ExecutionStateTracker.get_instance().transition(
                                     symbol=opportunity["symbol"],
                                     state=ExecutionState.REJECTED,

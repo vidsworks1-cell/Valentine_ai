@@ -80,14 +80,24 @@ class ExchangeReconciliationEngine:
                                 sym = p.get("symbol", "").upper()
                                 entry_px = float(p.get("entryPrice", 0.0))
                                 mark_px = float(p.get("markPrice", entry_px))
-                                side = "BUY" if pos_amt > 0 else "SELL"
+                                # Auto-remediate margin to ISOLATED and harmonize leverage to 15x if needed
+                                margin_type = str(p.get("marginType", "")).upper()
+                                lev_val = int(p.get("leverage", 20))
+                                if margin_type != "ISOLATED" or lev_val > 15:
+                                    try:
+                                        await connector.set_futures_margin_type(sym, "ISOLATED", active_mode)
+                                        await connector.set_futures_leverage(sym, 15, active_mode)
+                                        logger.info(f"🛡️ [RECONCILIATION HARMONIZATION] Remediated {sym} from {lev_val}x {margin_type} to 15x ISOLATED.")
+                                    except Exception as rem_err:
+                                        logger.warning(f"Reconciliation margin/leverage notice for {sym}: {rem_err}")
+
                                 exchange_positions.append({
                                     "symbol": sym,
                                     "side": side,
                                     "position_size": abs(pos_amt),
                                     "entry_price": entry_px if entry_px > 0 else mark_px,
-                                    "stop_loss": entry_px * (0.98 if side == "BUY" else 1.02),
-                                    "take_profit": entry_px * (1.04 if side == "BUY" else 0.96),
+                                    "stop_loss": round(entry_px * (0.99 if side == "BUY" else 1.01), 4),
+                                    "take_profit": round(entry_px * (1.025 if side == "BUY" else 0.975), 4),
                                     "asset": sym.replace("USDT", "")
                                 })
                     else:

@@ -42,6 +42,23 @@ class TradingPersonaPresetEngine:
     _instance: Optional['TradingPersonaPresetEngine'] = None
 
     PRESETS: Dict[str, Dict[str, Any]] = {
+        "OPTIMAL_MOMENTUM_SCALPER": {
+            "name": "Optimal Momentum Scalper (12x-15x)",
+            "key": "OPTIMAL_MOMENTUM_SCALPER",
+            "description": "Balanced high-octane momentum scalping: 12x-15x isolated leverage with tight 0.85x ATR stop-losses and rapid multi-stage take-profit locks.",
+            "min_bayesian_confidence": 0.72,
+            "sl_atr_multiplier": 0.85,
+            "tp_atr_multiplier": 2.5,
+            "tp_stage1_multiplier": 1.2,
+            "max_leverage": 15,
+            "min_leverage": 12,
+            "max_position_allocation_pct": 12.0,
+            "trailing_stop_enabled": True,
+            "macro_risk_penalty_weight": 0.9,
+            "liquidation_sweep_focus": True,
+            "arbitrage_skew_focus": False,
+            "preferred_timeframes": ["1m", "5m", "15m"]
+        },
         "CONSERVATIVE_MACRO_SWING": {
             "name": "Conservative Macro Swing",
             "key": "CONSERVATIVE_MACRO_SWING",
@@ -49,7 +66,9 @@ class TradingPersonaPresetEngine:
             "min_bayesian_confidence": 0.78,
             "sl_atr_multiplier": 2.5,
             "tp_atr_multiplier": 5.0,
+            "tp_stage1_multiplier": 1.8,
             "max_leverage": 3,
+            "min_leverage": 2,
             "max_position_allocation_pct": 10.0,
             "trailing_stop_enabled": True,
             "macro_risk_penalty_weight": 1.5,
@@ -58,14 +77,16 @@ class TradingPersonaPresetEngine:
             "preferred_timeframes": ["1h", "4h", "1d"]
         },
         "AGGRESSIVE_MOMENTUM_SCALPER": {
-            "name": "Aggressive Momentum Scalper",
+            "name": "Aggressive Momentum Scalper (15x-20x)",
             "key": "AGGRESSIVE_MOMENTUM_SCALPER",
             "description": "Capitalizes on rapid momentum breakouts, volume surges, and 50x/100x liquidation sweeps.",
             "min_bayesian_confidence": 0.70,
-            "sl_atr_multiplier": 1.0,
+            "sl_atr_multiplier": 0.75,
             "tp_atr_multiplier": 2.2,
-            "max_leverage": 10,
-            "max_position_allocation_pct": 25.0,
+            "tp_stage1_multiplier": 1.0,
+            "max_leverage": 20,
+            "min_leverage": 15,
+            "max_position_allocation_pct": 10.0,
             "trailing_stop_enabled": True,
             "macro_risk_penalty_weight": 0.8,
             "liquidation_sweep_focus": True,
@@ -79,7 +100,9 @@ class TradingPersonaPresetEngine:
             "min_bayesian_confidence": 0.72,
             "sl_atr_multiplier": 1.2,
             "tp_atr_multiplier": 2.0,
+            "tp_stage1_multiplier": 1.0,
             "max_leverage": 5,
+            "min_leverage": 3,
             "max_position_allocation_pct": 20.0,
             "trailing_stop_enabled": True,
             "macro_risk_penalty_weight": 1.0,
@@ -90,8 +113,8 @@ class TradingPersonaPresetEngine:
     }
 
     def __init__(self):
-        self._active_preset_key: str = "CONSERVATIVE_MACRO_SWING"
-        self._custom_config: Dict[str, Any] = dict(self.PRESETS["CONSERVATIVE_MACRO_SWING"])
+        self._active_preset_key: str = "OPTIMAL_MOMENTUM_SCALPER"
+        self._custom_config: Dict[str, Any] = dict(self.PRESETS["OPTIMAL_MOMENTUM_SCALPER"])
         self._custom_config["key"] = "CUSTOM_QUANT"
         self._custom_config["name"] = "Custom Quantitative Preset"
         self._last_updated_at: datetime = datetime.now(timezone.utc)

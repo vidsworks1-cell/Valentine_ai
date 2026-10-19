@@ -263,6 +263,19 @@ class AiReasoningEngine:
                             tp_stage1_mult = 1.4
                             tp_stage2_mult = 3.6
 
+                        # Dynamically calibrate SL and TP with active trading persona if defined (e.g. 0.85x ATR SL for 12x-15x scalping)
+                        try:
+                            from app.trading.trading_persona import TradingPersonaPresetEngine
+                            act_persona = TradingPersonaPresetEngine.get_instance().get_active_persona()
+                            if act_persona.get("sl_atr_multiplier"):
+                                sl_multiplier = float(act_persona["sl_atr_multiplier"])
+                            if act_persona.get("tp_atr_multiplier"):
+                                tp_stage2_mult = float(act_persona["tp_atr_multiplier"])
+                            if act_persona.get("tp_stage1_multiplier"):
+                                tp_stage1_mult = float(act_persona["tp_stage1_multiplier"])
+                        except Exception:
+                            pass
+
                         stop_loss = round(price - (sl_multiplier * atr) if proposed_side == "BUY" else price + (sl_multiplier * atr), 4)
                         take_profit = round(price + (tp_stage2_mult * atr) if proposed_side == "BUY" else price - (tp_stage2_mult * atr), 4)
                         tp_stage1_price = round(price + (tp_stage1_mult * atr) if proposed_side == "BUY" else price - (tp_stage1_mult * atr), 4)
