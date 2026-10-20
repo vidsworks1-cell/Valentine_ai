@@ -386,16 +386,16 @@ class PositionManager:
                                     stage["hit"] = True
                                     close_pct = stage["percentage"]
                                     
-                                    # For small accounts (position notional < $10.50), orders cannot be split below Binance's $5.00 MIN_NOTIONAL.
+                                    # For small accounts (position notional < $17.50), orders cannot be split below Binance's $5.00 MIN_NOTIONAL.
                                     # On TP1, lock in Breakeven (+0.35% net profit); on TP2/Final, close 100% full position in one legal order!
                                     pos_notional = float(pos.get("position_size", 0.0)) * current_price
-                                    if pos_notional < 10.50:
+                                    if pos_notional < 17.50:
                                         if stage == stages[0]:
                                             be_level = _round_price(entry * 1.0035 if side == "BUY" else entry * 0.9965)
                                             if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < be_level:
                                                 pos["trailing_stop"] = be_level
                                                 pos["breakeven_activated"] = True
-                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $10.50). Locked Breakeven at {be_level} (+0.35% net) without splitting below Binance $5 limit.")
+                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $17.50). Locked Breakeven at {be_level} (+0.35% net) without splitting below Binance $5 limit.")
                                         else:
                                             await self._close_position(trade_id, current_price, stage["label"])
                                             stage_triggered = True
@@ -422,16 +422,28 @@ class PositionManager:
                         if stage_triggered:
                             continue
                             
-                        # 3. Check General Trailing Stop Loss Exit Criteria
+                        # 3. Check General Trailing Stop Loss & Hard Drawdown Circuit Breaker
                         trailing_sl_val = float(pos.get("trailing_stop", 0.0))
-                        if side == "BUY":
-                            if current_price <= trailing_sl_val and trailing_sl_val > 0:
-                                await self._close_position(trade_id, current_price, "STOP_LOSS")
-                                continue
-                        elif side == "SELL":
-                            if current_price >= trailing_sl_val and trailing_sl_val > 0:
-                                await self._close_position(trade_id, current_price, "STOP_LOSS")
-                                continue
+                        fixed_sl_val = float(pos.get("stop_loss", 0.0))
+                        effective_sl = trailing_sl_val if trailing_sl_val > 0 else fixed_sl_val
+
+                        is_sl_hit = False
+                        if side == "BUY" and effective_sl > 0 and current_price <= effective_sl:
+                            is_sl_hit = True
+                        elif side == "SELL" and effective_sl > 0 and current_price >= effective_sl:
+                            is_sl_hit = True
+
+                        # Emergency Drawdown Guard: If position moves >= 1.2% against entry (>= 18% loss at 15x), force emergency close!
+                        loss_against_entry_pct = ((entry - current_price) / entry * 100.0) if side == "BUY" else ((current_price - entry) / entry * 100.0)
+                        if loss_against_entry_pct >= 1.2:
+                            is_sl_hit = True
+                            sl_exit_label = "EMERGENCY_DRAWDOWN_CUT"
+                        else:
+                            sl_exit_label = "STOP_LOSS"
+
+                        if is_sl_hit:
+                            await self._close_position(trade_id, current_price, sl_exit_label)
+                            continue
 
                         # 4. Intelligent Early Exit Engine (Thesis Invalidation Check with Grace Period & Gradual Decay)
                         from app.trading.mtf_confirmation import MTFConfirmationGuard
@@ -570,6 +582,16 @@ class PositionManager:
                 legal_close_qty = math.floor(close_size / step_size) * step_size
                 if legal_close_qty < min_qty:
                     legal_close_qty = min_qty
+
+                futures_close_notional = legal_close_qty * exit_price
+                if futures_close_notional < 5.0:
+                    logger.warning(
+                        f"⚠️ [FUTURES MIN_NOTIONAL GUARD] Partial close value (${futures_close_notional:.2f}) "
+                        f"for {symbol} is below Binance Futures $5.00 minimum notional. "
+                        f"Escalating to full position close to ensure order execution and cleanly bank profits into USDT."
+                    )
+                    await self._close_position(trade_id, exit_price, f"{stage_label}_FULL_CLOSE")
+                    return
 
                 formatted_close_qty = connector.format_quantity_for_symbol(symbol, legal_close_qty, prec)
                 logger.info(f"🚀 [BINANCE FUTURES PARTIAL CLOSE] Placing real Binance Futures partial close for {symbol} ({opposite_side} qty: {formatted_close_qty}, reduce_only=True) in {trading_mode} mode...")
@@ -723,7 +745,7 @@ class PositionManager:
                 step_size = float(filters.get("step_size", 0.001))
                 legal_qty = math.floor(size / step_size) * step_size
                 close_qty = round(legal_qty, prec)
-                logger.info(f"🚀 [BINANCE FUTURES CLOSE] Placing real Binance Futures close order for {symbol} ({opposite_side} qty: {close_qty}, reduce_only=True, exit: {exit_reason}) in {trading_mode} mode...")
+                logger.info(f"🚀 [BINANCE FUTURES CLOSE] Placing real Binance Futures close order for {symbol} ({opposite_side} qty: {close_qty}, reduce_only=True, exit: {outcome_type}) in {trading_mode} mode...")
                 binance_res = await connector.create_futures_order(
                     mode=trading_mode,
                     symbol=symbol,
@@ -734,6 +756,9 @@ class PositionManager:
                 )
                 if "error" in binance_res or ("code" in binance_res and isinstance(binance_res["code"], int) and binance_res["code"] < 0) or ("status_code" in binance_res and binance_res.get("status_code", 200) >= 400):
                     logger.error(f"❌ BINANCE FUTURES CLOSE ORDER FAILED for {symbol}: {binance_res}")
+                    # Re-insert position so tracking is not permanently lost on network or filter glitch
+                    self._positions[trade_id] = pos
+                    return
                 else:
                     logger.info(f"✅ [BINANCE FUTURES CLOSED] Contract position for {symbol} cleanly liquidated into USDT: {binance_res}")
             else:

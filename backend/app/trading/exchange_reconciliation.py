@@ -78,6 +78,7 @@ class ExchangeReconciliationEngine:
                             pos_amt = float(p.get("positionAmt", 0.0))
                             if abs(pos_amt) > 0.00001:
                                 sym = p.get("symbol", "").upper()
+                                side = "BUY" if pos_amt > 0 else "SELL"
                                 entry_px = float(p.get("entryPrice", 0.0))
                                 mark_px = float(p.get("markPrice", entry_px))
                                 # Auto-remediate margin to ISOLATED and harmonize leverage to 15x if needed
