@@ -788,9 +788,18 @@ class BinanceConnector:
             "marginType": margin_type.upper()
         }
         res = await self._request("POST", "/fapi/v1/marginType", mode_upper, params=params, venue="FUTURES", signed=True)
-        # Error -4046 means 'No need to change margin type', which confirms it is already ISOLATED
-        if isinstance(res, dict) and res.get("code") == -4046:
-            return {"code": 200, "msg": "Already ISOLATED margin"}
+        if isinstance(res, dict):
+            # Error -4046 means 'No need to change margin type', confirming it is already at the target margin type
+            if res.get("code") == -4046:
+                return {"code": 200, "msg": f"Already {margin_type.upper()} margin"}
+            # Error -4048 means 'Margin type cannot be changed if there exists position.'
+            if res.get("code") == -4048:
+                logger.info(f"ℹ️ [FUTURES MARGIN] Cannot change margin type for {symbol}: an open position already exists on Binance Futures.")
+                return res
+            if res.get("code", 200) not in [200, 0] or "error" in res:
+                logger.warning(f"⚠️ [FUTURES MARGIN NOTICE] Could not set margin type for {symbol}: {res}")
+                return res
+
         logger.info(f"🛡️ [FUTURES MARGIN CONFIGURED] {symbol} set to {margin_type.upper()} margin on Binance Futures.")
         return res
 
