@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-import httpx
+import urllib.request
 import websockets
 from app.core.config import settings
 from app.workers.price_cache import PriceCache
@@ -156,25 +156,29 @@ class BinanceWebSocketWorker:
         else:
             api_url = "https://api.binance.com/api/v3/ticker/24hr"
 
+        def _fetch():
+            req = urllib.request.Request(api_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status == 200:
+                    return json.loads(resp.read().decode("utf-8"))
+            return []
+
         while self.running:
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.get(api_url)
-                    if resp.status_code == 200:
-                        tickers = resp.json()
-                        count = 0
-                        if isinstance(tickers, list):
-                            for item in tickers:
-                                sym = str(item.get("symbol", "")).upper()
-                                if sym.endswith("USDT") and item.get("lastPrice"):
-                                    try:
-                                        px = float(item["lastPrice"])
-                                        vol = float(item.get("quoteVolume", 0.0))
-                                        cache.update_price_and_volume(sym, px, vol)
-                                        count += 1
-                                    except Exception:
-                                        pass
-                        logger.info(f"⚡ [UNIVERSE BOOTSTRAP] Synced {count} active USDT contracts from Binance {venue} into PriceCache.")
+                tickers = await asyncio.to_thread(_fetch)
+                count = 0
+                if isinstance(tickers, list):
+                    for item in tickers:
+                        sym = str(item.get("symbol", "")).upper()
+                        if sym.endswith("USDT") and item.get("lastPrice"):
+                            try:
+                                px = float(item["lastPrice"])
+                                vol = float(item.get("quoteVolume", 0.0))
+                                cache.update_price_and_volume(sym, px, vol)
+                                count += 1
+                            except Exception:
+                                pass
+                logger.info(f"⚡ [UNIVERSE BOOTSTRAP] Synced {count} active USDT contracts from Binance {venue} into PriceCache.")
             except Exception as e:
                 logger.debug(f"Universe bootstrap polling notice: {e}")
 
