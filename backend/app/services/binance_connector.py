@@ -184,7 +184,14 @@ class BinanceConnector:
             params = {}
 
         mode_upper = (mode or "PAPER").upper()
-        target_venue = (venue or self.trading_venue).upper()
+        if venue:
+            target_venue = venue.upper()
+        elif path.startswith("/fapi/"):
+            target_venue = "FUTURES"
+        elif path.startswith("/sapi/") or path.startswith("/api/"):
+            target_venue = "SPOT"
+        else:
+            target_venue = self.trading_venue.upper()
 
         if mode_upper == "OFF":
             logger.info("[BinanceConnector] Request rejected: Trading mode is OFF.")
@@ -568,7 +575,7 @@ class BinanceConnector:
 
     async def get_dust_convertible_assets(self, mode: str = "LIVE") -> Dict[str, Any]:
         """Queries /sapi/v1/asset/dust-btc to list all assets eligible for small balance conversion to BNB."""
-        return await self._request("POST", "/sapi/v1/asset/dust-btc", mode, signed=True)
+        return await self._request("POST", "/sapi/v1/asset/dust-btc", mode, signed=True, venue="SPOT")
 
     async def convert_dust_to_bnb(self, assets: List[str], mode: str = "LIVE") -> Dict[str, Any]:
         """
@@ -583,7 +590,7 @@ class BinanceConnector:
             return await self._mock_request("POST", "/sapi/v1/asset/dust", mode_upper, {"asset": assets})
 
         params = {"asset": ",".join(a.upper() for a in assets)}
-        return await self._request("POST", "/sapi/v1/asset/dust", mode_upper, params=params, signed=True)
+        return await self._request("POST", "/sapi/v1/asset/dust", mode_upper, params=params, signed=True, venue="SPOT")
 
     async def redeem_flexible_earn(self, asset: str, mode: str = "LIVE") -> Dict[str, Any]:
         """Redeems soft-staking / simple earn flexible assets back to Spot using valid productId."""
