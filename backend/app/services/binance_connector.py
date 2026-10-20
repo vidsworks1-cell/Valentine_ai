@@ -321,16 +321,34 @@ class BinanceConnector:
 
                 # Format log data cleanly by omitting hundreds of zero balances and empty positions
                 log_data = data
-                if isinstance(data, dict) and "balances" in data and isinstance(data["balances"], list):
-                    non_zero = [
-                        b for b in data["balances"]
-                        if float(b.get("free", 0.0)) > 0 or float(b.get("locked", 0.0)) > 0
-                    ]
-                    log_data = {
-                        k: v for k, v in data.items() if k != "balances"
-                    }
-                    log_data["non_zero_balances"] = non_zero
-                    log_data["_zero_balances_omitted"] = len(data["balances"]) - len(non_zero)
+                if isinstance(data, dict):
+                    clean_dict = dict(data)
+                    # Filter Spot balances
+                    if "balances" in clean_dict and isinstance(clean_dict["balances"], list):
+                        non_zero = [
+                            b for b in clean_dict["balances"]
+                            if float(b.get("free", 0.0)) > 0 or float(b.get("locked", 0.0)) > 0
+                        ]
+                        clean_dict["non_zero_balances"] = non_zero
+                        clean_dict["_zero_balances_omitted"] = len(clean_dict["balances"]) - len(non_zero)
+                        clean_dict.pop("balances", None)
+                    # Filter Futures positions in /fapi/v2/account
+                    if "positions" in clean_dict and isinstance(clean_dict["positions"], list):
+                        active_pos = [
+                            p for p in clean_dict["positions"]
+                            if abs(float(p.get("positionAmt", 0.0))) > 0.00001
+                        ]
+                        clean_dict["active_futures_positions"] = active_pos
+                        clean_dict["_zero_positions_omitted"] = len(clean_dict["positions"]) - len(active_pos)
+                        clean_dict.pop("positions", None)
+                    # Filter Futures assets in /fapi/v2/account
+                    if "assets" in clean_dict and isinstance(clean_dict["assets"], list):
+                        non_zero_assets = [
+                            a for a in clean_dict["assets"]
+                            if float(a.get("walletBalance", 0.0)) > 0 or float(a.get("marginBalance", 0.0)) > 0
+                        ]
+                        clean_dict["assets"] = non_zero_assets
+                    log_data = clean_dict
                 elif isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict) and "positionAmt" in data[0]:
                     active_positions = [
                         p for p in data
