@@ -57,12 +57,13 @@ class PriceCache:
         sym = symbol.upper()
         history = inst._price_history.get(sym, [])
         current_px = inst.get_price(sym)
+        dec_prec = 8 if current_px < 0.001 else (6 if current_px < 1.0 else 4)
         if not history or len(history) < 14:
             return {
                 "trend_bias": "NEUTRAL",
                 "is_trending": False,
                 "rsi": 50.0,
-                "atr": round(current_px * 0.008, 4),
+                "atr": max(round(current_px * 0.008, dec_prec), 10 ** (-dec_prec)),
                 "ema9": current_px,
                 "ema21": current_px,
                 "momentum_score": 50.0
@@ -93,7 +94,7 @@ class PriceCache:
 
         recent_chunk = history[-20:]
         high_low_range = max(recent_chunk) - min(recent_chunk)
-        atr = max(round(high_low_range * 0.5, 4), round(current_px * 0.005, 4))
+        atr = max(round(high_low_range * 0.5, dec_prec), round(current_px * 0.005, dec_prec), 10 ** (-dec_prec))
 
         is_bullish = (current_px > ema9 > ema21)
         is_bearish = (current_px < ema9 < ema21)
@@ -127,8 +128,8 @@ class PriceCache:
             inst._volume_24h[symbol.upper()] = quote_volume_24h
 
     @classmethod
-    def get_liquid_symbols(cls, min_quote_volume: float = 10_000_000.0, top_n: int = 120) -> list:
-        """Returns liquid USDT contracts sorted by 24h volume across the whole exchange universe."""
+    def get_liquid_symbols(cls, min_quote_volume: float = 500_000.0, top_n: int = 400) -> list:
+        """Returns liquid USDT contracts sorted by 24h volume across the whole exchange universe (400+ contracts)."""
         inst = cls.get_instance_sync()
         tracked = []
         for sym, px in inst._prices.items():

@@ -426,12 +426,27 @@ class PositionManager:
                         trailing_sl_val = float(pos.get("trailing_stop", 0.0))
                         fixed_sl_val = float(pos.get("stop_loss", 0.0))
                         effective_sl = trailing_sl_val if trailing_sl_val > 0 else fixed_sl_val
+                        
+                        # Spread Buffer Guard: Ensure effective SL is not placed inside the bid-ask spread (min 0.35% distance)
+                        if entry > 0 and effective_sl > 0:
+                            if side == "BUY" and (entry - effective_sl) / entry < 0.0035:
+                                effective_sl = round(entry * 0.9965, 6)
+                            elif side == "SELL" and (effective_sl - entry) / entry < 0.0035:
+                                effective_sl = round(entry * 1.0035, 6)
 
+                        holding_sec = time.time() - float(pos.get("opened_at", time.time()))
                         is_sl_hit = False
-                        if side == "BUY" and effective_sl > 0 and current_price <= effective_sl:
-                            is_sl_hit = True
-                        elif side == "SELL" and effective_sl > 0 and current_price >= effective_sl:
-                            is_sl_hit = True
+
+                        # If position opened under 5s ago, ignore micro-ticks within 0.30% to prevent instant spread stop-outs
+                        if holding_sec < 5.0:
+                            micro_loss = ((entry - current_price) / entry * 100.0) if side == "BUY" else ((current_price - entry) / entry * 100.0)
+                            if micro_loss >= 0.80:
+                                is_sl_hit = True
+                        else:
+                            if side == "BUY" and effective_sl > 0 and current_price <= effective_sl:
+                                is_sl_hit = True
+                            elif side == "SELL" and effective_sl > 0 and current_price >= effective_sl:
+                                is_sl_hit = True
 
                         # Emergency Drawdown Guard: If position moves >= 1.2% against entry (>= 18% loss at 15x), force emergency close!
                         loss_against_entry_pct = ((entry - current_price) / entry * 100.0) if side == "BUY" else ((current_price - entry) / entry * 100.0)

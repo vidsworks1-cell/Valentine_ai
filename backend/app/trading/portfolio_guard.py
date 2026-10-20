@@ -654,10 +654,12 @@ class PortfolioGuard:
                 cluster_count += 1
 
         new_total_sector_risk = cluster_risk_pct + incoming_risk_pct
-        if new_total_sector_risk > self.MAX_SECTOR_RISK_CAP_PCT or cluster_count >= self.MAX_CLUSTER_POSITIONS:
-            return False, f"🌐 [SECTOR CLUSTER GUARD] Trade rejected. {sector} cluster risk ({new_total_sector_risk:.2f}%) exceeds max sector cap ({self.MAX_SECTOR_RISK_CAP_PCT}%) or cluster count ({cluster_count} >= {self.MAX_CLUSTER_POSITIONS})."
+        max_allowed_count = self.MAX_OPEN_POSITIONS if sector == "GENERAL_ALT" else self.MAX_CLUSTER_POSITIONS
+        max_sector_cap = max(self.MAX_SECTOR_RISK_CAP_PCT, 4.0) if sector == "GENERAL_ALT" else self.MAX_SECTOR_RISK_CAP_PCT
+        if new_total_sector_risk > max_sector_cap or cluster_count >= max_allowed_count:
+            return False, f"🌐 [SECTOR CLUSTER GUARD] Trade rejected. {sector} cluster risk ({new_total_sector_risk:.2f}%) exceeds max sector cap ({max_sector_cap}%) or cluster count ({cluster_count} >= {max_allowed_count})."
 
-        return True, f"Passed sector risk check ({sector}: {new_total_sector_risk:.2f}% <= {self.MAX_SECTOR_RISK_CAP_PCT}%)"
+        return True, f"Passed sector risk check ({sector}: {new_total_sector_risk:.2f}% <= {max_sector_cap}%)"
 
     def calculate_portfolio_covariance_matrix(self, active_positions: list) -> Dict[str, Any]:
         """

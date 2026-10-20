@@ -337,9 +337,29 @@ class OrderManager:
                 adaptation_summary = SelfAdaptationEngine.get_instance().get_adaptation_summary()
                 empirical_win_rate_pct = float(adaptation_summary.get("overall_win_rate_pct", 55.0))
                 
-                price = opportunity["entry_price"]
-                stop_loss = opportunity["stop_loss"]
-                atr_val = opportunity.get("atr", price * 0.01)
+                price = float(opportunity["entry_price"])
+                atr_val = float(opportunity.get("atr", 0.0))
+                if atr_val <= 0.0:
+                    atr_val = price * 0.008
+                
+                opp_side = opportunity.get("side", "BUY").upper()
+                dec = 8 if price < 0.001 else (6 if price < 1.0 else (4 if price < 50.0 else 2))
+                min_stop_distance = max(atr_val * 1.5, price * 0.005)
+
+                raw_sl = float(opportunity.get("stop_loss", 0.0))
+                if raw_sl <= 0.0 or abs(price - raw_sl) < (price * 0.0035):
+                    repaired_sl = round(price - min_stop_distance if opp_side == "BUY" else price + min_stop_distance, dec)
+                    logger.warning(f"🛡️ [SL REPAIR] Detected degenerate/spread SL ({raw_sl}) for {symbol}. Repaired to: {repaired_sl}")
+                    stop_loss = repaired_sl
+                    opportunity["stop_loss"] = stop_loss
+                else:
+                    stop_loss = raw_sl
+
+                raw_tp = float(opportunity.get("take_profit", 0.0))
+                if raw_tp <= 0.0 or abs(price - raw_tp) < (price * 0.005):
+                    repaired_tp = round(price + (min_stop_distance * 2.0) if opp_side == "BUY" else price - (min_stop_distance * 2.0), dec)
+                    logger.warning(f"🛡️ [TP REPAIR] Detected zero/degenerate TP ({raw_tp}) for {symbol}. Repaired to: {repaired_tp}")
+                    opportunity["take_profit"] = repaired_tp
 
                 # PIPELINE STEP 1: Adaptive Sizing
                 risk_pct, size_breakdown = AdaptivePositionSizer.get_instance().calculate_adaptive_risk_pct(

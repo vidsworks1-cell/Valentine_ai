@@ -77,7 +77,7 @@ data class MarketMicrostructureData(
  */
 object LuminaMultiSymbolUniverseEngine {
 
-    // Predefined Universe of Monitored Assets
+    // Predefined Universe of Monitored Assets across Blue-Chips, Major Alts, and High-Momentum Moonshots
     val UNIVERSE_SPECIFICATIONS = listOf(
         // Tier 1: Blue-Chips
         Triple("BTCUSDT", "BTC", SymbolCategory.BLUE_CHIP),
@@ -93,19 +93,33 @@ object LuminaMultiSymbolUniverseEngine {
         Triple("LINKUSDT", "LINK", SymbolCategory.MAJOR_ALT),
         Triple("NEARUSDT", "NEAR", SymbolCategory.MAJOR_ALT),
         Triple("LTCUSDT", "LTC", SymbolCategory.MAJOR_ALT),
+        Triple("XRPUSDT", "XRP", SymbolCategory.MAJOR_ALT),
+        Triple("UNIUSDT", "UNI", SymbolCategory.MAJOR_ALT),
+        Triple("AAVEUSDT", "AAVE", SymbolCategory.MAJOR_ALT),
+        Triple("TAOUSDT", "TAO", SymbolCategory.MAJOR_ALT),
 
-        // Tier 3: High-Growth & Moonshot Opportunities
+        // Tier 3: High-Growth, Breakout & Moonshot Opportunities
         Triple("PEPEUSDT", "PEPE", SymbolCategory.MOONSHOT_GROWTH),
         Triple("DOGEUSDT", "DOGE", SymbolCategory.MOONSHOT_GROWTH),
         Triple("RENDERUSDT", "RENDER", SymbolCategory.MOONSHOT_GROWTH),
         Triple("INJUSDT", "INJ", SymbolCategory.MOONSHOT_GROWTH),
         Triple("SUIUSDT", "SUI", SymbolCategory.MOONSHOT_GROWTH),
         Triple("FETUSDT", "FET", SymbolCategory.MOONSHOT_GROWTH),
-        Triple("TIAUSDT", "TIA", SymbolCategory.MOONSHOT_GROWTH)
+        Triple("TIAUSDT", "TIA", SymbolCategory.MOONSHOT_GROWTH),
+        Triple("WIFUSDT", "WIF", SymbolCategory.MOONSHOT_GROWTH),
+        Triple("BONKUSDT", "BONK", SymbolCategory.MOONSHOT_GROWTH),
+        Triple("PENDLEUSDT", "PENDLE", SymbolCategory.MOONSHOT_GROWTH),
+        Triple("MIRAUSDT", "MIRA", SymbolCategory.MOONSHOT_GROWTH),
+        Triple("PROMPTUSDT", "PROMPT", SymbolCategory.MOONSHOT_GROWTH),
+        Triple("FIGHTUSDT", "FIGHT", SymbolCategory.MOONSHOT_GROWTH),
+        Triple("AIGENSYNUSDT", "AIGENSYN", SymbolCategory.MOONSHOT_GROWTH),
+        Triple("ANKRUSDT", "ANKR", SymbolCategory.MOONSHOT_GROWTH),
+        Triple("USUALUSDT", "USUAL", SymbolCategory.MOONSHOT_GROWTH)
     )
 
     /**
      * Assesses and ranks all symbols in the multi-tier universe.
+     * Dynamically incorporates any active contracts provided in livePrices to support 400+ exchange assets.
      */
     fun scanAndRankUniverse(
         livePrices: Map<String, Double> = emptyMap(),
@@ -114,7 +128,16 @@ object LuminaMultiSymbolUniverseEngine {
     ): UniverseScanSummary {
         val assessedList = mutableListOf<SymbolAssessmentRecord>()
 
-        UNIVERSE_SPECIFICATIONS.forEach { (symbol, baseAsset, category) ->
+        // Combine predefined specifications with any additional live streamed contracts
+        val combinedSpecs = UNIVERSE_SPECIFICATIONS.toMutableList()
+        val existingSymbols = UNIVERSE_SPECIFICATIONS.map { it.first }.toSet()
+
+        livePrices.keys.filter { it.endsWith("USDT") && it !in existingSymbols }.forEach { dynSym ->
+            val base = dynSym.removeSuffix("USDT")
+            combinedSpecs.add(Triple(dynSym, base, SymbolCategory.MOONSHOT_GROWTH))
+        }
+
+        combinedSpecs.forEach { (symbol, baseAsset, category) ->
             val price = livePrices[symbol] ?: getBaselinePrice(symbol)
             val assessment = evaluateSingleSymbol(
                 symbol = symbol,

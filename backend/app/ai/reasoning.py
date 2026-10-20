@@ -172,7 +172,7 @@ class AiReasoningEngine:
         while self.running:
             try:
                 # Dynamically retrieve all liquid contracts across the entire exchange (400+ contracts universe)
-                liquid_symbols = cache.get_liquid_symbols(min_quote_volume=10_000_000.0, top_n=120)
+                liquid_symbols = cache.get_liquid_symbols(min_quote_volume=500_000.0, top_n=400)
                 dynamic_symbols = liquid_symbols if len(liquid_symbols) >= 10 else default_baseline_symbols
 
                 # Poll cache for setups across all liquid exchange contracts
@@ -236,7 +236,10 @@ class AiReasoningEngine:
                         self.set_cooldown(symbol, proposed_side, category="MARKET_DATA_STALE", reason=md_reason, price=price)
                         continue
 
-                    atr = ta.get("atr", round(price * 0.008, 2))
+                    atr_dec = 8 if price < 0.001 else (6 if price < 1.0 else 4)
+                    atr = ta.get("atr")
+                    if not atr or atr <= 0.0:
+                        atr = max(round(price * 0.008, atr_dec), 10 ** (-atr_dec))
                     relative_volatility = atr / price if price > 0 else 0.01
 
                     # Evaluate Dynamic Volatility Compression (Squeeze)
@@ -280,9 +283,11 @@ class AiReasoningEngine:
                     except Exception:
                         pass
 
-                    stop_loss = round(price - (sl_multiplier * atr) if proposed_side == "BUY" else price + (sl_multiplier * atr), 4)
-                    take_profit = round(price + (tp_stage2_mult * atr) if proposed_side == "BUY" else price - (tp_stage2_mult * atr), 4)
-                    tp_stage1_price = round(price + (tp_stage1_mult * atr) if proposed_side == "BUY" else price - (tp_stage1_mult * atr), 4)
+                    dec_prec = 8 if price < 0.001 else (6 if price < 1.0 else (4 if price < 50.0 else 2))
+                    min_dist = max(sl_multiplier * atr, price * 0.0045)
+                    stop_loss = round(price - min_dist if proposed_side == "BUY" else price + min_dist, dec_prec)
+                    take_profit = round(price + (tp_stage2_mult * atr) if proposed_side == "BUY" else price - (tp_stage2_mult * atr), dec_prec)
+                    tp_stage1_price = round(price + (tp_stage1_mult * atr) if proposed_side == "BUY" else price - (tp_stage1_mult * atr), dec_prec)
 
                     tp_stages = [
                         {

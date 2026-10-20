@@ -62,7 +62,7 @@ fun LuminaMultiSymbolSelectorCard(
                             color = Color(0xFF00B0FF)
                         )
                         Text(
-                            text = "Blue-Chips • Major Alts (ADA/DOT/MATIC) • Moonshots",
+                            text = "Full Exchange Perpetual Universe • 400+ Contracts",
                             fontSize = 9.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -74,7 +74,7 @@ fun LuminaMultiSymbolSelectorCard(
                     contentColor = Color(0xFF00B0FF)
                 ) {
                     Text(
-                        text = "${scanSummary?.totalAssessedSymbols ?: 18} MONITORED",
+                        text = "${scanSummary?.totalAssessedSymbols ?: 31} MONITORED",
                         fontWeight = FontWeight.Bold,
                         fontSize = 9.5.sp,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)

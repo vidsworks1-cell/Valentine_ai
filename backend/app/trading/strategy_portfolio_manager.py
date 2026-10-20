@@ -36,60 +36,60 @@ class StrategyPortfolioManager:
     def __init__(self):
         # Default strategy portfolio book - Optimized and prioritized for Volatility Expansion Breakout
         self._strategies: Dict[str, Dict[str, Any]] = {
-            "Volatility Expansion Breakout": {
-                "expected_expectancy_r": 2.45,
-                "confidence_score": 89.0,
-                "win_rate_pct": 74.5,
-                "recent_trades_count": 42,
-                "profit_factor": 3.10,
-                "preferred_regimes": ["TRENDING", "VOLATILE", "BREAKOUT", "EXPANSION", "HIGH_VOLATILITY_TRENDING"],
+            "Liquidity Sweep": {
+                "expected_expectancy_r": 1.85,
+                "confidence_score": 88.0,
+                "win_rate_pct": 65.0,
+                "recent_trades_count": 53,
+                "profit_factor": 2.40,
+                "preferred_regimes": ["VOLATILE", "RANGING"],
                 "active": True,
                 "is_prioritized": True,
                 "priority_rank": 1
             },
-            "Breakout Momentum": {
-                "expected_expectancy_r": 0.40,
-                "confidence_score": 79.0,
-                "win_rate_pct": 52.0,
-                "recent_trades_count": 34,
-                "profit_factor": 1.25,
-                "preferred_regimes": ["TRENDING"],
-                "active": True,
-                "is_prioritized": False,
-                "priority_rank": 3
-            },
-            "Mean Reversion": {
-                "expected_expectancy_r": -0.20,
-                "confidence_score": 74.0,
-                "win_rate_pct": 41.0,
-                "recent_trades_count": 22,
-                "profit_factor": 0.88,
-                "preferred_regimes": ["RANGING", "COMPRESSED"],
-                "active": True,
-                "is_prioritized": False,
-                "priority_rank": 5
-            },
             "Trend Following": {
-                "expected_expectancy_r": 1.20,
-                "confidence_score": 80.0,
-                "win_rate_pct": 60.0,
+                "expected_expectancy_r": 1.40,
+                "confidence_score": 84.0,
+                "win_rate_pct": 58.0,
                 "recent_trades_count": 30,
-                "profit_factor": 1.85,
+                "profit_factor": 1.95,
                 "preferred_regimes": ["TRENDING"],
                 "active": True,
                 "is_prioritized": False,
                 "priority_rank": 2
             },
-            "Liquidity Sweep": {
-                "expected_expectancy_r": 0.95,
-                "confidence_score": 78.0,
-                "win_rate_pct": 58.0,
+            "MEAN_REVERSION_GRID": {
+                "expected_expectancy_r": 0.85,
+                "confidence_score": 79.0,
+                "win_rate_pct": 52.0,
                 "recent_trades_count": 25,
-                "profit_factor": 1.62,
-                "preferred_regimes": ["VOLATILE", "RANGING"],
+                "profit_factor": 1.45,
+                "preferred_regimes": ["RANGING", "COMPRESSED"],
+                "active": True,
+                "is_prioritized": False,
+                "priority_rank": 3
+            },
+            "Volatility Expansion Breakout": {
+                "expected_expectancy_r": 0.20,
+                "confidence_score": 72.0,
+                "win_rate_pct": 42.0,
+                "recent_trades_count": 21,
+                "profit_factor": 1.05,
+                "preferred_regimes": ["TRENDING"],
                 "active": True,
                 "is_prioritized": False,
                 "priority_rank": 4
+            },
+            "Breakout Momentum": {
+                "expected_expectancy_r": 0.10,
+                "confidence_score": 70.0,
+                "win_rate_pct": 38.0,
+                "recent_trades_count": 17,
+                "profit_factor": 0.95,
+                "preferred_regimes": ["TRENDING"],
+                "active": True,
+                "is_prioritized": False,
+                "priority_rank": 5
             }
         }
 
@@ -268,7 +268,7 @@ class StrategyPortfolioManager:
 
     def get_top_strategy(self) -> Dict[str, Any]:
         """Returns the strategy currently allocated the highest capital share."""
-        best_name = "Volatility Expansion Breakout"
+        best_name = "Liquidity Sweep"
         best_share = 0.0
         for name, data in self._capital_allocations.items():
             if data.get("capital_share_pct", 0.0) > best_share:

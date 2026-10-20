@@ -1,4 +1,4 @@
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any
 from app.core.config import settings
 
 try:
@@ -19,7 +19,7 @@ try:
 except ImportError:
     engine = None
     AsyncSessionLocal = None
-    AsyncSession = Any = object
+    AsyncSession = object
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI Dependency for database sessions."""
