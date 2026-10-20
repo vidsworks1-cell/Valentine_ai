@@ -63,12 +63,12 @@ class PortfolioGuard:
     """
     _instance: Optional['PortfolioGuard'] = None
     
-    MAX_OPEN_POSITIONS = 5
+    MAX_OPEN_POSITIONS = 3      # Max 3 open positions simultaneously (disciplined high-leverage risk cap)
     MAX_PORTFOLIO_RISK = 0.06   # 6% Portfolio Heat Limit
     MAX_SYMBOL_EXPOSURE = 0.02  # 2% Max Per-Symbol Exposure
     MAX_DAILY_LOSS = 0.05       # 5% Daily Loss Circuit Breaker
-    MAX_CLUSTER_POSITIONS = 2   # Max 2 simultaneous positions per correlation cluster
-    MAX_SECTOR_RISK_CAP_PCT = 3.5 # Max 3.5% portfolio risk per sector cluster
+    MAX_CLUSTER_POSITIONS = 1   # Max 1 simultaneous position per correlation cluster (prevents altcoin dump contagion)
+    MAX_SECTOR_RISK_CAP_PCT = 2.5 # Max 2.5% portfolio risk per sector cluster
     MAX_SCALE_INS_PER_POSITION = 2 # Max 2 scale-ins per position (3 entries max total)
     MIN_SWAP_HOLD_TIME_SEC = 3600.0   # Must hold for at least 60 minutes before even considering an Alpha Swap
     SWAP_GLOBAL_COOLDOWN_SEC = 7200.0 # Max 1 swap per 2 hours to eliminate position churn and fee bleed

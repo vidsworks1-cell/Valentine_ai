@@ -46,7 +46,7 @@ class TradingPersonaPresetEngine:
             "name": "Optimal Momentum Scalper (12x-15x)",
             "key": "OPTIMAL_MOMENTUM_SCALPER",
             "description": "Balanced high-octane momentum scalping: 12x-15x isolated leverage with tight 0.85x ATR stop-losses and rapid multi-stage take-profit locks.",
-            "min_bayesian_confidence": 0.72,
+            "min_bayesian_confidence": 0.80,
             "sl_atr_multiplier": 0.85,
             "tp_atr_multiplier": 2.5,
             "tp_stage1_multiplier": 1.2,

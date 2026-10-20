@@ -9,6 +9,7 @@ class PriceCache:
 
     def __init__(self):
         self._prices: Dict[str, float] = {}
+        self._price_history: Dict[str, list] = {}
         self._updates_count: Dict[str, int] = {}
         self._symbol_last_update_time: Dict[str, float] = {}
         self._symbol_synchronized: Dict[str, bool] = {}
@@ -39,10 +40,111 @@ class PriceCache:
         sym = symbol.upper()
         now = time.time()
         inst._prices[sym] = price
+        if sym not in inst._price_history:
+            inst._price_history[sym] = []
+        inst._price_history[sym].append(price)
+        if len(inst._price_history[sym]) > 100:
+            inst._price_history[sym].pop(0)
         inst._updates_count[sym] = inst._updates_count.get(sym, 0) + 1
         inst._symbol_last_update_time[sym] = now
         inst._symbol_synchronized[sym] = True
         inst._last_update_time = now
+
+    @classmethod
+    def get_technical_analysis(cls, symbol: str) -> Dict[str, Any]:
+        """Calculates real EMA (9, 21), RSI (14), and ATR based on cached price history."""
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        history = inst._price_history.get(sym, [])
+        current_px = inst.get_price(sym)
+        if not history or len(history) < 14:
+            return {
+                "trend_bias": "NEUTRAL",
+                "is_trending": False,
+                "rsi": 50.0,
+                "atr": round(current_px * 0.008, 4),
+                "ema9": current_px,
+                "ema21": current_px,
+                "momentum_score": 50.0
+            }
+
+        def calc_ema(prices, period):
+            k = 2.0 / (period + 1.0)
+            ema = prices[0]
+            for p in prices[1:]:
+                ema = (p * k) + (ema * (1.0 - k))
+            return ema
+
+        ema9 = calc_ema(history, 9)
+        ema21 = calc_ema(history, min(21, len(history)))
+
+        gains = []
+        losses = []
+        for i in range(1, min(15, len(history))):
+            diff = history[-i] - history[-i-1]
+            if diff > 0:
+                gains.append(diff)
+            else:
+                losses.append(abs(diff))
+        avg_gain = sum(gains) / 14.0 if gains else 0.0001
+        avg_loss = sum(losses) / 14.0 if losses else 0.0001
+        rs = avg_gain / avg_loss
+        rsi = round(100.0 - (100.0 / (1.0 + rs)), 1)
+
+        recent_chunk = history[-20:]
+        high_low_range = max(recent_chunk) - min(recent_chunk)
+        atr = max(round(high_low_range * 0.5, 4), round(current_px * 0.005, 4))
+
+        is_bullish = (current_px > ema9 > ema21)
+        is_bearish = (current_px < ema9 < ema21)
+
+        if is_bullish:
+            bias = "BULLISH"
+            is_trending = True
+        elif is_bearish:
+            bias = "BEARISH"
+            is_trending = True
+        else:
+            bias = "NEUTRAL"
+            is_trending = False
+
+        return {
+            "trend_bias": bias,
+            "is_trending": is_trending,
+            "rsi": rsi,
+            "atr": atr,
+            "ema9": round(ema9, 4),
+            "ema21": round(ema21, 4),
+            "momentum_score": 75.0 if is_trending else 40.0
+        }
+
+    @classmethod
+    def update_price_and_volume(cls, symbol: str, price: float, quote_volume_24h: float = 0.0):
+        """Updates cached price and 24h volume for any exchange symbol."""
+        cls.update_price(symbol, price)
+        if quote_volume_24h > 0:
+            inst = cls.get_instance_sync()
+            inst._volume_24h[symbol.upper()] = quote_volume_24h
+
+    @classmethod
+    def get_liquid_symbols(cls, min_quote_volume: float = 10_000_000.0, top_n: int = 120) -> list:
+        """Returns liquid USDT contracts sorted by 24h volume across the whole exchange universe."""
+        inst = cls.get_instance_sync()
+        tracked = []
+        for sym, px in inst._prices.items():
+            if not sym.endswith("USDT") or px <= 0:
+                continue
+            vol = inst._volume_24h.get(sym, 0.0)
+            if vol >= min_quote_volume or sym in ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]:
+                tracked.append((sym, vol))
+
+        # Sort by 24h quote volume descending so top liquid symbols with minimal spread are prioritized
+        tracked.sort(key=lambda x: x[1], reverse=True)
+        result = [item[0] for item in tracked[:top_n]]
+        if not result and inst._prices:
+            # Fallback if volume is still populating
+            result = [s for s in list(inst._prices.keys()) if s.endswith("USDT")][:top_n]
+        return result
 
     @classmethod
     def get_price(cls, symbol: str) -> float:

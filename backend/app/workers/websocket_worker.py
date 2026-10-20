@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import httpx
 import websockets
 from app.core.config import settings
 from app.workers.price_cache import PriceCache
@@ -48,14 +49,19 @@ class BinanceWebSocketWorker:
         from app.scheduler.manager import LayeredSchedulerManager
         scheduler = await LayeredSchedulerManager.get_instance()
         trading_mode = scheduler.global_trading_mode
+        trading_venue = getattr(scheduler, "trading_venue", "SPOT").upper()
         is_testnet = (trading_mode == "TESTNET") or getattr(settings, "BINANCE_TESTNET", False)
-        if is_testnet:
-            base_url = "wss://testnet.binance.vision/ws"
+
+        if trading_venue == "FUTURES":
+            base_url = "wss://stream.binancefuture.com/ws" if is_testnet else "wss://fstream.binance.com/ws"
         else:
-            base_url = "wss://stream.binance.com:9443/ws"
+            base_url = "wss://testnet.binance.vision/ws" if is_testnet else "wss://stream.binance.com:9443/ws"
             
-        logger.info(f"Connecting to Binance Spot WebSocket at: {base_url} (Mode={trading_mode}, Testnet={is_testnet})")
+        logger.info(f"Connecting to Binance {trading_venue} WebSocket at: {base_url} (Mode={trading_mode}, Testnet={is_testnet})")
         
+        # Start background universe refresher to populate 24h volume for all 700+ contracts immediately
+        asyncio.create_task(self._bootstrap_exchange_universe(trading_venue, is_testnet))
+
         while self.running:
             try:
                 if self._retry_count > 0:
@@ -64,43 +70,29 @@ class BinanceWebSocketWorker:
                 
                 logger.info(f"Connecting to Binance WebSocket: {base_url}")
                 async with websockets.connect(base_url, ping_interval=20, ping_timeout=20) as websocket:
-                    if is_testnet:
-                        logger.info("Connected to Binance Testnet")
-                    else:
-                        logger.info("Connected to Binance WebSocket")
+                    logger.info(f"Connected to Binance {trading_venue} Market Stream")
                     cache.connection_status = "CONNECTED"
-                    self._retry_count = 0  # Reset retry count on successful connection
+                    self._retry_count = 0
                     
                     try:
                         async with AsyncSessionLocal() as db:
                             await AuditService.create_audit_log(db, AuditLogCreate(
                                 level="INFO",
                                 category="SYSTEM",
-                                message="Binance WebSocket connected",
-                                details=f"Successfully connected to Binance stream at {base_url}."
+                                message=f"Binance {trading_venue} WebSocket connected",
+                                details=f"Connected to all-market stream at {base_url}."
                              ))
                     except Exception as ae:
                         logger.error(f"Failed to log WebSocket connection audit event: {ae}")
                         
+                    # Subscribe to all-market ticker array (!miniTicker@arr streams all symbols at once)
                     subscribe_payload = {
                         "method": "SUBSCRIBE",
-                        "params": [f"{symbol.lower()}@ticker" for symbol in symbols],
+                        "params": ["!miniTicker@arr"],
                         "id": 1
                     }
                     await websocket.send(json.dumps(subscribe_payload))
-                    for symbol in symbols:
-                        logger.info(f"Subscribed to {symbol.lower()}@ticker")
-                    
-                    try:
-                        async with AsyncSessionLocal() as db:
-                            await AuditService.create_audit_log(db, AuditLogCreate(
-                                level="INFO",
-                                category="SYSTEM",
-                                message="Binance WebSocket subscription sent",
-                                details=f"Subscription request sent for: {symbols}"
-                            ))
-                    except Exception as ae:
-                        logger.error(f"Failed to log subscription success audit event: {ae}")
+                    logger.info(f"Subscribed to !miniTicker@arr (All-Market Stream for {trading_venue})")
                     
                     async for message in websocket:
                         if not self.running:
@@ -117,23 +109,21 @@ class BinanceWebSocketWorker:
 
                         try:
                             data = json.loads(message)
-                            if "result" in data and data.get("id") == 1:
-                                logger.info("Subscribed streams success")
+                            if isinstance(data, dict) and "result" in data and data.get("id") == 1:
+                                logger.info("Subscribed to all-market ticker stream successfully")
                             else:
-                                # Handle both single stream format and combined stream wrapper format
-                                ticker_data = data.get("data", data) if "stream" in data else data
-                                if "s" in ticker_data and "c" in ticker_data:
-                                    symbol = ticker_data["s"]
-                                    price = float(ticker_data["c"])
-                                    cache.update_price(symbol, price)
-
-                                    # Duplicate event processing if chaos enabled
-                                    if chaos.enabled and chaos.should_inject_ws_duplicate():
-                                        cache.update_price(symbol, price)
+                                # Handle all-market array format (!miniTicker@arr) or wrapped stream format
+                                items = data if isinstance(data, list) else ([data.get("data", data)] if "stream" in data else [data])
+                                for item in items:
+                                    if isinstance(item, dict) and "s" in item and "c" in item:
+                                        sym = str(item["s"]).upper()
+                                        if sym.endswith("USDT"):
+                                            px = float(item["c"])
+                                            q_vol = float(item.get("q", 0.0))
+                                            cache.update_price_and_volume(sym, px, q_vol)
                         except Exception as inner_e:
                             logger.error(f"Error parsing ticker message: {inner_e}")
                     
-                    # If async for finishes without exception, the server closed the stream
                     logger.info("Connection closed by server")
                     
             except asyncio.CancelledError:
@@ -157,3 +147,35 @@ class BinanceWebSocketWorker:
                 
                 logger.info("Reconnecting...")
                 await asyncio.sleep(min(2.0 + self._retry_count * 0.5, 10.0))
+
+    async def _bootstrap_exchange_universe(self, venue: str = "FUTURES", is_testnet: bool = False):
+        """Periodically fetches all 24h tickers from Binance REST API to ensure 100% full market coverage."""
+        cache = await PriceCache.get_instance()
+        if venue == "FUTURES":
+            api_url = "https://fapi.binance.com/fapi/v1/ticker/24hr"
+        else:
+            api_url = "https://api.binance.com/api/v3/ticker/24hr"
+
+        while self.running:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(api_url)
+                    if resp.status_code == 200:
+                        tickers = resp.json()
+                        count = 0
+                        if isinstance(tickers, list):
+                            for item in tickers:
+                                sym = str(item.get("symbol", "")).upper()
+                                if sym.endswith("USDT") and item.get("lastPrice"):
+                                    try:
+                                        px = float(item["lastPrice"])
+                                        vol = float(item.get("quoteVolume", 0.0))
+                                        cache.update_price_and_volume(sym, px, vol)
+                                        count += 1
+                                    except Exception:
+                                        pass
+                        logger.info(f"⚡ [UNIVERSE BOOTSTRAP] Synced {count} active USDT contracts from Binance {venue} into PriceCache.")
+            except Exception as e:
+                logger.debug(f"Universe bootstrap polling notice: {e}")
+
+            await asyncio.sleep(45.0)
