@@ -312,7 +312,7 @@ class BinanceConnector:
                         "msg": response.text
                     }
 
-                # Format log data cleanly by omitting hundreds of zero balances
+                # Format log data cleanly by omitting hundreds of zero balances and empty positions
                 log_data = data
                 if isinstance(data, dict) and "balances" in data and isinstance(data["balances"], list):
                     non_zero = [
@@ -324,6 +324,15 @@ class BinanceConnector:
                     }
                     log_data["non_zero_balances"] = non_zero
                     log_data["_zero_balances_omitted"] = len(data["balances"]) - len(non_zero)
+                elif isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict) and "positionAmt" in data[0]:
+                    active_positions = [
+                        p for p in data
+                        if abs(float(p.get("positionAmt", 0.0))) > 0.00001
+                    ]
+                    log_data = {
+                        "active_futures_positions": active_positions,
+                        "_zero_positions_omitted": len(data) - len(active_positions)
+                    }
 
                 logger.info(
                     f"[BinanceConnector] Response Received | Environment: {exec_env} | Mode: {mode_upper} | "
