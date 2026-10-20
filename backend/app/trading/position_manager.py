@@ -1001,16 +1001,18 @@ class PositionManager:
                     except Exception as qe:
                         logger.warning(f"Failed to notify Opportunity Queue: {qe}")
 
-                    # Notify Dust Recovery Engine to detect residual dust and auto-liquidate/accumulate
+                    # Notify Dust Recovery Engine only for SPOT venue trades (Futures settles in USDT margin)
                     try:
-                        from app.trading.dust_recovery_engine import DustRecoveryEngine
-                        asyncio.create_task(DustRecoveryEngine.get_instance().on_trade_completed(
-                            symbol=symbol,
-                            base_asset=base_asset,
-                            exit_price=exit_price,
-                            trading_mode=trading_mode,
-                            trade_size_usdt=exit_price * size
-                        ))
+                        from app.services.binance_connector import BinanceConnector
+                        if BinanceConnector.get_instance().trading_venue.upper() == "SPOT":
+                            from app.trading.dust_recovery_engine import DustRecoveryEngine
+                            asyncio.create_task(DustRecoveryEngine.get_instance().on_trade_completed(
+                                symbol=symbol,
+                                base_asset=base_asset,
+                                exit_price=exit_price,
+                                trading_mode=trading_mode,
+                                trade_size_usdt=exit_price * size
+                            ))
                     except Exception as dre_err:
                         logger.warning(f"Failed to notify DustRecoveryEngine: {dre_err}")
 

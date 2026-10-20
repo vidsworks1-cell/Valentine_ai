@@ -147,29 +147,15 @@ class LayeredSchedulerManager:
         1. Upgrade 3: Ensures BNB balance has ~$1.00 buffer for 25% fee discount.
         2. Upgrade 4: Automatically sweeps sub-dollar dust balances into BNB.
         """
-        logger.info("Starting scheduled Dust Sweep & BNB Fee Discount maintenance daemon (every 6 hours)...")
-        # Initial delayed check 30s after startup
+        logger.info("Maintenance daemon initialized (automated Spot dust conversion disabled; managed manually by user).")
         await asyncio.sleep(30.0)
         while self.running:
+            # Automated Spot dust conversion is disabled per user preference (Spot assets are managed manually)
+            # Sleep 6 hours
             try:
-                if self.global_trading_mode in ["LIVE", "TESTNET"]:
-                    from app.services.binance_connector import BinanceConnector
-                    from app.trading.dust_recovery_engine import DustRecoveryEngine
-                    
-                    connector = BinanceConnector.get_instance()
-                    # 1. Maintain BNB balance for 25% discount
-                    await connector.ensure_bnb_balance_for_fees(
-                        min_bnb_value_usdt=0.50,
-                        replenish_amount_usdt=1.00,
-                        mode=self.global_trading_mode
-                    )
-                    
-                    # 2. Sweep accumulated micro-dust into BNB
-                    await DustRecoveryEngine.get_instance().convert_accumulated_dust(self.global_trading_mode)
+                await asyncio.sleep(6 * 3600.0)
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                logger.error(f"Error in dust & fee maintenance loop: {e}")
             
             # Sleep 6 hours (21600 seconds)
             try:

@@ -142,11 +142,12 @@ class DustRecoveryEngine:
         """
         async with self._lock:
             try:
-                self._total_traded_volume_usdt += max(trade_size_usdt, 10.0)
                 connector = BinanceConnector.get_instance()
-                
-                # Brief pause to allow exchange trade settlement
-                await asyncio.sleep(1.2)
+                if connector.trading_venue.upper() == "FUTURES":
+                    # Futures positions are USD-M margin contracts and do not leave Spot dust
+                    return
+
+                self._total_traded_volume_usdt += max(trade_size_usdt, 10.0)
 
                 # 1. Detect remaining free balance for traded asset
                 actual_free = await connector.get_free_asset_balance(base_asset, trading_mode)
@@ -218,29 +219,30 @@ class DustRecoveryEngine:
             except Exception as e:
                 logger.error(f"Error in DustRecoveryEngine post-trade check for {symbol}: {e}", exc_info=True)
 
-    async def convert_accumulated_dust(self, trading_mode: str = "LIVE") -> Dict[str, Any]:
+    async def convert_accumulated_dust(self, trading_mode: str = "LIVE", manual_trigger: bool = False) -> Dict[str, Any]:
         """
         Converts accumulated eligible dust balances into BNB using Binance official dust API.
+        Automatically disabled for FUTURES venue (Spot dust is managed manually by user).
         """
+        connector = BinanceConnector.get_instance()
+        if connector.trading_venue.upper() == "FUTURES" and not manual_trigger:
+            logger.info("ℹ️ [DUST CONVERSION SKIPPED] Lumina venue is FUTURES. Automatic Spot dust conversion is disabled (user manages Spot manually).")
+            return {
+                "status": "SKIPPED_FUTURES",
+                "message": "Spot dust conversion disabled in FUTURES venue. User manages Spot assets manually.",
+                "converted_assets": [],
+                "recovered_usdt": 0.0
+            }
+
         async with self._lock:
-            connector = BinanceConnector.get_instance()
             # Collect unique pending assets (exclude USDT and BNB)
             pending_assets = list({
                 r.asset for r in self._dust_records 
                 if r.status == "PENDING_CONVERSION" and r.asset not in ["USDT", "BNB"]
             })
 
-            # Also query exchange for any live convertible assets via SAPI
-            try:
-                dust_info = await connector.get_dust_convertible_assets(trading_mode)
-                if isinstance(dust_info, dict) and "details" in dust_info:
-                    for d in dust_info["details"]:
-                        ast = d.get("asset", "").upper()
-                        if ast and ast not in ["USDT", "BNB"]:
-                            if ast not in pending_assets:
-                                pending_assets.append(ast)
-            except Exception as e:
-                logger.warning(f"Could not fetch live dust convertible list: {e}")
+            # Do not query or convert wallet-wide spot assets; only convert explicitly recorded trade dust if present
+            connector = BinanceConnector.get_instance()
 
             if not pending_assets:
                 return {
