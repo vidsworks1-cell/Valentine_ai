@@ -163,6 +163,8 @@ class BinanceWebSocketWorker:
                     return json.loads(resp.read().decode("utf-8"))
             return []
 
+        first_run = True
+        last_log_time = 0.0
         while self.running:
             try:
                 tickers = await asyncio.to_thread(_fetch)
@@ -178,8 +180,14 @@ class BinanceWebSocketWorker:
                                 count += 1
                             except Exception:
                                 pass
-                logger.info(f"⚡ [UNIVERSE BOOTSTRAP] Synced {count} active USDT contracts from Binance {venue} into PriceCache.")
+                now = time.time()
+                if first_run or (now - last_log_time >= 600.0):
+                    logger.info(f"⚡ [UNIVERSE BOOTSTRAP] Synced {count} active USDT contracts from Binance {venue} into PriceCache.")
+                    first_run = False
+                    last_log_time = now
+                else:
+                    logger.debug(f"[UNIVERSE BOOTSTRAP] Periodic sync: {count} contracts refreshed.")
             except Exception as e:
                 logger.debug(f"Universe bootstrap polling notice: {e}")
 
-            await asyncio.sleep(45.0)
+            await asyncio.sleep(60.0)
