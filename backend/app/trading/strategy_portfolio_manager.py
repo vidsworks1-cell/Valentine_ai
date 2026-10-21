@@ -184,7 +184,7 @@ class StrategyPortfolioManager:
 
             # Mathematical edge: Edge = Expectancy * (Confidence/100) * Regime Factor
             # Prioritized strategies receive institutional priority multiplier
-            priority_mult = 1.25 if (strat.get("is_prioritized", False) or "volatility expansion" in strat_name.lower()) else 1.0
+            priority_mult = 1.25 if strat.get("is_prioritized", False) else 1.0
 
             # If expectancy is negative, statistical edge is 0 (preserves capital)
             if exp_r <= 0.0:
