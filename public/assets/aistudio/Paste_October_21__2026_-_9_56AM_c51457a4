@@ -1,0 +1,578 @@
+s old, max allowed 5.0s).
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:36,133 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed APTUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: Rejected APTUSDT trade.
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (10.1s old, max allowed 5.0s).
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:36,134 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: Rejected ALTUSDT trade.
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (10.1s old, max allowed 5.0s).
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:36,134 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ALTUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: Rejected ALTUSDT trade.
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (10.1s old, max allowed 5.0s).
+Oct 21 10:48:36 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:36,143 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:48:41 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:41,176 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:48:46 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:46,194 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:48:46 vmi3653665 uvicorn[67362]: Rejected ONDOUSDT trade.
+Oct 21 10:48:46 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (20.1s old, max allowed 5.0s).
+Oct 21 10:48:46 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:46,194 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ONDOUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:48:46 vmi3653665 uvicorn[67362]: Rejected ONDOUSDT trade.
+Oct 21 10:48:46 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (20.1s old, max allowed 5.0s).
+Oct 21 10:48:46 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:46,204 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:48:51 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:51,234 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:48:56 vmi3653665 uvicorn[67362]: 2026-10-21 10:48:56,272 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,276 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ZECUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,277 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ZECUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ZECUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,278 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected KORUUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,278 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed KORUUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected KORUUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,280 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BZUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,280 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed BZUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BZUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,283 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected IOSTUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,283 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed IOSTUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected IOSTUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,284 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected NVDAUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,284 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed NVDAUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected NVDAUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,286 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BTWUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,286 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed BTWUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BTWUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,288 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected TSLAUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,288 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed TSLAUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected TSLAUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,289 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected DRAMUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,289 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed DRAMUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected DRAMUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,290 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected INJUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,290 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed INJUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected INJUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,290 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected EWYUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,291 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed EWYUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected EWYUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,291 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ARBUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,291 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ARBUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ARBUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,291 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ADAUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,291 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ADAUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ADAUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,292 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected NBISUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,292 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed NBISUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected NBISUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,294 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected APRUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,294 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed APRUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected APRUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,296 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected PAXGUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,296 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed PAXGUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected PAXGUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,297 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected AMDUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,297 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed AMDUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected AMDUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,300 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ICNTUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,300 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ICNTUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ICNTUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,302 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected AAOIUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,303 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed AAOIUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected AAOIUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,303 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected LITUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,303 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed LITUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected LITUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,304 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BATUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,304 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed BATUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BATUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,306 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BEUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,307 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed BEUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BEUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,307 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BMTUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,307 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed BMTUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected BMTUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,308 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected XAUTUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,308 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed XAUTUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected XAUTUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,309 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected CRVUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,309 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed CRVUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected CRVUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,309 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected OPUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,309 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed OPUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected OPUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,310 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected SANDUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,311 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed SANDUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected SANDUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,311 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected AVGOUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,312 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed AVGOUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected AVGOUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,312 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ZHIPUUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,312 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ZHIPUUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA
+GUARD]
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Rejected ZHIPUUSDT trade.
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (35.2s old, max allowed 5.0s).
+Oct 21 10:49:01 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:01,312 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:06,329 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Rejected UNIUSDT trade.
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (40.3s old, max allowed 5.0s).
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:06,330 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed UNIUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Rejected UNIUSDT trade.
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (40.3s old, max allowed 5.0s).
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:06,346 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Rejected APTUSDT trade.
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (40.3s old, max allowed 5.0s).
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:06,347 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed APTUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Rejected APTUSDT trade.
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (40.3s old, max allowed 5.0s).
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:06,348 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Rejected ALTUSDT trade.
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (40.3s old, max allowed 5.0s).
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:06,348 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ALTUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Rejected ALTUSDT trade.
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (40.3s old, max allowed 5.0s).
+Oct 21 10:49:06 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:06,360 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:49:11 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:11,395 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:49:16 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:16,415 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:16 vmi3653665 uvicorn[67362]: Rejected ONDOUSDT trade.
+Oct 21 10:49:16 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (50.3s old, max allowed 5.0s).
+Oct 21 10:49:16 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:16,415 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ONDOUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:16 vmi3653665 uvicorn[67362]: Rejected ONDOUSDT trade.
+Oct 21 10:49:16 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (50.3s old, max allowed 5.0s).
+Oct 21 10:49:16 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:16,425 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:49:21 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:21,453 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:49:23 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:23,620 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET | Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key:
+Bi7cow... | Signed: True
+Oct 21 10:49:23 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:23,935 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1792572563621&signature=46a96f90106a89214c7dc44469b0af86d65c40a3726df96b67af85427b750230 "HTTP/1.1 200 OK"
+Oct 21 10:49:23 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:23,963 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [{'symbol': 'LTCUSDT', 'positionAmt': '2.728', 'entryPrice': '61.63999999999999', 'breakEvenPrice': '61.67082', 'markPrice': '61.58623529', 'unRealizedProfit': '-0.14667010', 'liquidationPrice': '59.74768448', 'leverage': '29', 'maxNotionalValue': '160000', 'marginType': 'cross', 'isolatedMargin': '0.00000000', 'isAutoAddMargin': 'false', 'positionSide': 'BOTH', 'notional': '168.00724987', 'isolatedWallet': '0', 'updateTime': 1792572272003, 'isolated': False, 'adlQuantile': 2}], '_zero_positions_omitted': 930}
+Oct 21 10:49:23 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:23,964 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: POST |
+Path: /fapi/v1/leverage | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Oct 21 10:49:24 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:24,281 [INFO] httpx: HTTP Request: POST https://fapi.binance.com/fapi/v1/leverage?symbol=LTCUSDT&leverage=15&recvWindow=60000&timestamp=1792572563964&signature=dcca66e8b732a101ce4e9c3c846a8a8585dff477680edd6ab7880bbca4e016a5 "HTTP/1.1 400 Bad Request"
+Oct 21 10:49:24 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:24,282 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v1/leverage | HTTP Status: 400 | Response: {'code': -2028, 'msg': 'Leverage is smaller than permitted: insufficient margin balance.'}
+Oct 21 10:49:24 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:24,283 [ERROR] lumina.services.binance_connector: ❌ [BINANCE REJECTION - HTTP 400] Binance Exchange Error (Code -2028): Leverage is smaller than permitted: insufficient margin balance.
+Oct 21 10:49:24 vmi3653665 uvicorn[67362]:   - Action: POST /fapi/v1/leverage | Environment: LIVE | Mode: LIVE
+Oct 21 10:49:24 vmi3653665 uvicorn[67362]:   - Diagnostic Advice: Leverage is smaller than permitted: insufficient margin balance.
+Oct 21 10:49:24 vmi3653665 uvicorn[67362]:   - Full Raw Response: {'code': -2028, 'msg': 'Leverage is smaller than permitted: insufficient margin balance.'}
+Oct 21 10:49:24 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:24,283 [INFO] lumina.services.binance_connector: ⚡ [FUTURES LEVERAGE SET] LTCUSDT leverage configured to 15x on Binance Futures (LIVE).
+Oct 21 10:49:24 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:24,283 [INFO] lumina.trading.exchange_reconciliation: ⚡ [RECONCILIATION HARMONIZATION] Harmonized LTCUSDT leverage from 29x to 15x.
+Oct 21 10:49:24 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:24,289 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #17 (LIVE) IN SYNC. Audited: 1 | Zero discrepancies.
+Oct 21 10:49:26 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:26,487 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,492 [INFO] lumina.ai.meta_reasoning: 🧠 [META-REASONING DEBATE] SPCXUSDT BUY
+($163.46): Question: 'Why do I believe SPCXUSDT BUY ($163.46) deserves capital?' ==> Outcome: ✅ CAPITAL APPROVED (Conviction: 82.2/100 >= 70.0). Second brain confirms robust confluence across Market Structure
+(88), Liquidity (72), Momentum (68), and HTF (95).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,492 [INFO] lumina.ai.self_adaptation: 🎯 [DYNAMIC THRESHOLD CALIBRATION] Persona Baseline: 0.80 | Win Rate: 45.0% | Calibration Offset: -0.03 | Counterfactual Offset: +0.00 | Regime Offset (TRENDING): +0.00 -> Final Threshold: 0.74
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,493 [INFO] lumina.ai.reasoning: 🚨 OPPORTUNITY APPROVED BY PIPELINE: SPCXUSDT BUY via Trend Continuation (Original: Trend Continuation) at $163.46
+(Conviction Score: 82.2/100 | Adapted Conf: 0.8 >= 0.64)
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]:   - Pipeline Trace: Scanner [PASS] ✔ -> MacroGuard [PASS] ✔ -> MTFGuard [PASS] ✔ -> VolumeLiquidityGuard [PASS] ✔ -> Phase1Guards [PASS] ✔ -> MetaReasoning [PASS] ✔ -> SelfAdaptation [PASS] ✔ -> ConfidenceFilter [PASS] ✔ -> ThesisPersistence [PASS] ✔ -> DecisionLock [PASS] ✔
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,493 [INFO] lumina.ai.reasoning: 🧠 [SELF-ADAPTATION INSIGHTS] [SECOND BRAIN HIGH CONVICTION BONUS] Added +0.07 confidence boost for Meta Conviction 82.2/100
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,493 [INFO] lumina.trading.order_manager: [STAGE: SIGNAL] Reviewing trade opportunity from AI Scanner: SPCXUSDT (BUY) at 163.46 via Trend Continuation
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,493 [INFO] lumina.trading.execution_state: 🔄 [EXECUTION STATE SYNC] SPCXUSDT -> SIGNAL_DETECTED | Signal detected for SPCXUSDT (BUY). Analyzing market structure and regime...
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,493 [INFO] lumina.trading.execution_state: 🔄 [EXECUTION STATE SYNC] SPCXUSDT -> OPPORTUNITY_APPROVED | SPCXUSDT opportunity approved by strategy and Meta-Reasoning. Proceeding to risk validation.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,493 [INFO] lumina.trading.order_manager: 🔒 [ORDER MANAGER EXECUTION ENGINE]
+Processing locked DecisionContext sig_1792572571492_SPCXUSDT_BUY (SPCXUSDT BUY via Trend Continuation) | Pipeline Ver: 2.4.0-institutional
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,499 [INFO] lumina.trading.order_manager: 🔗 [CROSS-ASSET CORRELATION SCALER]
+Position size for SPCXUSDT scaled to 0.5 (50% due to HIGH_CONCENTRATION_RISK vs LTCUSDT).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,499 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET | Path: /fapi/v2/account | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,804 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/account?recvWindow=60000&timestamp=1792572571499&signature=c068acf89714dbf36b5c516ebefa7c2f87ab3f8202dc31a1a7858b6d502fa915 "HTTP/1.1 200 OK"
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,811 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/account | HTTP Status: 200 | Response: {'feeTier': 0, 'canTrade': True, 'canDeposit': True, 'canWithdraw': True, 'feeBurn': False, 'tradeGroupId': -1, 'updateTime': 0, 'multiAssetsMargin': True, 'totalInitialMargin': '5.78603209', 'totalMaintMargin': '0.83897461', 'totalWalletBalance': '5.96938757', 'totalUnrealizedProfit': '-0.16832467', 'totalMarginBalance': '5.80106290', 'totalPositionInitialMargin': '5.78603209', 'totalOpenOrderInitialMargin': '0.00000000', 'totalCrossWalletBalance': '5.96938757', 'totalCrossUnPnl': '-0.16832467', 'availableBalance': '0.00000000', 'maxWithdrawAmount': '0.00000000', 'assets': [{'asset': 'USDT', 'walletBalance': '5.97735814', 'unrealizedProfit': '-0.16854942', 'marginBalance': '5.80880872', 'maintMargin': '0.83992685', 'initialMargin': '5.79259922', 'positionInitialMargin': '5.79259922', 'openOrderInitialMargin': '0.00000000', 'maxWithdrawAmount': '0.00000000', 'crossWalletBalance': '5.97735814', 'crossUnPnl': '-0.16854942', 'availableBalance': '0.00000000', 'marginAvailable':
+True, 'updateTime': 1792572272003}], 'active_futures_positions': [{'symbol': 'LTCUSDT', 'initialMargin': '5.79259922', 'maintMargin': '0.83992685', 'unrealizedProfit': '-0.16854942', 'positionInitialMargin': '5.79259922', 'openOrderInitialMargin': '0', 'leverage': '29', 'isolated': False, 'entryPrice': '61.63999999999999', 'breakEvenPrice': '61.67082', 'maxNotional': '160000', 'positionSide': 'BOTH', 'positionAmt': '2.728', 'notional': '167.98537054', 'isolatedWallet': '0', 'updateTime': 1792572272003, 'bidNotional': '0', 'askNotional': '0'}], '_zero_positions_omitted': 930}
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,813 [WARNING] lumina.trading.order_manager: 🛑 [INSUFFICIENT BALANCE] Insufficient available Futures USDT margin ($0.00 USDT). Minimum margin is $2.00 USDT.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,813 [WARNING] lumina.trading.execution_state: 🔄 [EXECUTION STATE SYNC] SPCXUSDT -> REJECTED | SPCXUSDT opportunity rejected at BALANCE_VERIFICATION: Insufficient available Futures USDT margin ($0.00 USDT). Minimum margin is $2.00 USDT. No order was sent to Binance.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,828 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected CLUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.0s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,829 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed CLUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected CLUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.0s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,830 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected KORUUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.0s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,830 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed KORUUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected KORUUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.0s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,835 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected HYPEUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,836 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed HYPEUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected HYPEUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,842 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected QUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,842 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed QUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected QUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,844 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected PUMPUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,844 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed PUMPUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected PUMPUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,846 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected DRAMUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,846 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed DRAMUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected DRAMUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,847 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected XMRUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,847 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed XMRUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected XMRUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,847 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected EWYUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,848 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed EWYUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected EWYUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,849 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected NBISUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,849 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed NBISUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected NBISUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,849 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected AVAXUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,849 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed AVAXUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected AVAXUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,850 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected FILUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,850 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed FILUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected FILUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,851 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected COMPUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,851 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed COMPUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected COMPUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,852 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected BCHUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,852 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed BCHUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected BCHUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,853 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected PAXGUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,853 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed PAXGUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected PAXGUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,853 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected TRUMPUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,854 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed TRUMPUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected TRUMPUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,854 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected ZROUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,854 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ZROUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected ZROUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,858 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected QNTUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,858 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed QNTUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected QNTUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,861 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected BATUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,862 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed BATUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected BATUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,863 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected DOTUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,863 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed DOTUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected DOTUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,864 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected BMTUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,865 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed BMTUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected BMTUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,865 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected PHAUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,865 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed PHAUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected PHAUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,866 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected XAUTUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,866 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed XAUTUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected XAUTUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,867 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected CRVUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,867 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed CRVUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected CRVUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,868 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected MEWUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,868 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed MEWUSDT (BUY) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected MEWUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,869 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected SANDUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,869 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed SANDUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected SANDUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,870 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected ZHIPUUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,870 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed ZHIPUUSDT (SELL) on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA
+GUARD]
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Rejected ZHIPUUSDT trade.
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (5.1s old, max allowed 5.0s).
+Oct 21 10:49:31 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:31,871 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:36,874 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: Rejected SPCXUSDT trade.
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (10.1s old, max allowed 5.0s).
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:36,875 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed SPCXUSDT (BUY)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: Rejected SPCXUSDT trade.
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (10.1s old, max allowed 5.0s).
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:36,895 [WARNING] lumina.ai.reasoning: 🚫 [MARKET DATA GUARD REJECTED] [MARKET DATA GUARD]
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: Rejected APTUSDT trade.
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (10.1s old, max allowed 5.0s).
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:36,895 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed APTUSDT (SELL)
+on 30s cooldown [Category: MARKET_DATA_STALE]. Reason: [MARKET DATA GUARD]
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: Rejected APTUSDT trade.
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: Reason: Price timestamp is
+stale (10.1s old, max allowed 5.0s).
+Oct 21 10:49:36 vmi3653665 uvicorn[67362]: 2026-10-21 10:49:36,906 [ERROR] lumina.ai.reasoning: Opportunity Scanner error: float division by zero

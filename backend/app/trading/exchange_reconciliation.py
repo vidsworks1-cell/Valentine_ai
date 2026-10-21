@@ -94,8 +94,11 @@ class ExchangeReconciliationEngine:
                                             else:
                                                 await connector.set_futures_margin_type(sym, "ISOLATED", active_mode)
                                         if lev_val > 15:
-                                            await connector.set_futures_leverage(sym, 15, active_mode)
-                                            logger.info(f"⚡ [RECONCILIATION HARMONIZATION] Harmonized {sym} leverage from {lev_val}x to 15x.")
+                                            lev_res = await connector.set_futures_leverage(sym, 15, active_mode)
+                                            if isinstance(lev_res, dict) and int(lev_res.get("leverage", 0)) == 15:
+                                                logger.info(f"⚡ [RECONCILIATION HARMONIZATION] Harmonized {sym} leverage from {lev_val}x to 15x.")
+                                            elif isinstance(lev_res, dict) and lev_res.get("code") == -2028:
+                                                logger.debug(f"ℹ️ [RECONCILIATION] Insufficient free margin to lower {sym} leverage from {lev_val}x to 15x while position is open; keeping existing position leverage.")
                                     except Exception as rem_err:
                                         logger.warning(f"Reconciliation margin/leverage notice for {sym}: {rem_err}")
 
@@ -201,18 +204,64 @@ class ExchangeReconciliationEngine:
                 }
                 discrepancies.append(disc)
 
-                # Auto-resolve: Adopt position into internal manager
-                new_trade_id = int(datetime.now(timezone.utc).timestamp() * 1000)
+                # Auto-resolve: Ensure Trade record exists in Database and adopt position into internal manager
                 entry_px = float(exc_pos.get("entry_price", 100.0))
+                pos_size = float(exc_pos.get("position_size", 1.0))
+                side_val = exc_pos.get("side", "BUY")
+                sl_val = float(exc_pos.get("stop_loss", 0.0))
+                tp_val = float(exc_pos.get("take_profit", 0.0))
+
+                db_trade_id = None
+                try:
+                    async with AsyncSessionLocal() as db:
+                        q = select(Trade).where(
+                            Trade.symbol == sym,
+                            Trade.trading_mode == active_mode,
+                            Trade.exit_time.is_(None)
+                        ).order_by(Trade.entry_time.desc())
+                        res_db = await db.execute(q)
+                        existing_trade = res_db.scalars().first()
+                        if existing_trade:
+                            db_trade_id = existing_trade.id
+                            logger.info(f"💾 [RECONCILIATION] Re-linked orphan exchange position {sym} to existing DB Trade #{db_trade_id}.")
+                        else:
+                            # Create new persisted Trade record in DB
+                            from app.api.schemas import TradeCreate
+                            from app.services.trading_service import TradingService
+                            t_create = TradeCreate(
+                                symbol=sym,
+                                side=side_val,
+                                entry_price=entry_px,
+                                position_size=pos_size,
+                                stop_loss=sl_val,
+                                take_profit=tp_val,
+                                strategy_used="Exchange_Reconciliation_Adopted",
+                                market_regime="TRENDING",
+                                confidence_score=0.85,
+                                entry_reason=f"Position adopted from Binance {active_mode} during exchange reconciliation",
+                                indicators="{}",
+                                atr=0.0,
+                                risk_amount=round(pos_size * entry_px * 0.02, 4),
+                                risk_pct=2.0,
+                                trading_mode=active_mode
+                            )
+                            new_trade = await TradingService.create_trade(db, t_create)
+                            db_trade_id = new_trade.id
+                            logger.info(f"💾 [RECONCILIATION DB PERSISTENCE] Persisted orphan exchange position {sym} as new DB Trade #{db_trade_id} ({active_mode}).")
+                except Exception as sync_err:
+                    logger.error(f"[RECONCILIATION] Error persisting adopted position to DB: {sync_err}")
+
+                actual_trade_id = db_trade_id or int(datetime.now(timezone.utc).timestamp() * 1000)
                 pos_details = {
-                    "trade_id": new_trade_id,
+                    "id": actual_trade_id,
+                    "trade_id": actual_trade_id,
                     "symbol": sym,
-                    "side": exc_pos.get("side", "BUY"),
-                    "position_size": float(exc_pos.get("position_size", 1.0)),
+                    "side": side_val,
+                    "position_size": pos_size,
                     "entry_price": entry_px,
-                    "stop_loss": float(exc_pos.get("stop_loss", 0.0)),
-                    "take_profit": float(exc_pos.get("take_profit", 0.0)),
-                    "trailing_stop": float(exc_pos.get("stop_loss", 0.0)),
+                    "stop_loss": sl_val,
+                    "take_profit": tp_val,
+                    "trailing_stop": sl_val,
                     "highest_price": entry_px,
                     "lowest_price": entry_px,
                     "strategy": "Exchange_Reconciliation_Adopted",
@@ -220,11 +269,11 @@ class ExchangeReconciliationEngine:
                     "trading_mode": active_mode,
                     "opened_at": time.time()
                 }
-                await pm.track_position(new_trade_id, pos_details)
+                await pm.track_position(actual_trade_id, pos_details)
                 resolutions.append({
                     "symbol": sym,
                     "action": "AUTO_ADOPTED_ORPHAN_POSITION",
-                    "trade_id": new_trade_id,
+                    "trade_id": actual_trade_id,
                     "status": "RESOLVED"
                 })
 

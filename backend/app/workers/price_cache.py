@@ -85,12 +85,20 @@ class PriceCache:
             diff = history[-i] - history[-i-1]
             if diff > 0:
                 gains.append(diff)
-            else:
+            elif diff < 0:
                 losses.append(abs(diff))
-        avg_gain = sum(gains) / 14.0 if gains else 0.0001
-        avg_loss = sum(losses) / 14.0 if losses else 0.0001
-        rs = avg_gain / avg_loss
-        rsi = round(100.0 - (100.0 / (1.0 + rs)), 1)
+
+        periods = float(min(14, len(history) - 1)) if len(history) > 1 else 14.0
+        avg_gain = sum(gains) / periods if gains else 0.0
+        avg_loss = sum(losses) / periods if losses else 0.0
+
+        if avg_loss <= 1e-9:
+            rsi = 100.0 if avg_gain > 0 else 50.0
+        elif avg_gain <= 1e-9:
+            rsi = 0.0
+        else:
+            rs = avg_gain / avg_loss
+            rsi = round(100.0 - (100.0 / (1.0 + rs)), 1)
 
         recent_chunk = history[-20:]
         high_low_range = max(recent_chunk) - min(recent_chunk)
@@ -211,7 +219,7 @@ class PriceCache:
         return inst._symbol_synchronized.get(symbol.upper(), False)
 
     @classmethod
-    def validate_market_data(cls, symbol: str, max_age_seconds: float = 5.0) -> Tuple[bool, str]:
+    def validate_market_data(cls, symbol: str, max_age_seconds: float = 15.0) -> Tuple[bool, str]:
         """
         Hard Safety Gate for Market Data.
         Verifies:

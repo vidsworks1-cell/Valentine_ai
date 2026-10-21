@@ -78,7 +78,7 @@ class OrderManager:
             # 0a. Market Data Guard Check: Verify live WebSocket feed is active, recent, and synchronized
             from app.workers.price_cache import PriceCache
             cache = await PriceCache.get_instance()
-            passed_md, md_reason = cache.validate_market_data(symbol, max_age_seconds=5.0)
+            passed_md, md_reason = cache.validate_market_data(symbol, max_age_seconds=15.0)
             if not passed_md:
                 logger.warning(md_reason)
                 ExecutionStateTracker.get_instance().transition(

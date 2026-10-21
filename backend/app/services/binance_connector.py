@@ -793,6 +793,13 @@ class BinanceConnector:
             "leverage": int(leverage)
         }
         res = await self._request("POST", "/fapi/v1/leverage", mode_upper, params=params, venue="FUTURES", signed=True)
+        if isinstance(res, dict):
+            if res.get("code") == -2028:
+                logger.warning(f"⚠️ [FUTURES LEVERAGE NOTICE] Cannot lower {symbol} leverage to {leverage}x on Binance Futures: {res.get('msg', 'insufficient margin balance')}")
+                return res
+            if res.get("code", 200) not in [200, 0] or "error" in res:
+                logger.warning(f"⚠️ [FUTURES LEVERAGE NOTICE] Could not set leverage for {symbol}: {res}")
+                return res
         logger.info(f"⚡ [FUTURES LEVERAGE SET] {symbol} leverage configured to {leverage}x on Binance Futures ({mode_upper}).")
         return res
 

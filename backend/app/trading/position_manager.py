@@ -697,6 +697,15 @@ class PositionManager:
             try:
                 # 1. Update Trade Record in DB
                 trade = await TradingService.get_trade_by_id(db, trade_id)
+                if not trade:
+                    from sqlalchemy.future import select
+                    from app.models.trading import Trade
+                    q = select(Trade).where(
+                        Trade.symbol == symbol,
+                        Trade.trading_mode == trading_mode,
+                        Trade.exit_time.is_(None)
+                    ).order_by(Trade.entry_time.desc())
+                    trade = (await db.execute(q)).scalars().first()
                 if trade:
                     current_pnl = trade.profit_loss or 0.0
                     new_pnl = current_pnl + pnl
@@ -706,7 +715,7 @@ class PositionManager:
                         profit_loss=new_pnl,
                         position_size=new_size
                     )
-                    await TradingService.update_trade(db, trade_id, trade_update)
+                    await TradingService.update_trade(db, trade.id, trade_update)
                 
                 # 2. Adjust Paper Wallet Balance (only for paper)
                 if trading_mode not in ["TESTNET", "LIVE"]:
@@ -901,7 +910,40 @@ class PositionManager:
                     exit_time=datetime.utcnow(),
                     outcome=outcome
                 )
-                await TradingService.update_trade(db, trade_id, trade_update)
+                updated_trade = await TradingService.update_trade(db, trade_id, trade_update)
+                if not updated_trade:
+                    # Fallback A: match unclosed Trade by symbol and trading_mode
+                    from sqlalchemy.future import select
+                    from app.models.trading import Trade
+                    q = select(Trade).where(
+                        Trade.symbol == symbol,
+                        Trade.trading_mode == trading_mode,
+                        Trade.exit_time.is_(None)
+                    ).order_by(Trade.entry_time.desc())
+                    matched_trade = (await db.execute(q)).scalars().first()
+                    if matched_trade:
+                        await TradingService.update_trade(db, matched_trade.id, trade_update)
+                        logger.info(f"💾 [DB RECOVERY] Successfully matched and updated closed Trade #{matched_trade.id} for {symbol} ({outcome}).")
+                    else:
+                        # Fallback B: insert completed Trade record so no closed trade is ever lost
+                        recovered_trade = Trade(
+                            symbol=symbol,
+                            side=side,
+                            entry_price=entry,
+                            exit_price=exit_price,
+                            position_size=size,
+                            profit_loss=pnl,
+                            strategy_used=pos.get("strategy", "PositionManager"),
+                            market_regime=pos.get("market_regime", "TRENDING"),
+                            confidence_score=float(pos.get("confidence", 0.8)),
+                            entry_reason="Position closed and persisted by PositionManager",
+                            outcome=outcome,
+                            trading_mode=trading_mode,
+                            exit_time=datetime.utcnow()
+                        )
+                        db.add(recovered_trade)
+                        await db.commit()
+                        logger.info(f"💾 [DB PERSISTENCE] Inserted completed trade for {symbol} (PnL: ${pnl:.4f}) into database.")
                 
                 # 2. Adjust Paper Wallet Balance (only for paper)
                 if trading_mode not in ["TESTNET", "LIVE"]:

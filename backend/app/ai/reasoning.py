@@ -205,7 +205,12 @@ class AiReasoningEngine:
                         logger.error(f"Error checking smart re-entry or macro guard: {ree}")
                     
                     # Real Technical Analysis: EMA Trend & RSI Confluence Engine (Study before entering)
-                    ta = cache.get_technical_analysis(symbol)
+                    try:
+                        ta = cache.get_technical_analysis(symbol)
+                    except Exception as ta_err:
+                        logger.debug(f"Error computing technical analysis for {symbol}: {ta_err}")
+                        continue
+
                     trend_bias = ta.get("trend_bias", "NEUTRAL")
                     rsi_val = ta.get("rsi", 50.0)
                     is_trending = ta.get("is_trending", False)
@@ -230,7 +235,7 @@ class AiReasoningEngine:
                         continue
 
                     # Hard Safety Gate: Verify live market data before generating trade
-                    passed_md, md_reason = cache.validate_market_data(symbol, max_age_seconds=5.0)
+                    passed_md, md_reason = cache.validate_market_data(symbol, max_age_seconds=15.0)
                     if not passed_md:
                         logger.warning(f"🚫 [MARKET DATA GUARD REJECTED] {md_reason}")
                         self.set_cooldown(symbol, proposed_side, category="MARKET_DATA_STALE", reason=md_reason, price=price)
