@@ -234,8 +234,8 @@ class AiReasoningEngine:
                     if in_cooldown:
                         continue
 
-                    # Hard Safety Gate: Verify live market data before generating trade
-                    passed_md, md_reason = cache.validate_market_data(symbol, max_age_seconds=15.0)
+                    # Hard Safety Gate: Verify live market data before generating trade (45s window for altcoin universe)
+                    passed_md, md_reason = cache.validate_market_data(symbol, max_age_seconds=45.0)
                     if not passed_md:
                         logger.warning(f"🚫 [MARKET DATA GUARD REJECTED] {md_reason}")
                         self.set_cooldown(symbol, proposed_side, category="MARKET_DATA_STALE", reason=md_reason, price=price)

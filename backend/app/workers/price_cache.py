@@ -220,12 +220,12 @@ class PriceCache:
         return inst._symbol_synchronized.get(symbol.upper(), False)
 
     @classmethod
-    def validate_market_data(cls, symbol: str, max_age_seconds: float = 15.0) -> Tuple[bool, str]:
+    def validate_market_data(cls, symbol: str, max_age_seconds: float = 45.0) -> Tuple[bool, str]:
         """
         Hard Safety Gate for Market Data.
         Verifies:
         1. live_update_count > 0
-        2. price timestamp is recent (< 5 seconds old)
+        2. price timestamp is recent (< 45 seconds old)
         3. symbol is marked as synchronized
         4. connection status is CONNECTED
         """

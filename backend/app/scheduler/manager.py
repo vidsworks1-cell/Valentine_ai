@@ -120,10 +120,10 @@ class LayeredSchedulerManager:
         if cache.connection_status != "CONNECTED":
             return False, f"CIRCUIT_BREAKER_TRIGGERED: Stale network connectivity ({cache.connection_status})."
 
-        # 2. Feed Freshness Circuit Breaker
+        # 2. Feed Freshness Circuit Breaker (calibrated to 45.0s for broad 400+ altcoin futures universe)
         stale_time = time.time() - cache.last_update_time
-        if stale_time > 5.0:
-            return False, f"CIRCUIT_BREAKER_TRIGGERED: Market price feed is stale (last update: {stale_time:.1f}s ago)."
+        if stale_time > 45.0:
+            return False, f"CIRCUIT_BREAKER_TRIGGERED: Market price feed is stale (last update: {stale_time:.1f}s ago, max allowed 45.0s)."
 
         return True, f"ALLOWED: Active under {self.global_trading_mode} mode."
 
