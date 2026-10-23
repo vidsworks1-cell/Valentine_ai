@@ -139,7 +139,7 @@ class PositionManager:
         # Lumina Stability Additions: Thesis Strength, Grace Period & Trend Persistence Engine
         position_details["thesis_strength"] = float(position_details.get("confidence", position_details.get("entry_confidence", 0.83)))
         position_details["entry_strategy"] = position_details.get("strategy", "Volatility Expansion Breakout")
-        position_details["grace_period_sec"] = float(position_details.get("grace_period_sec", 90.0))  # 90s Grace Period
+        position_details["grace_period_sec"] = float(position_details.get("grace_period_sec", 300.0))  # 300s (5m) Grace Period to let trend develop
         position_details["invalidation_consecutive_cycles"] = 0
         position_details["invalidation_first_detected_at"] = 0.0
         position_details["trend_history"] = []
@@ -463,7 +463,14 @@ class PositionManager:
                         # 4. Intelligent Early Exit Engine (Thesis Invalidation Check with Grace Period & Gradual Decay)
                         from app.trading.mtf_confirmation import MTFConfirmationGuard
                         holding_time_sec = time.time() - pos.get("opened_at", time.time())
-                        grace_period_sec = pos.get("grace_period_sec", 90.0)
+                        grace_period_sec = pos.get("grace_period_sec", 300.0)
+
+                        # Profit Protection: Never early-invalidate positions currently in profit.
+                        # Let Trailing Stop and Take-Profit engines manage winning trades to capture full R:R expansions.
+                        entry_px = float(pos.get("entry_price", 0.0))
+                        is_in_profit = (current_price > entry_px) if side == "BUY" else (current_price < entry_px)
+                        if is_in_profit:
+                            continue
 
                         invalidity_strength, mtf_details = await MTFConfirmationGuard.get_instance().evaluate_weighted_mtf_invalidation(symbol, side, current_price)
 
@@ -498,8 +505,8 @@ class PositionManager:
                         persistence_time_sec = time.time() - first_detected if first_detected > 0.0 else 0.0
                         consecutive_cycles = pos.get("invalidation_consecutive_cycles", 0)
 
-                        # Reversal must persist for >= 3 consecutive cycles OR >= 60 seconds
-                        persist_confirmed = (consecutive_cycles >= 3 or persistence_time_sec >= 60.0)
+                        # Reversal must be confirmed by sustained structural pressure (>= 60s and >= 60 cycles)
+                        persist_confirmed = (consecutive_cycles >= 60 and persistence_time_sec >= 60.0)
 
                         if strength_succeeded and persist_confirmed:
                             if holding_time_sec < grace_period_sec:

@@ -77,8 +77,11 @@ class WalkForwardValidator:
             # 2. Group trades by regime & strategy
             regime_matrix: Dict[str, Dict[str, List[Trade]]] = {}
 
+            from app.trading.strategy_classifier import is_system_strategy_label
             for t in trades:
                 s = t.strategy_used or "Breakout Momentum"
+                if is_system_strategy_label(s):
+                    continue
                 r = t.market_regime or "RANGING"
                 strat_trades.setdefault(s, []).append(t)
                 regime_matrix.setdefault(r, {}).setdefault(s, []).append(t)

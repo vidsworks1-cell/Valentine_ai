@@ -844,6 +844,20 @@ class OrderManager:
                             quantity=position_size,
                             trading_mode=trading_mode
                         )
+                        # Auto-cooldown symbols rejected by exchange-level constraints (-4411 agreement, -2027 leverage tier)
+                        if err_code in [-4411, -2027, -4003]:
+                            try:
+                                from app.ai.reasoning import AIReasoningEngine
+                                AIReasoningEngine.get_instance().set_cooldown(
+                                    opportunity["symbol"],
+                                    "ALL",
+                                    category="EXCHANGE_REJECTED",
+                                    reason=f"Binance code {err_code}: {err_msg}",
+                                    price=price,
+                                    duration_seconds=1800.0
+                                )
+                            except Exception:
+                                pass
                         # Record in Execution Outcome Database for comprehensive training and analysis
                         try:
                             from app.trading.execution_database import ExecutionOutcomeDatabase

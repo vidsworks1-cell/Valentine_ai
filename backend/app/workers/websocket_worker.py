@@ -120,7 +120,9 @@ class BinanceWebSocketWorker:
                                         if sym.endswith("USDT"):
                                             px = float(item["c"])
                                             q_vol = float(item.get("q", 0.0))
-                                            cache.update_price_and_volume(sym, px, q_vol)
+                                            h_px = float(item.get("h", 0.0))
+                                            l_px = float(item.get("l", 0.0))
+                                            cache.update_price_and_volume(sym, px, q_vol, high_24h=h_px, low_24h=l_px)
                         except Exception as inner_e:
                             logger.error(f"Error parsing ticker message: {inner_e}")
                     
@@ -176,7 +178,9 @@ class BinanceWebSocketWorker:
                             try:
                                 px = float(item["lastPrice"])
                                 vol = float(item.get("quoteVolume", 0.0))
-                                cache.update_price_and_volume(sym, px, vol)
+                                h_px = float(item.get("highPrice", 0.0))
+                                l_px = float(item.get("lowPrice", 0.0))
+                                cache.update_price_and_volume(sym, px, vol, high_24h=h_px, low_24h=l_px)
                                 count += 1
                             except Exception:
                                 pass

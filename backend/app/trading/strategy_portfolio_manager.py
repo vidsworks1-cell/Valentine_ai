@@ -328,6 +328,10 @@ class StrategyPortfolioManager:
         """
         Updates strategy empirical performance and dynamically adjusts expectancy & confidence.
         """
+        from app.trading.strategy_classifier import is_system_strategy_label
+        if not strategy_name or is_system_strategy_label(strategy_name):
+            return
+
         matched_strat = None
         clean_in = strategy_name.lower().replace("_", " ").strip()
         for name in self._strategies:

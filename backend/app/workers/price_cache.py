@@ -14,6 +14,9 @@ class PriceCache:
         self._symbol_last_update_time: Dict[str, float] = {}
         self._symbol_synchronized: Dict[str, bool] = {}
         self._volume_24h: Dict[str, float] = {}
+        self._high_24h: Dict[str, float] = {}
+        self._low_24h: Dict[str, float] = {}
+        self._volume_history: Dict[str, list] = {}
         self._bid_depth_05pct: Dict[str, float] = {}
         self._ask_depth_05pct: Dict[str, float] = {}
         self._spread_pct: Dict[str, float] = {}
@@ -45,6 +48,13 @@ class PriceCache:
         inst._price_history[sym].append(price)
         if len(inst._price_history[sym]) > 100:
             inst._price_history[sym].pop(0)
+
+        # Dynamic live high/low tracking as ticks stream in
+        if sym in inst._high_24h and price > inst._high_24h[sym]:
+            inst._high_24h[sym] = price
+        if sym in inst._low_24h and (price < inst._low_24h[sym] or inst._low_24h[sym] <= 0):
+            inst._low_24h[sym] = price
+
         inst._updates_count[sym] = inst._updates_count.get(sym, 0) + 1
         inst._symbol_last_update_time[sym] = now
         inst._symbol_synchronized[sym] = True
@@ -129,20 +139,82 @@ class PriceCache:
         }
 
     @classmethod
-    def update_price_and_volume(cls, symbol: str, price: float, quote_volume_24h: float = 0.0):
-        """Updates cached price and 24h volume for any exchange symbol."""
+    def update_price_and_volume(cls, symbol: str, price: float, quote_volume_24h: float = 0.0, high_24h: float = 0.0, low_24h: float = 0.0):
+        """Updates cached price, 24h volume, 24h high, and 24h low for any exchange symbol."""
         cls.update_price(symbol, price)
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        if high_24h > 0:
+            inst._high_24h[sym] = high_24h
+        if low_24h > 0:
+            inst._low_24h[sym] = low_24h
         if quote_volume_24h > 0:
-            inst = cls.get_instance_sync()
-            inst._volume_24h[symbol.upper()] = quote_volume_24h
+            inst._volume_24h[sym] = quote_volume_24h
+            if sym not in inst._volume_history:
+                inst._volume_history[sym] = []
+            now = time.time()
+            inst._volume_history[sym].append((now, quote_volume_24h))
+            if len(inst._volume_history[sym]) > 40:
+                inst._volume_history[sym].pop(0)
 
     @classmethod
-    def get_liquid_symbols(cls, min_quote_volume: float = 500_000.0, top_n: int = 400) -> list:
-        """Returns liquid USDT contracts sorted by 24h volume across the whole exchange universe (400+ contracts)."""
+    def get_24h_high_low(cls, symbol: str) -> Tuple[float, float]:
+        """Returns (high_24h, low_24h) for symbol, or (0.0, 0.0) if not available."""
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        return inst._high_24h.get(sym, 0.0), inst._low_24h.get(sym, 0.0)
+
+    @classmethod
+    def get_price_history(cls, symbol: str) -> List[float]:
+        """Returns the list of cached price history observations (up to 100 ticks)."""
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        return list(inst._price_history.get(sym, []))
+
+    @classmethod
+    def get_volume_surge_ratio(cls, symbol: str) -> float:
+        """
+        Computes recent relative volume surge (RVOL) based on delta in 24h cumulative quote volume.
+        Returns ratio >= 1.0 (baseline 1.0 if not enough data).
+        """
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        history = inst._volume_history.get(sym, [])
+        if len(history) < 3:
+            return 1.0
+
+        # Calculate rate of volume change (delta_volume / delta_time)
+        rates = []
+        for i in range(1, len(history)):
+            t_prev, v_prev = history[i-1]
+            t_curr, v_curr = history[i]
+            dt = t_curr - t_prev
+            dv = v_curr - v_prev
+            if dt > 0.5 and dv >= 0:
+                rates.append(dv / dt)
+
+        if len(rates) < 2:
+            return 1.0
+
+        latest_rate = rates[-1]
+        baseline_rate = sum(rates[:-1]) / len(rates[:-1])
+        if baseline_rate <= 1e-6:
+            return 1.0
+
+        ratio = round(latest_rate / baseline_rate, 2)
+        return float(max(0.5, min(10.0, ratio)))
+
+
+    @classmethod
+    def get_liquid_symbols(cls, min_quote_volume: float = 10_000_000.0, top_n: int = 70) -> list:
+        """Returns liquid USDT contracts sorted by 24h volume across top liquid exchange universe (Top 70, min $10M volume)."""
         inst = cls.get_instance_sync()
         tracked = []
         for sym, px in inst._prices.items():
             if not sym.endswith("USDT") or px <= 0:
+                continue
+            # Exclude TradFi commodity contracts (Gold/Silver) requiring manual agreement signatures in Binance UI
+            if sym.startswith(("XAU", "XAG", "XAUT")):
                 continue
             vol = inst._volume_24h.get(sym, 0.0)
             if vol >= min_quote_volume or sym in ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]:

@@ -171,8 +171,8 @@ class AiReasoningEngine:
         
         while self.running:
             try:
-                # Dynamically retrieve all liquid contracts across the entire exchange (400+ contracts universe)
-                liquid_symbols = cache.get_liquid_symbols(min_quote_volume=500_000.0, top_n=400)
+                # Dynamically retrieve liquid contracts across the exchange universe (Top 70 with >= $10M 24h volume)
+                liquid_symbols = cache.get_liquid_symbols(min_quote_volume=10_000_000.0, top_n=70)
                 dynamic_symbols = liquid_symbols if len(liquid_symbols) >= 10 else default_baseline_symbols
 
                 # Poll cache for setups across all liquid exchange contracts
@@ -247,14 +247,30 @@ class AiReasoningEngine:
                         atr = max(round(price * 0.008, atr_dec), 10 ** (-atr_dec))
                     relative_volatility = atr / price if price > 0 else 0.01
 
-                    # Evaluate Dynamic Volatility Compression (Squeeze)
+                    # Evaluate Dynamic Volatility Compression (Squeeze) & 24h High/Low Breakout
                     from app.trading.volatility_squeeze import VolatilitySqueezeDetector
                     squeeze_info = VolatilitySqueezeDetector.get_instance().detect_squeeze(symbol, price)
                     squeeze_state = squeeze_info["squeeze_state"]
+                    rvol = squeeze_info.get("rvol", 1.0)
+
+                    # Capture 24h High/Low and Detect Big Move (Volatility Expansion Breakout)
+                    high_24h, low_24h = cache.get_24h_high_low(symbol)
+                    is_24h_breakout_long = (proposed_side == "BUY" and high_24h > 0 and price >= high_24h * 0.997)
+                    is_24h_breakout_short = (proposed_side == "SELL" and low_24h > 0 and price <= low_24h * 1.003)
+                    is_big_move_candidate = (
+                        (is_24h_breakout_long or is_24h_breakout_short) and
+                        squeeze_state in ["SQUEEZE_FIRING", "SQUEEZE_ACTIVE"] and
+                        rvol >= 1.20
+                    )
 
                     # 1. Regime Classification & Strategy Mapping based on real technical alignment
                     market_regime = "TRENDING"
-                    strategy = "Breakout Momentum" if squeeze_state == "SQUEEZE_FIRING" else "Trend Continuation"
+                    if is_big_move_candidate:
+                        strategy = "Volatility Expansion Breakout"
+                    elif squeeze_state == "SQUEEZE_FIRING":
+                        strategy = "Breakout Momentum"
+                    else:
+                        strategy = "Trend Continuation"
 
                     # 2. Dynamic Stop Loss & Multi-Stage Take Profit Placement (Optimized for VEB Expectancy)
                     if strategy == "Volatility Expansion Breakout":
@@ -416,7 +432,7 @@ class AiReasoningEngine:
 
                     bayesian_signals = {
                         "mtf_aligned": passed_mtf_pre,
-                        "rvol_surge": volatility_quality_bonus > 0,
+                        "rvol_surge": (rvol >= 1.25) or (volatility_quality_bonus > 0),
                         "squeeze_firing": squeeze_state == "SQUEEZE_FIRING",
                         "macro_risk_low": macro_info.get("trade_permitted", True),
                         "order_flow_aligned": order_flow_aligned,
@@ -427,10 +443,12 @@ class AiReasoningEngine:
                     }
                     bayesian_calibration = BayesianBeliefCalibrationEngine.get_instance().calibrate_belief(strategy, bayesian_signals)
 
+                    big_move_bonus = 0.05 if is_big_move_candidate else 0.0
                     pruned_signal_adjustment = (
                         (squeeze_bonus * squeeze_weight * 2.5) +
                         (regime_confluence_bonus * regime_weight * 2.0) +
                         (volatility_quality_bonus * rvol_weight * 2.0) +
+                        big_move_bonus +
                         sentiment_bonus + liq_bonus + sweep_bonus + netflow_bonus +
                         order_flow_bonus + funding_bonus + anomaly_penalty
                     )
@@ -447,6 +465,10 @@ class AiReasoningEngine:
                         "market_regime": market_regime,
                         "atr": atr,
                         "squeeze_info": squeeze_info,
+                        "high_24h": high_24h,
+                        "low_24h": low_24h,
+                        "rvol": rvol,
+                        "is_big_move": is_big_move_candidate,
                         "confidence_score": bayesian_confidence
                     })
                     meta_approved, meta_transcript = await meta_engine.conduct_meta_reasoning_debate(pre_setup)
@@ -590,8 +612,12 @@ class AiReasoningEngine:
                         "tp_stages": tp_stages,
                         "market_regime": market_regime,
                         "squeeze_info": squeeze_info,
+                        "high_24h": high_24h,
+                        "low_24h": low_24h,
+                        "rvol": rvol,
+                        "is_big_move": is_big_move_candidate,
                         "is_probationary_trade": is_probationary,
-                        "entry_reason": f"AI Engine evaluated ticker telemetry. Symbol {symbol} trading at ${price} with live update count {tally}. High conviction {ctx.active_strategy} trigger generated based on dynamic ATR of ${atr}. Applied dynamic confidence threshold: {dynamic_threshold}. Self-Adaptation: {adaptation_log_str}",
+                        "entry_reason": f"AI Engine evaluated ticker telemetry. Symbol {symbol} trading at ${price} with live update count {tally}. High conviction {ctx.active_strategy} trigger generated based on dynamic ATR of ${atr}. Applied dynamic confidence threshold: {dynamic_threshold}. RVOL: {rvol:.2f}x. 24h Range: [{low_24h} - {high_24h}]. Self-Adaptation: {adaptation_log_str}",
                         "adaptation_insights": adaptation_reasons,
                         "timestamp": asyncio.get_event_loop().time()
                     })

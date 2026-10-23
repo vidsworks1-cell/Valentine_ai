@@ -624,14 +624,19 @@ class SelfAdaptationEngine:
         best_strat = None
         best_composite_score = -999.0
 
-        # 1. Rank empirical strategy candidates via Composite Score
+        from app.trading.strategy_classifier import is_system_strategy_label
+
+        # 1. Rank empirical strategy candidates via Composite Score (strictly genuine trading strategies only)
         for strat_name, s_data in self._strategy_stats.items():
             norm_name = self.normalize_strategy_name(strat_name)
+            # System bookkeeping labels (e.g. Exchange_Reconciliation_Adopted) must NEVER participate in substitution
+            if is_system_strategy_label(norm_name) or is_system_strategy_label(strat_name):
+                continue
             if norm_name in norm_excluded:
                 continue
 
             st_status = s_data.get("status", "ACTIVE")
-            if st_status in ["DISABLED", "RESTRICTED"]:
+            if st_status in ["DISABLED", "RESTRICTED", "SYSTEM_METADATA"]:
                 continue
 
             reg_stats = s_data.get("regime_stats", {}).get(regime_upper, {})
@@ -1383,6 +1388,26 @@ class SelfAdaptationEngine:
                         else:
                             break
 
+                    from app.trading.strategy_classifier import is_system_strategy_label
+                    if is_system_strategy_label(strat):
+                        new_strat_stats[strat] = {
+                            "total_trades": total_strat_trades,
+                            "recent_sample": recent_sample,
+                            "wins": wins,
+                            "losses": losses,
+                            "win_rate_pct": round(win_rate, 1),
+                            "avg_win_r": avg_win_r,
+                            "avg_loss_r": avg_loss_r,
+                            "expectancy_r": expectancy_r,
+                            "shrunk_expectancy_r": shrunk_expectancy_r,
+                            "status": "SYSTEM_METADATA",
+                            "is_trading_strategy": False,
+                            "risk_allocation": 0.0,
+                            "confidence_modifier": 0.0,
+                            "regime_stats": regime_stats
+                        }
+                        continue
+
                     # ----------------------------------------------------
                     # BAYESIAN SHRUNK EXPECTANCY + WIN RATE SPECTRUM MAPPING
                     # ----------------------------------------------------
@@ -1810,7 +1835,8 @@ class SelfAdaptationEngine:
                 if should_substitute:
                     # Tier 3: Attempt Strategy Substitution & Parameter Retuning prior to suppression
                     sub_info = self.get_best_substitute_strategy(regime, [strategy], setup)
-                    if sub_info:
+                    from app.trading.strategy_classifier import is_system_strategy_label
+                    if sub_info and not is_system_strategy_label(sub_info.get("strategy")):
                         sub_name = sub_info["strategy"]
                         sub_exp = sub_info["expectancy_r"]
                         sub_wr = sub_info["win_rate_pct"]
@@ -1922,7 +1948,8 @@ class SelfAdaptationEngine:
                         st_mod = 0.0
                     else:
                         sub_info = self.get_best_substitute_strategy(regime, [strategy], setup)
-                        if sub_info:
+                        from app.trading.strategy_classifier import is_system_strategy_label
+                        if sub_info and not is_system_strategy_label(sub_info.get("strategy")):
                             sub_name = sub_info["strategy"]
                             sub_exp = sub_info["expectancy_r"]
                             sub_wr = sub_info["win_rate_pct"]

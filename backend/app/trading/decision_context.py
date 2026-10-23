@@ -270,6 +270,13 @@ class DecisionContext:
         if self.is_locked:
             logger.warning(f"Attempted to update active_strategy on locked DecisionContext {self.signal_id}")
             return
+        from app.trading.strategy_classifier import is_system_strategy_label
+        if is_system_strategy_label(substitute_strategy):
+            logger.warning(
+                f"🚫 [STRATEGY SUBSTITUTION GUARD] Rejected substitution of '{self.original_strategy}' "
+                f"with system bookkeeping label '{substitute_strategy}'. Genuine strategy retained."
+            )
+            return
         if substitute_strategy != self.active_strategy:
             logger.info(
                 f"🔄 [DECISION CONTEXT] Strategy substitution applied: '{self.original_strategy}' -> '{substitute_strategy}'. "

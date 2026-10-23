@@ -37,27 +37,34 @@ class VolatilitySqueezeDetector:
         """
         sym = symbol.upper()
         cache = PriceCache.get_instance_sync()
-        tally = cache.get_update_tally(sym)
-        vol_data = cache.get_volume_and_depth(sym)
+        history = cache.get_price_history(sym)
+        ta = cache.get_technical_analysis(sym)
 
-        price_int = int(price * 100)
+        dec_prec = 8 if price < 0.001 else (6 if price < 1.0 else 4)
 
-        # Baseline metrics calculation
-        atr = round(price * (0.008 + ((price_int + tally) % 10) * 0.001), 2)
-        baseline_atr = round(price * 0.012, 2)
+        # Baseline metrics calculation using real ATR
+        atr = ta.get("atr", max(round(price * 0.008, dec_prec), 10 ** (-dec_prec)))
+        baseline_atr = max(round(price * 0.012, dec_prec), 10 ** (-dec_prec))
         atr_compression_ratio = round(atr / baseline_atr, 2) if baseline_atr > 0 else 1.0
 
-        # Bollinger Bands Width calculation
-        # StdDev dynamically derived
-        std_dev = atr * 0.85
-        bb_upper = round(price + (2.0 * std_dev), 2)
-        bb_lower = round(price - (2.0 * std_dev), 2)
-        bb_width = round(bb_upper - bb_lower, 2)
+        # Real Empirical Bollinger Bands & Keltner Channels
+        if len(history) >= 14:
+            chunk = history[-20:]
+            sma20 = sum(chunk) / len(chunk)
+            variance = sum((p - sma20) ** 2 for p in chunk) / len(chunk)
+            std_dev = math.sqrt(variance)
+        else:
+            sma20 = price
+            std_dev = atr * 0.85
 
-        # Keltner Channels Width calculation (1.5x ATR multiplier)
-        kc_upper = round(price + (1.5 * atr), 2)
-        kc_lower = round(price - (1.5 * atr), 2)
-        kc_width = round(kc_upper - kc_lower, 2)
+        bb_upper = round(sma20 + (2.0 * std_dev), dec_prec)
+        bb_lower = round(sma20 - (2.0 * std_dev), dec_prec)
+        bb_width = max(round(bb_upper - bb_lower, dec_prec), 10 ** (-dec_prec))
+
+        # Keltner Channels Width calculation (1.5x ATR multiplier around SMA)
+        kc_upper = round(sma20 + (1.5 * atr), dec_prec)
+        kc_lower = round(sma20 - (1.5 * atr), dec_prec)
+        kc_width = max(round(kc_upper - kc_lower, dec_prec), 10 ** (-dec_prec))
 
         # Squeeze Ratio (< 1.0 implies BB compressed inside KC)
         squeeze_ratio = round(bb_width / kc_width, 3) if kc_width > 0 else 1.0
@@ -65,16 +72,16 @@ class VolatilitySqueezeDetector:
         # Compression Score (0.0 = Wide expansion, 100.0 = Extreme tight compression)
         compression_score = round(max(0.0, min(100.0, (1.2 - squeeze_ratio) * 200.0)), 1)
 
-        # Relative Volume (RVOL) for breakout confirmation
-        rvol = round(1.0 + ((price_int + tally * 2) % 9) * 0.12, 2)
+        # Relative Volume (RVOL) from real tick quote volume delta
+        rvol = cache.get_volume_surge_ratio(sym)
 
         # Determine Squeeze State - Calibrated for high-conviction Volatility Expansion
-        if squeeze_ratio < 0.94 or atr_compression_ratio < 0.72:
+        if squeeze_ratio < 0.95 or atr_compression_ratio < 0.72:
             squeeze_state = "SQUEEZE_ACTIVE"
-            squeeze_description = "High volatility compression coiling energy. Standby for momentum breakout."
-        elif squeeze_ratio >= 0.90 and squeeze_ratio <= 1.20 and rvol >= 1.20:
+            squeeze_description = f"High volatility compression coiling energy (Squeeze ratio {squeeze_ratio:.2f}). Standby for breakout."
+        elif (0.92 <= squeeze_ratio <= 1.30) and (rvol >= 1.25 or price >= bb_upper * 0.999 or price <= bb_lower * 1.001):
             squeeze_state = "SQUEEZE_FIRING"
-            squeeze_description = "Squeeze release in progress! Volatility expansion & volume surge confirmed."
+            squeeze_description = f"Squeeze release in progress! Volatility expansion & volume surge ({rvol:.2f}x) confirmed."
         else:
             squeeze_state = "NO_SQUEEZE"
             squeeze_description = "Normal volatility expansion / trend continuation."
@@ -86,18 +93,17 @@ class VolatilitySqueezeDetector:
         recommended_order_routing = "LIMIT" if is_squeeze_prepositioning else ("MARKET" if squeeze_state == "SQUEEZE_FIRING" else "LIMIT")
 
         # Predictive Duration & Expansion Target Estimation
-        # Est. candles coiling remaining before explosion = f(squeeze_ratio, compression_score)
         predicted_coiling_candles = max(1, min(18, int((squeeze_ratio / 0.95) * 6))) if squeeze_state == "SQUEEZE_ACTIVE" else 0
-        expected_expansion_move_pct = round(max(1.5, min(12.0, (1.2 - squeeze_ratio) * 15.0 + (atr_compression_ratio * 3.0))), 2)
-        upper_expansion_target = round(price * (1.0 + (expected_expansion_move_pct / 100.0)), 2)
-        lower_expansion_target = round(price * (1.0 - (expected_expansion_move_pct / 100.0)), 2)
+        expected_expansion_move_pct = round(max(1.5, min(15.0, (1.2 - squeeze_ratio) * 15.0 + (atr_compression_ratio * 3.0))), 2)
+        upper_expansion_target = round(price * (1.0 + (expected_expansion_move_pct / 100.0)), dec_prec)
+        lower_expansion_target = round(price * (1.0 - (expected_expansion_move_pct / 100.0)), dec_prec)
 
         if squeeze_state == "SQUEEZE_FIRING":
-            directional_bias = "BUY" if (price_int + tally) % 2 == 0 else "SELL"
+            directional_bias = "BUY" if price >= sma20 else "SELL"
         elif squeeze_state == "SQUEEZE_ACTIVE":
             directional_bias = "CONSOLIDATING"
         else:
-            directional_bias = "NEUTRAL"
+            directional_bias = "BUY" if price >= sma20 else "SELL"
 
         return {
             "symbol": sym,

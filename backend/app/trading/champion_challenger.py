@@ -105,8 +105,9 @@ class ChampionChallengerEngine:
         """
         Updates live Elo rating for a strategy following a closed trade outcome.
         """
-        if not strategy:
-            strategy = "Breakout Momentum"
+        from app.trading.strategy_classifier import is_system_strategy_label
+        if not strategy or is_system_strategy_label(strategy):
+            return 1500.0
 
         current_elo = self._elo_ratings.get(strategy, 1500.0)
         avg_elo = sum(self._elo_ratings.values()) / max(1, len(self._elo_ratings))
@@ -178,8 +179,11 @@ class ChampionChallengerEngine:
                 "Momentum": []
             }
 
+            from app.trading.strategy_classifier import is_system_strategy_label
             for t in trades:
                 s_name = t.strategy_used or "Breakout Momentum"
+                if is_system_strategy_label(s_name):
+                    continue
                 if s_name not in strat_trades:
                     strat_trades[s_name] = []
                 strat_trades[s_name].append(t)
