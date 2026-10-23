@@ -225,7 +225,7 @@ class ExchangeReconciliationEngine:
                             db_trade_id = existing_trade.id
                             logger.info(f"💾 [RECONCILIATION] Re-linked orphan exchange position {sym} to existing DB Trade #{db_trade_id}.")
                         else:
-                            # Create new persisted Trade record in DB
+                            # Create and persist new Trade record directly to database
                             from app.api.schemas import TradeCreate
                             from app.services.trading_service import TradingService
                             t_create = TradeCreate(
@@ -246,6 +246,7 @@ class ExchangeReconciliationEngine:
                                 trading_mode=active_mode
                             )
                             new_trade = await TradingService.create_trade(db, t_create)
+                            await db.commit()
                             db_trade_id = new_trade.id
                             logger.info(f"💾 [RECONCILIATION DB PERSISTENCE] Persisted orphan exchange position {sym} as new DB Trade #{db_trade_id} ({active_mode}).")
                 except Exception as sync_err:

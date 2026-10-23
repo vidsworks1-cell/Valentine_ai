@@ -92,6 +92,7 @@ class PriceCache:
         avg_gain = sum(gains) / periods if gains else 0.0
         avg_loss = sum(losses) / periods if losses else 0.0
 
+        # Safe RSI computation: strictly guard against ZeroDivisionError when avg_loss or avg_gain is zero
         if avg_loss <= 1e-9:
             rsi = 100.0 if avg_gain > 0 else 50.0
         elif avg_gain <= 1e-9:

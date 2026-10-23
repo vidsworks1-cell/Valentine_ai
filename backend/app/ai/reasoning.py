@@ -208,7 +208,7 @@ class AiReasoningEngine:
                     try:
                         ta = cache.get_technical_analysis(symbol)
                     except Exception as ta_err:
-                        logger.debug(f"Error computing technical analysis for {symbol}: {ta_err}")
+                        logger.warning(f"⚠️ [TA GUARD] Skipping {symbol} due to technical analysis computation anomaly: {ta_err}")
                         continue
 
                     trend_bias = ta.get("trend_bias", "NEUTRAL")

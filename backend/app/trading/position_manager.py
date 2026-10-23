@@ -923,6 +923,7 @@ class PositionManager:
                     matched_trade = (await db.execute(q)).scalars().first()
                     if matched_trade:
                         await TradingService.update_trade(db, matched_trade.id, trade_update)
+                        await db.commit()
                         logger.info(f"💾 [DB RECOVERY] Successfully matched and updated closed Trade #{matched_trade.id} for {symbol} ({outcome}).")
                     else:
                         # Fallback B: insert completed Trade record so no closed trade is ever lost
