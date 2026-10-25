@@ -48,9 +48,15 @@ class CrossAssetCorrelationEngine:
         syms = symbols if symbols else self.DEFAULT_SYMBOLS
         cache = PriceCache.get_instance_sync()
         
-        # Build synthetic/live price series for correlation analysis
+        # Build live/empirical price series for correlation analysis
         price_series: Dict[str, List[float]] = {}
         for s in syms:
+            cached_history = cache.get_price_history(s)
+            if cached_history and len(cached_history) >= 15:
+                # Use real tick price history
+                price_series[s] = cached_history[-20:]
+                continue
+
             base_p = cache.get_price(s)
             if not base_p or base_p <= 0:
                 base_p = (
@@ -195,6 +201,158 @@ class CrossAssetCorrelationEngine:
             "position_scaler": position_scaler,
             "recommendation": recommendation,
             "contagion_spillover_index": matrix_data["contagion_spillover_index"]
+        }
+
+    def calculate_portfolio_heat(
+        self,
+        active_positions: List[Dict[str, Any]],
+        proposed_position: Optional[Dict[str, Any]] = None,
+        balance: float = 100000.0,
+        max_heat_pct: float = 0.055
+    ) -> Dict[str, Any]:
+        """
+        Computes Institutional Correlation-Weighted Portfolio Heat:
+        Systemic Heat = sqrt( Sum_i Sum_j (w_i * w_j * rho_ij) )
+        where w_i is nominal dollar-at-risk / balance.
+        
+        Evaluates portfolio risk budget and returns:
+        - current_heat_pct: active systemic heat
+        - projected_heat_pct: systemic heat if proposed trade is accepted
+        - is_within_budget: boolean
+        - recommended_scaler: 1.0 (approved), < 1.0 (scaled down), or 0.0 (rejected)
+        - btc_spillover_alert: bool
+        """
+        clean = lambda s: s.replace("/", "").replace("-", "").replace("_", "").strip().upper() if s else ""
+        eq = max(100.0, balance)
+
+        # 1. Map positions into risk elements: (symbol, side, risk_usd, weight)
+        all_items: List[Dict[str, Any]] = []
+        for pos in active_positions:
+            s = clean(pos.get("symbol", ""))
+            if not s:
+                continue
+            entry = float(pos.get("entry_price", 0.0))
+            sl = float(pos.get("stop_loss", 0.0))
+            size = float(pos.get("position_size", pos.get("quantity", 0.0)))
+            side = str(pos.get("side", "BUY")).upper()
+            if entry > 0 and sl > 0 and size > 0:
+                risk_usd = abs(entry - sl) * size
+            else:
+                risk_usd = float(pos.get("risk_amount", eq * 0.015))
+            weight = risk_usd / eq
+            all_items.append({"symbol": s, "side": side, "risk_usd": risk_usd, "weight": weight, "is_proposed": False})
+
+        proposed_weight = 0.0
+        if proposed_position:
+            psym = clean(proposed_position.get("symbol", ""))
+            pentry = float(proposed_position.get("entry_price", proposed_position.get("price", 0.0)))
+            psl = float(proposed_position.get("stop_loss", 0.0))
+            psize = float(proposed_position.get("position_size", proposed_position.get("quantity", 0.0)))
+            pside = str(proposed_position.get("side", "BUY")).upper()
+            if pentry > 0 and psl > 0 and psize > 0:
+                prisk_usd = abs(pentry - psl) * psize
+            else:
+                prisk_usd = float(proposed_position.get("risk_amount", eq * 0.015))
+            proposed_weight = prisk_usd / eq
+            all_items.append({"symbol": psym, "side": pside, "risk_usd": prisk_usd, "weight": proposed_weight, "is_proposed": True})
+
+        if not all_items:
+            return {
+                "current_heat_pct": 0.0,
+                "projected_heat_pct": 0.0,
+                "max_heat_budget_pct": max_heat_pct * 100.0,
+                "is_within_budget": True,
+                "recommended_scaler": 1.0,
+                "btc_contagion_alert": False,
+                "cluster_heat": {},
+                "summary": "Portfolio is completely flat. Zero systemic heat."
+            }
+
+        # 2. Get correlation matrix for symbols
+        syms_needed = list(set([item["symbol"] for item in all_items] + ["BTCUSDT"]))
+        matrix_data = self.calculate_correlation_matrix(syms_needed)
+        matrix = matrix_data["matrix"]
+        contagion_index = matrix_data.get("contagion_spillover_index", 40.0)
+
+        # 3. Check BTC Spillover: If BTC is in a strong drop or contagion > 70
+        cache = PriceCache.get_instance_sync()
+        btc_hi, btc_lo = cache.get_24h_high_low("BTCUSDT")
+        btc_px = cache.get_price("BTCUSDT")
+        btc_dumping = False
+        if btc_hi > 0 and btc_px > 0:
+            btc_drawdown_pct = (btc_hi - btc_px) / btc_hi * 100.0
+            if btc_drawdown_pct >= 4.0 or contagion_index >= 70.0:
+                btc_dumping = True
+
+        effective_max_heat = (max_heat_pct * 0.5) if btc_dumping else max_heat_pct
+
+        # 4. Compute systemic heat with correlation weighting
+        def compute_heat(items: List[Dict[str, Any]]) -> float:
+            variance_sum = 0.0
+            for i, it1 in enumerate(items):
+                w1 = it1["weight"]
+                s1 = it1["symbol"]
+                side1 = it1["side"]
+                for j, it2 in enumerate(items):
+                    w2 = it2["weight"]
+                    s2 = it2["symbol"]
+                    side2 = it2["side"]
+                    
+                    rho = matrix.get(s1, {}).get(s2, 0.75 if s1 != s2 else 1.0)
+                    # Opposite directions hedge each other
+                    direction_mult = 1.0 if side1 == side2 else -0.8
+                    variance_sum += (w1 * w2 * rho * direction_mult)
+            return math.sqrt(max(0.0, variance_sum))
+
+        active_items = [it for it in all_items if not it["is_proposed"]]
+        current_heat = compute_heat(active_items) if active_items else 0.0
+        projected_heat = compute_heat(all_items)
+
+        # 5. Sector / Cluster Heat analysis
+        CLUSTERS = {
+            "LAYER_1": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "AVAXUSDT", "BNBUSDT", "SUIUSDT", "ADAUSDT", "DOTUSDT", "NEARUSDT", "LTCUSDT"],
+            "DEFI": ["UNIUSDT", "AAVEUSDT", "MKRUSDT", "LINKUSDT", "PENDLEUSDT", "INJUSDT"],
+            "AI_TOKENS": ["TAOUSDT", "FETUSDT", "RENDERUSDT", "NEARUSDT"],
+            "MEMES": ["DOGEUSDT", "PEPEUSDT", "SHIBUSDT", "WIFUSDT", "BONKUSDT"]
+        }
+        cluster_heat: Dict[str, float] = {}
+        for it in all_items:
+            assigned = "OTHER"
+            for cname, csyms in CLUSTERS.items():
+                if it["symbol"] in csyms:
+                    assigned = cname
+                    break
+            cluster_heat[assigned] = cluster_heat.get(assigned, 0.0) + (it["weight"] * 100.0)
+
+        # 6. Recommendation & Scaling calculation
+        is_within_budget = (projected_heat <= effective_max_heat)
+        scaler = 1.0
+
+        if not is_within_budget:
+            if current_heat >= effective_max_heat:
+                scaler = 0.0
+                summary = f"Portfolio heat budget exhausted ({current_heat*100:.2f}% >= {effective_max_heat*100:.2f}% cap). New trade blocked."
+            else:
+                # Scale proposed weight down to fit remaining variance budget
+                remaining_heat = max(0.0, effective_max_heat - current_heat)
+                if proposed_weight > 0:
+                    scaler = round(min(1.0, remaining_heat / proposed_weight), 2)
+                    summary = f"Projected heat ({projected_heat*100:.2f}%) exceeds cap ({effective_max_heat*100:.2f}%). Position scaled to {scaler*100:.0f}%."
+                else:
+                    scaler = 0.5
+                    summary = "Scaled due to portfolio heat limits."
+        else:
+            summary = f"Portfolio heat ({projected_heat*100:.2f}%) within budget ({effective_max_heat*100:.2f}% cap). Approved."
+
+        return {
+            "current_heat_pct": round(current_heat * 100.0, 2),
+            "projected_heat_pct": round(projected_heat * 100.0, 2),
+            "max_heat_budget_pct": round(effective_max_heat * 100.0, 2),
+            "is_within_budget": is_within_budget,
+            "recommended_scaler": scaler,
+            "btc_contagion_alert": btc_dumping,
+            "cluster_heat": {k: round(v, 2) for k, v in cluster_heat.items()},
+            "summary": summary
         }
 
     @staticmethod

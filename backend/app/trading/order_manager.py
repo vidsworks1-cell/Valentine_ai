@@ -127,19 +127,68 @@ class OrderManager:
                 opportunity["position_size"] = round(old_size * macro_scaler, 4)
                 logger.info(f"⚖️ [MACRO RISK SCALER] Position size for {symbol} scaled from {old_size} to {opportunity['position_size']} ({macro_scaler * 100:.0f}% allocation due to {macro_overlay.get('risk_level', 'ELEVATED')}).")
 
-            # 0d. Cross-Asset Correlation & Concentration Risk Check
+            # 0d. Cross-Asset Correlation & Portfolio Heat Budget Check
             from app.trading.cross_asset_correlation import CrossAssetCorrelationEngine
             from app.trading.position_manager import PositionManager
             active_mode = scheduler.global_trading_mode
             active_pos = PositionManager.get_instance().get_active_positions(trading_mode=active_mode)
             active_syms = [p.get("symbol") for p in active_pos if p.get("symbol")]
-            corr_info = CrossAssetCorrelationEngine.get_instance().evaluate_trade_correlation_risk(symbol, active_syms)
+            corr_engine = CrossAssetCorrelationEngine.get_instance()
+            corr_info = corr_engine.evaluate_trade_correlation_risk(symbol, active_syms)
 
             corr_scaler = corr_info.get("position_scaler", 1.0)
             if corr_scaler < 1.0:
                 old_size = opportunity.get("position_size", 1.0)
                 opportunity["position_size"] = round(old_size * corr_scaler, 4)
                 logger.info(f"🔗 [CROSS-ASSET CORRELATION SCALER] Position size for {symbol} scaled to {opportunity['position_size']} ({corr_scaler * 100:.0f}% due to {corr_info['risk_flag']} vs {corr_info['most_correlated_active_symbol']}).")
+
+            # 0d-1. Systemic Portfolio Heat Budget Guard (Caps aggregate correlation variance)
+            heat_info = corr_engine.calculate_portfolio_heat(
+                active_positions=active_pos,
+                proposed_position=opportunity,
+                balance=100000.0,
+                max_heat_pct=0.055
+            )
+            heat_scaler = float(heat_info.get("recommended_scaler", 1.0))
+            if not heat_info.get("is_within_budget", True) and heat_scaler <= 0.0:
+                reject_reason = f"⚠️ [PORTFOLIO HEAT EXHAUSTED] {heat_info['summary']}"
+                logger.warning(reject_reason)
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=symbol,
+                    state=ExecutionState.REJECTED,
+                    side=side,
+                    stage="PORTFOLIO_HEAT_GUARD",
+                    reason=reject_reason,
+                    price=float(opportunity.get("entry_price", 0.0))
+                )
+                return
+            elif heat_scaler < 1.0 and heat_scaler > 0.0:
+                old_size = opportunity.get("position_size", 1.0)
+                opportunity["position_size"] = round(old_size * heat_scaler, 4)
+                logger.info(f"🔥 [PORTFOLIO HEAT SCALER] Position size scaled to {opportunity['position_size']} ({heat_scaler * 100:.0f}% due to {heat_info['summary']}).")
+
+            # 0d-2. Level 2 Order Book Microstructure Safety Gate
+            from app.trading.orderbook_l2_engine import OrderBookL2Engine
+            ob_l2 = OrderBookL2Engine.get_instance()
+            ob_confluence = ob_l2.evaluate_microstructure_confluence(symbol, side)
+            if not ob_confluence.get("is_safe_to_enter", True):
+                ob_reason = f"🚫 [ORDERBOOK L2 WALL REJECTION] Blocked {symbol} {side}: {', '.join(ob_confluence['reasons'])}"
+                logger.warning(ob_reason)
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=symbol,
+                    state=ExecutionState.REJECTED,
+                    side=side,
+                    stage="ORDERBOOK_L2_GUARD",
+                    reason=ob_reason,
+                    price=float(opportunity.get("entry_price", 0.0))
+                )
+                return
+            else:
+                conf_delta = float(ob_confluence.get("confidence_delta", 0.0))
+                if conf_delta != 0.0:
+                    old_conf = float(opportunity.get("confidence_score", 0.78))
+                    opportunity["confidence_score"] = round(max(0.50, min(0.98, old_conf + conf_delta)), 3)
+                    logger.info(f"📊 [ORDERBOOK L2 CONFLUENCE] {symbol} {side}: OBI {ob_confluence['obi_top5']:.2f}, Confidence adjusted by {conf_delta:+.3f} to {opportunity['confidence_score']:.3f}.")
 
             # 0e. Thesis Persistence Layer: Filter contradictory local chop signals
             from app.trading.thesis_persistence import ThesisPersistenceEngine
@@ -344,12 +393,22 @@ class OrderManager:
                 
                 opp_side = opportunity.get("side", "BUY").upper()
                 dec = 8 if price < 0.001 else (6 if price < 1.0 else (4 if price < 50.0 else 2))
-                min_stop_distance = max(atr_val * 1.5, price * 0.005)
+
+                # Wish 2: Volatility Quantile Clustered Initial Stop Bracket
+                from app.trading.adaptive_trailing_engine import AdaptiveTrailingEngine
+                vol_bracket = AdaptiveTrailingEngine.get_instance().calculate_initial_stop_bracket(
+                    symbol=symbol,
+                    side=opp_side,
+                    entry_price=price,
+                    atr=atr_val,
+                    strategy=opportunity.get("strategy_used", "VEB")
+                )
+                min_stop_distance = max(vol_bracket["stop_distance"], price * 0.005)
 
                 raw_sl = float(opportunity.get("stop_loss", 0.0))
                 if raw_sl <= 0.0 or abs(price - raw_sl) < (price * 0.0035):
                     repaired_sl = round(price - min_stop_distance if opp_side == "BUY" else price + min_stop_distance, dec)
-                    logger.warning(f"🛡️ [SL REPAIR] Detected degenerate/spread SL ({raw_sl}) for {symbol}. Repaired to: {repaired_sl}")
+                    logger.warning(f"🛡️ [SL CALIBRATION - {vol_bracket['volatility_regime']}] Quantile {vol_bracket['volatility_quantile']:.2f} ({vol_bracket['multiplier']}x ATR) for {symbol}. Calibrated SL to: {repaired_sl}")
                     stop_loss = repaired_sl
                     opportunity["stop_loss"] = stop_loss
                 else:
@@ -358,7 +417,7 @@ class OrderManager:
                 raw_tp = float(opportunity.get("take_profit", 0.0))
                 if raw_tp <= 0.0 or abs(price - raw_tp) < (price * 0.005):
                     repaired_tp = round(price + (min_stop_distance * 2.0) if opp_side == "BUY" else price - (min_stop_distance * 2.0), dec)
-                    logger.warning(f"🛡️ [TP REPAIR] Detected zero/degenerate TP ({raw_tp}) for {symbol}. Repaired to: {repaired_tp}")
+                    logger.warning(f"🛡️ [TP CALIBRATION - {vol_bracket['volatility_regime']}] Calibrated TP for {symbol} to: {repaired_tp}")
                     opportunity["take_profit"] = repaired_tp
 
                 # PIPELINE STEP 1: Adaptive Sizing
@@ -1199,6 +1258,24 @@ class OrderManager:
                     )
                 except Exception as tpe_err:
                     logger.error(f"Failed to register thesis in ThesisPersistenceEngine: {tpe_err}")
+
+                # Real-Time Telegram Telemetry Dispatch
+                try:
+                    from app.trading.telegram_notifier import TelegramNotifier
+                    tg = TelegramNotifier.get_instance()
+                    tg.send_order_filled(
+                        symbol=trade.symbol,
+                        side=trade.side,
+                        qty=trade.position_size,
+                        price=trade.entry_price,
+                        stop_loss=trade.stop_loss,
+                        tp1=trade.take_profit,
+                        strategy=trade.strategy_used,
+                        trading_mode=trading_mode,
+                        routing=order_routing
+                    )
+                except Exception as tg_err:
+                    logger.error(f"Failed to dispatch Telegram order filled alert: {tg_err}")
 
             except Exception as e:
                 logger.error(f"Failed to execute trade proposal in database: {e}")

@@ -310,6 +310,17 @@ class PositionManager:
                                         f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +0.80% threshold)! "
                                         f"Stop-Loss ratcheted to {be_level} (+{pct_buffer*100:.2f}% locked, exchange fees 100% covered). Free-roll active!"
                                     )
+                                    try:
+                                        from app.trading.telegram_notifier import TelegramNotifier
+                                        TelegramNotifier.get_instance().send_tp_ratchet(
+                                            symbol=symbol,
+                                            current_price=current_price,
+                                            be_level=be_level,
+                                            locked_profit_pct=pct_buffer * 100.0,
+                                            max_gain_pct=max(favorable_move_pct, peak_move_pct)
+                                        )
+                                    except Exception:
+                                        pass
                             elif side == "SELL" and (current_sl > be_level or current_sl == 0.0):
                                 pos["trailing_stop"] = be_level
                                 if not pos.get("breakeven_activated", False):
@@ -320,46 +331,113 @@ class PositionManager:
                                         f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +0.80% threshold)! "
                                         f"Stop-Loss ratcheted to {be_level} (+{pct_buffer*100:.2f}% locked, exchange fees 100% covered). Free-roll active!"
                                     )
+                                    try:
+                                        from app.trading.telegram_notifier import TelegramNotifier
+                                        TelegramNotifier.get_instance().send_tp_ratchet(
+                                            symbol=symbol,
+                                            current_price=current_price,
+                                            be_level=be_level,
+                                            locked_profit_pct=pct_buffer * 100.0,
+                                            max_gain_pct=max(favorable_move_pct, peak_move_pct)
+                                        )
+                                    except Exception:
+                                        pass
 
-                        # B. Regime-Adaptive Dynamic Trailing Stop Adjustment
-                        if peak_in_atr >= trail_activation_atr:
-                            trail_dist = trail_mult * atr
-                            if side == "BUY":
-                                target_sl = _round_price(float(pos.get("highest_price", entry)) - trail_dist)
-                                if target_sl > float(pos.get("trailing_stop", 0.0)) and target_sl < current_price:
-                                    old_sl = pos.get("trailing_stop", 0.0)
-                                    pos["trailing_stop"] = target_sl
-                                    pos["trailing_active"] = True
-                                    logger.info(
-                                        f"📈 [REGIME DYNAMIC TRAILING] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                        f"SL raised from {old_sl} to {target_sl} (Highest: {pos.get('highest_price', entry)}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
-                                    )
-                            elif side == "SELL":
-                                target_sl = _round_price(float(pos.get("lowest_price", entry)) + trail_dist)
-                                if (target_sl < float(pos.get("trailing_stop", 0.0)) or float(pos.get("trailing_stop", 0.0)) == 0.0) and target_sl > current_price:
-                                    old_sl = pos.get("trailing_stop", 0.0)
-                                    pos["trailing_stop"] = target_sl
-                                    pos["trailing_active"] = True
-                                    logger.info(
-                                        f"📉 [REGIME DYNAMIC TRAILING] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                        f"SL lowered from {old_sl} to {target_sl} (Lowest: {pos.get('lowest_price', entry)}, Trail Dist: {trail_dist} [{trail_mult}x ATR])."
-                                    )
+                        # B. Wish 2: Adaptive Volatility-Clustered Trailing & Chandelier Engine
+                        try:
+                            from app.trading.adaptive_trailing_engine import AdaptiveTrailingEngine
+                            from app.trading.orderbook_l2_engine import OrderBookL2Engine
+                            
+                            ta_live_trail = cache.get_technical_analysis(symbol)
+                            rvol_trail = cache.get_volume_surge_ratio(symbol)
+                            rsi_trail = float(ta_live_trail.get("rsi", 50.0))
+                            ob_metrics = OrderBookL2Engine.get_instance().get_orderbook_metrics(symbol)
+                            live_obi = float(ob_metrics.get("obi_top5", 0.0))
+                            
+                            chandelier_eval = AdaptiveTrailingEngine.get_instance().evaluate_trailing_update(
+                                position=pos,
+                                current_price=current_price,
+                                live_rvol=rvol_trail,
+                                live_rsi=rsi_trail,
+                                orderbook_obi=live_obi
+                            )
+                            
+                            if chandelier_eval.get("should_update"):
+                                new_sl = chandelier_eval["new_stop"]
+                                old_sl = chandelier_eval["old_stop"]
+                                locked_r = chandelier_eval["locked_r"]
+                                peak_r = chandelier_eval["peak_r"]
+                                vol_reg = chandelier_eval["volatility_regime"]
+                                reason_txt = chandelier_eval["reason"]
+                                
+                                pos["trailing_stop"] = new_sl
+                                pos["trailing_active"] = True
+                                pos["chandelier_regime"] = vol_reg
+                                pos["chandelier_locked_r"] = locked_r
+                                
+                                logger.info(
+                                    f"⚡ [CHANDELIER RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {vol_reg}): "
+                                    f"SL updated from {old_sl} to {new_sl} (+{locked_r:.2f}R locked, Peak: +{peak_r:.2f}R). {reason_txt}"
+                                )
+                                
+                                # Send Telegram telemetry if meaningful lock or ratchet step
+                                if locked_r >= 0.5:
+                                    try:
+                                        from app.trading.telegram_notifier import TelegramNotifier
+                                        watermark = float(pos.get("highest_price", entry) if side == "BUY" else pos.get("lowest_price", entry))
+                                        TelegramNotifier.get_instance().send_chandelier_ratchet(
+                                            symbol=symbol,
+                                            side=side,
+                                            highest_or_lowest=watermark,
+                                            new_sl=new_sl,
+                                            locked_r=locked_r,
+                                            peak_r=peak_r,
+                                            regime=vol_reg,
+                                            reason=reason_txt
+                                        )
+                                    except Exception as tel_err:
+                                        logger.debug(f"Chandelier telegram alert failed: {tel_err}")
+                        except Exception as trail_err:
+                            logger.error(f"Error in AdaptiveTrailingEngine evaluation for {symbol}: {trail_err}")
                         # 1b. Module 6: Adaptive Profit Optimization (TP Extension & Dynamic Trajectory)
                         try:
                             from app.trading.adaptive_profit_optimizer import AdaptiveProfitOptimizer
+                            ta_live = cache.get_technical_analysis(symbol)
+                            live_rvol = cache.get_volume_surge_ratio(symbol)
+                            live_rsi = float(ta_live.get("rsi", 55.0))
+                            ema9 = float(ta_live.get("ema9", current_price))
+                            ema21 = float(ta_live.get("ema21", current_price))
+                            momentum_accel = (current_price >= ema9 and ema9 >= ema21) if side == "BUY" else (current_price <= ema9 and ema9 <= ema21)
+
                             apo_decision = AdaptiveProfitOptimizer.get_instance().evaluate_trajectory(
                                 position=pos,
                                 current_price=current_price,
-                                rvol=float(pos.get("rvol", 1.5)),
-                                rsi=float(pos.get("rsi", 55.0)),
-                                momentum_accelerating=True
+                                rvol=live_rvol,
+                                rsi=live_rsi,
+                                momentum_accelerating=momentum_accel
                             )
                             if apo_decision.action == "EXTEND_TP" and apo_decision.new_take_profit:
                                 pos["take_profit"] = apo_decision.new_take_profit
                                 pos["tp_extensions_count"] = int(pos.get("tp_extensions_count", 0)) + 1
+                                # Update final stage level so runner is not prematurely closed at previous target
+                                stages = pos.get("tp_stages", [])
+                                if stages:
+                                    stages[-1]["level"] = apo_decision.new_take_profit
                                 if apo_decision.new_trailing_stop:
                                     pos["trailing_stop"] = apo_decision.new_trailing_stop
                                     pos["trailing_active"] = True
+                                try:
+                                    from app.trading.telegram_notifier import TelegramNotifier
+                                    gain_pct = (current_price - entry) / entry * 100.0 if side == "BUY" else (entry - current_price) / entry * 100.0
+                                    TelegramNotifier.get_instance().send_runner_extension(
+                                        symbol=symbol,
+                                        stage=pos["tp_extensions_count"],
+                                        new_tp=apo_decision.new_take_profit,
+                                        trailing_stop=apo_decision.new_trailing_stop or pos.get("trailing_stop", 0.0),
+                                        current_gain_pct=gain_pct
+                                    )
+                                except Exception:
+                                    pass
                             elif apo_decision.action == "TIGHTEN_TRAIL" and apo_decision.new_trailing_stop:
                                 pos["trailing_stop"] = apo_decision.new_trailing_stop
                                 pos["trailing_active"] = True
@@ -547,13 +625,22 @@ class PositionManager:
                         is_hard_max_exceeded = time_open_sec >= hard_max_time_sec
                         is_stale_stall = (time_open_sec >= stale_limit_sec and price_change_pct <= stale_pct_limit)
 
-                        if is_hard_max_exceeded or is_stale_stall:
+                        # Winner Protection & Timeout Immunity:
+                        # Never kill an active, profitable runner or a trade whose trailing stop is locked in profit!
+                        # Let the trailing stop protect the capital while allowing 5%-20% expansions to develop.
+                        is_pos_in_profit = (current_price > entry) if side == "BUY" else (current_price < entry)
+                        has_profit_protection = is_pos_in_profit and (pos.get("trailing_active", False) or pos.get("breakeven_activated", False))
+
+                        if has_profit_protection:
+                            # Position is in profit and trailing/breakeven protected - exempt from timeout
+                            pass
+                        elif is_hard_max_exceeded or is_stale_stall:
                             open_mins = round(time_open_sec / 60.0, 1)
                             reason_tag = "HARD_TIMEOUT_EXIT" if is_hard_max_exceeded else "STALE_MOMENTUM_ROTATE"
                             logger.warning(
                                 f"⏳ [{reason_tag}] Trade {trade_id} {symbol} ({side}, Strategy: {strat_name}): "
                                 f"Open for {open_mins}m (Hard cap: {hard_max_time_sec/60:.0f}m, Stale threshold: {stale_limit_sec/60:.0f}m). "
-                                f"Exiting position to recycle capital into higher-ranked opportunities."
+                                f"Exiting stagnant position to recycle capital into higher-ranked opportunities."
                             )
                             await self._close_position(trade_id, current_price, reason_tag)
                             continue
@@ -904,6 +991,27 @@ class PositionManager:
         
         logger.info(f"[STAGE: CLOSE] Closing Trade {trade_id} {symbol} ({side}) at exit price {exit_price} due to {outcome_type}. Realized P&L: {pnl} ({outcome}).")
         
+        try:
+            from app.trading.telegram_notifier import TelegramNotifier
+            duration_min = 0.0
+            if "entry_time" in pos:
+                t_entry = pos["entry_time"]
+                if hasattr(t_entry, "timestamp"):
+                    duration_min = max(0.1, (time.time() - t_entry.timestamp()) / 60.0)
+            pnl_pct = (pnl / (entry * size)) * 100.0 if (entry * size) > 0 else 0.0
+            TelegramNotifier.get_instance().send_trade_closed(
+                symbol=symbol,
+                side=side,
+                entry_price=entry,
+                exit_price=exit_price,
+                pnl_usd=round(pnl, 2),
+                pnl_pct=round(pnl_pct, 2),
+                duration_mins=round(duration_min, 1),
+                outcome_type=outcome_type
+            )
+        except Exception as tg_close_err:
+            logger.error(f"Failed to dispatch Telegram trade closed alert: {tg_close_err}")
+
         from app.services.trading_service import TradingService
         from app.services.paper_trading_service import PaperTradingService
         from app.services.audit_service import AuditService

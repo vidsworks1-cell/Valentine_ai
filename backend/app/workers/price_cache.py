@@ -20,6 +20,7 @@ class PriceCache:
         self._bid_depth_05pct: Dict[str, float] = {}
         self._ask_depth_05pct: Dict[str, float] = {}
         self._spread_pct: Dict[str, float] = {}
+        self._l2_orderbooks: Dict[str, Dict[str, Any]] = {}
         self._last_update_time: float = time.time()
         self._connection_status: str = "DISCONNECTED"
 
@@ -284,6 +285,35 @@ class PriceCache:
             "ask_depth_05pct": ask_depth,
             "spread_pct": spread_pct
         }
+
+    @classmethod
+    def update_l2_orderbook(cls, symbol: str, bids: List[Tuple[float, float]], asks: List[Tuple[float, float]]):
+        """Updates Level-2 top order book bids and asks [(price, qty)] for symbol."""
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        inst._l2_orderbooks[sym] = {
+            "bids": bids,
+            "asks": asks,
+            "updated_at": time.time()
+        }
+        # Update aggregate depth and spread pct from top of book
+        if bids and asks:
+            best_bid = bids[0][0]
+            best_ask = asks[0][0]
+            spread = max(0.0, best_ask - best_bid)
+            mid = (best_ask + best_bid) / 2.0 if (best_ask + best_bid) > 0 else 1.0
+            inst._spread_pct[sym] = round((spread / mid) * 100.0, 4)
+            # 0.5% depth calculation
+            bid_cutoff = mid * 0.995
+            ask_cutoff = mid * 1.005
+            inst._bid_depth_05pct[sym] = sum(p * q for p, q in bids if p >= bid_cutoff)
+            inst._ask_depth_05pct[sym] = sum(p * q for p, q in asks if p <= ask_cutoff)
+
+    @classmethod
+    def get_l2_orderbook(cls, symbol: str) -> Optional[Dict[str, Any]]:
+        """Returns cached L2 order book snapshot for symbol."""
+        inst = cls.get_instance_sync()
+        return inst._l2_orderbooks.get(symbol.upper())
 
     @classmethod
     def is_symbol_synchronized(cls, symbol: str) -> bool:

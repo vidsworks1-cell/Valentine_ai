@@ -84,30 +84,31 @@ class AdaptiveProfitOptimizer:
 
         # Strategy specific calibration
         strat = position.get("strategy", position.get("entry_strategy", ""))
-        is_veb = "volatility expansion" in strat.lower()
-        req_progress = 0.70 if is_veb else 0.75
-        req_rvol = 1.35 if is_veb else 1.60
-        max_extensions = 3 if is_veb else 2
+        is_veb = ("volatility expansion" in strat.lower()) or ("breakout" in strat.lower())
+        req_progress = 0.65 if is_veb else 0.75
+        req_rvol = 1.20 if is_veb else 1.50
+        max_extensions = 5 if is_veb else 2
 
         # 1. TP Extension: Price reached >= req_progress of initial TP with accelerating momentum and high volume
         progress_to_tp = (unrealized_pnl_pct / target_distance_pct) if target_distance_pct > 0 else 0.0
 
         if progress_to_tp >= req_progress and momentum_accelerating and rvol >= req_rvol:
-            # Trend is exceptionally strong: extend TP by 1.2x ATR to let winners run
-            extension_amount = atr * (1.35 if is_veb else 1.2)
+            # Trend is exceptionally strong: extend TP by 1.6x ATR for big moves to let winners run
+            extension_amount = atr * (1.60 if is_veb else 1.2)
             if side == "BUY":
-                extended_tp = round(tp + extension_amount, 4)
-                raised_trail = round(max(current_trail, entry + (atr * 0.6)), 4)
+                extended_tp = round(tp + extension_amount, 6)
+                # Dynamic Chandelier trailing stop trailing 1.2x ATR behind live price
+                raised_trail = round(max(current_trail, current_price - (atr * 1.2), entry + (atr * 0.8)), 6)
             else:
-                extended_tp = round(tp - extension_amount, 4)
-                raised_trail = round(min(current_trail, entry - (atr * 0.6)), 4)
+                extended_tp = round(tp - extension_amount, 6)
+                raised_trail = round(min(current_trail, current_price + (atr * 1.2), entry - (atr * 0.8)), 6)
 
             # Prevent infinite extension if already reached extension limit
             ext_count = int(position.get("tp_extensions_count", 0))
             if ext_count < max_extensions:
                 msg = (
-                    f"🚀 [TP EXTENSION - {strat or 'VEB'}] {symbol} {side} momentum accelerating (+{unrealized_pnl_pct:.2f}%, RVOL {rvol:.1f}). "
-                    f"Extended TP from ${tp:.2f} to ${extended_tp:.2f} to let outlier winner run. Lock trail at ${raised_trail:.2f}."
+                    f"🚀 [RUNNER TP EXTENSION - {strat or 'VEB'}] {symbol} {side} momentum accelerating (+{unrealized_pnl_pct:.2f}%, RVOL {rvol:.2f}x). "
+                    f"Extended TP from ${tp:.4f} to ${extended_tp:.4f} (extension #{ext_count+1}/{max_extensions}). Locked Chandelier trail at ${raised_trail:.4f}."
                 )
                 logger.info(msg)
                 return AdaptiveProfitDecision(

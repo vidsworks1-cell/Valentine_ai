@@ -192,11 +192,26 @@ class AiReasoningEngine:
                         
                         await SystemicMacroGuardEngine.get_instance().evaluate_systemic_risk()
 
+                        # 0a. Evaluate Re-entry following protective exit
                         reentry_sig = await SmartReentryEngine.get_instance().evaluate_reentry_candidate(
                             symbol=symbol,
                             current_price=price,
                             current_regime="TRENDING" if (int(price * 10) % 3 == 0) else "VOLATILE"
                         )
+
+                        # 0b. Institutional First-Pullback Re-entry Engine (Linda Raschke / Prop Desk VWAP Playbook)
+                        if not reentry_sig:
+                            hist_slice = cache.get_price_history(symbol)
+                            rvol_live = cache.get_volume_surge_ratio(symbol)
+                            ta_live = cache.get_technical_analysis(symbol)
+                            reentry_sig = SmartReentryEngine.get_instance().detect_first_pullback_opportunity(
+                                symbol=symbol,
+                                current_price=price,
+                                cache_ta=ta_live,
+                                rvol=rvol_live,
+                                history=hist_slice
+                            )
+
                         if reentry_sig:
                             from app.trading.order_manager import OrderManager
                             await OrderManager.get_instance().execute_opportunity(reentry_sig)
@@ -252,6 +267,11 @@ class AiReasoningEngine:
                     squeeze_info = VolatilitySqueezeDetector.get_instance().detect_squeeze(symbol, price)
                     squeeze_state = squeeze_info["squeeze_state"]
                     rvol = squeeze_info.get("rvol", 1.0)
+                    vcp_info = squeeze_info.get("vcp_pattern", {})
+                    is_vcp_apex = vcp_info.get("is_vcp_valid", False) and vcp_info.get("is_at_apex", False)
+
+                    # SMB Capital "Stocks/Coins in Play" Rule: RVOL >= 2.50x
+                    is_in_play = (rvol >= 2.50)
 
                     # Capture 24h High/Low and Detect Big Move (Volatility Expansion Breakout)
                     high_24h, low_24h = cache.get_24h_high_low(symbol)
@@ -263,18 +283,27 @@ class AiReasoningEngine:
                         rvol >= 1.20
                     )
 
-                    # 1. Regime Classification & Strategy Mapping based on real technical alignment
+                    # 1. Regime Classification & Real-Trader Strategy Mapping
                     market_regime = "TRENDING"
-                    if is_big_move_candidate:
+                    if is_vcp_apex:
+                        strategy = "Minervini VCP Breakout"
+                    elif is_in_play and is_big_move_candidate:
+                        strategy = "High-RVOL Breakout (In Play)"
+                    elif is_big_move_candidate:
                         strategy = "Volatility Expansion Breakout"
-                    elif squeeze_state == "SQUEEZE_FIRING":
+                    elif squeeze_state == "SQUEEZE_FIRING" and (rvol >= 1.80 or is_vcp_apex):
                         strategy = "Breakout Momentum"
                     else:
                         strategy = "Trend Continuation"
 
-                    # 2. Dynamic Stop Loss & Multi-Stage Take Profit Placement (Optimized for VEB Expectancy)
-                    if strategy == "Volatility Expansion Breakout":
-                        # Institutional Optimization: Tight 1.45x ATR SL, 1.50x Stage 1 TP (+BE lock), 3.80x Runner TP (2.62 RRR)
+                    # 2. Dynamic Stop Loss & Multi-Stage Take Profit Placement (Optimized for Real Trader Expectancy)
+                    if strategy == "Minervini VCP Breakout":
+                        # Ultra-tight stop at apex of coil (1.20x ATR), massive 4.20x runner target (3.5 RRR)
+                        sl_multiplier = 1.20
+                        tp_stage1_mult = 1.60
+                        tp_stage2_mult = 4.20
+                    elif strategy in ["Volatility Expansion Breakout", "High-RVOL Breakout (In Play)"]:
+                        # Institutional VEB: 1.45x ATR SL, 1.50x Stage 1 TP (+BE lock), 3.80x Runner TP
                         sl_multiplier = 1.45
                         tp_stage1_mult = 1.50
                         tp_stage2_mult = 3.80
@@ -444,11 +473,35 @@ class AiReasoningEngine:
                     bayesian_calibration = BayesianBeliefCalibrationEngine.get_instance().calibrate_belief(strategy, bayesian_signals)
 
                     big_move_bonus = 0.05 if is_big_move_candidate else 0.0
+                    is_squeeze_cascade = is_big_move_candidate and (funding_aligned or order_flow_aligned or liq_aligned)
+                    if is_squeeze_cascade:
+                        big_move_bonus += 0.04
+
+                    # Level 2 Order Book Microstructure (OBI) Confluence
+                    from app.trading.orderbook_l2_engine import OrderBookL2Engine
+                    ob_eval = OrderBookL2Engine.get_instance().evaluate_microstructure_confluence(symbol, proposed_side)
+                    l2_obi_bonus = float(ob_eval.get("confidence_delta", 0.0))
+
+                    if is_big_move_candidate:
+                        try:
+                            from app.trading.telegram_notifier import TelegramNotifier
+                            TelegramNotifier.get_instance().send_breakout_alert(
+                                symbol=symbol,
+                                side=proposed_side,
+                                price=price,
+                                squeeze_ratio=float(squeeze_info.get("squeeze_ratio", 0.9)),
+                                rvol=float(rvol),
+                                is_veb=(strategy == "Volatility Expansion Breakout"),
+                                liquidation_skew=macro_metrics.get("funding_skew_type", "TRAPPED_COUNTERPARTY_SKEW") if is_squeeze_cascade else None
+                            )
+                        except Exception:
+                            pass
+
                     pruned_signal_adjustment = (
                         (squeeze_bonus * squeeze_weight * 2.5) +
                         (regime_confluence_bonus * regime_weight * 2.0) +
                         (volatility_quality_bonus * rvol_weight * 2.0) +
-                        big_move_bonus +
+                        big_move_bonus + l2_obi_bonus +
                         sentiment_bonus + liq_bonus + sweep_bonus + netflow_bonus +
                         order_flow_bonus + funding_bonus + anomaly_penalty
                     )
@@ -557,6 +610,12 @@ class AiReasoningEngine:
                         adaptive_modifier += sb_bonus
                         adaptation_reasons.append(
                             f"[SECOND BRAIN HIGH CONVICTION BONUS] Added +{sb_bonus:.2f} confidence boost for Meta Conviction {meta_conviction_score:.1f}/100"
+                        )
+
+                    if is_squeeze_cascade:
+                        adaptive_modifier += 0.03
+                        adaptation_reasons.append(
+                            f"[LIQUIDATION SQUEEZE CASCADE] Trapped counterparty order flow detected on {symbol}. Breakout propulsion active."
                         )
 
                     from app.trading.execution_analytics import ExecutionAnalyticsEngine
