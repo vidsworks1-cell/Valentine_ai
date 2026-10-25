@@ -1018,6 +1018,13 @@ class PositionManager:
 
         async with AsyncSessionLocal() as db:
             try:
+                # Record trade result in InstitutionalRiskEngine for consecutive loss & circuit breaker tracking
+                try:
+                    from app.trading.institutional_risk import InstitutionalRiskEngine
+                    InstitutionalRiskEngine.get_instance().record_trade_result(pnl)
+                except Exception as ir_err:
+                    logger.debug(f"InstitutionalRiskEngine record trade error: {ir_err}")
+
                 # 1. Update Trade Record in DB
                 trade_update = TradeUpdate(
                     exit_price=exit_price,

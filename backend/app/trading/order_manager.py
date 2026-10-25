@@ -100,6 +100,20 @@ class OrderManager:
                         ))
                 except Exception as ae:
                     logger.error(f"Failed to log market data guard audit event: {ae}")
+            # 0a-1. Institutional Risk Circuit Breaker Gate (Daily Loss Limit & Consecutive Losses)
+            from app.trading.institutional_risk import InstitutionalRiskEngine
+            risk_breaker = await InstitutionalRiskEngine.get_instance().evaluate_risk_breakers()
+            if risk_breaker.get("trading_halted", False):
+                halt_reason = f"🛑 [INSTITUTIONAL RISK BREAKER] Order blocked: {risk_breaker.get('halt_reason', 'Daily loss or consecutive loss limit hit')}"
+                logger.warning(halt_reason)
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=symbol,
+                    state=ExecutionState.REJECTED,
+                    side=side,
+                    stage="INSTITUTIONAL_RISK_BREAKER",
+                    reason=halt_reason,
+                    price=float(opportunity.get("entry_price", 0.0))
+                )
                 return
 
             # 0b. Position Exposure & Portfolio Intelligence Guard:
