@@ -59,9 +59,10 @@ class MacroRiskOverlayEngine:
         price_int = int(btc_price * 10)
 
         # 1. Macro Calendar Event Proximity Guard
-        # Simulates proximity to scheduled high-impact news (e.g. within 30 min of FOMC/CPI)
-        event_proximity_minutes = (price_int + tally * 7) % 180
-        macro_event_active = event_proximity_minutes < 15 or self._manual_event_lockdown
+        # Only activate hard event lockdown if manually toggled by user or external calendar signal
+        macro_event_active = self._manual_event_lockdown
+        event_proximity_minutes = 90  # Default safe distance when no manual lockout is active
+        event_risk_score = 100.0 if macro_event_active else 20.0
 
         # 2. Institutional Perpetual Funding Rate Skew & Order Flow Depth Imbalance
         # Positive funding = Long heavy; Negative funding = Short heavy
@@ -111,7 +112,7 @@ class MacroRiskOverlayEngine:
         # 6. Calculate Composite Macro Risk Sub-Scores
         funding_risk_score = min(100.0, (abs(funding_annualized_pct) / 45.0) * 100.0)
         cascade_risk_score = oi_cascade_risk
-        event_risk_score = 100.0 if macro_event_active else (max(0.0, (30.0 - event_proximity_minutes) / 30.0) * 80.0)
+        event_risk_score = 100.0 if self._manual_event_lockdown else 15.0
         dxy_risk_score = max(0.0, (dxy_index - 103.0) * 20.0)
 
         # Weighted Composite Macro Risk Score
@@ -130,12 +131,12 @@ class MacroRiskOverlayEngine:
             composite_risk_score = 95.0
 
         # Determine Risk Level & Modulation Parameters
-        if macro_event_active or composite_risk_score >= 85.0:
+        if self._manual_event_lockdown or composite_risk_score >= 85.0:
             risk_level = "CRITICAL_EVENT_LOCKDOWN"
             position_size_scaler = 0.0
             recommended_leverage_cap = 1
             trade_permitted = False
-            risk_summary = f"CRITICAL MACRO RISK! High-impact event proximity or lockdown active. (Score: {composite_risk_score}/100)"
+            risk_summary = f"CRITICAL MACRO RISK! High-impact event lockdown active. (Score: {composite_risk_score}/100)"
         elif composite_risk_score >= 60.0:
             risk_level = "HIGH_MACRO_RISK"
             position_size_scaler = 0.35
