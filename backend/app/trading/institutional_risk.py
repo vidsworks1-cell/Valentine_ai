@@ -39,9 +39,12 @@ class InstitutionalRiskEngine:
         }
         self.trading_halted: bool = False
         self.halt_reason: Optional[str] = None
+        self.halted_at: Optional[float] = None
+        self.cooldown_period_sec: float = 7200.0  # 2 hours cooling-off period
         self.consecutive_losses_count: int = 0
-        self.current_daily_pnl_usd: float = 45.20
-        self.current_weekly_pnl_usd: float = 180.50
+        self.current_daily_pnl_usd: float = 0.0
+        self.current_weekly_pnl_usd: float = 0.0
+        self.last_pnl_reset_date: str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         self.news_blackout_active: bool = False
         self.last_risk_audit_at: Optional[str] = None
 
@@ -53,6 +56,7 @@ class InstitutionalRiskEngine:
 
     def record_trade_result(self, pnl: float):
         """Updates internal risk metrics following trade completion and transitions recovery state."""
+        self._check_daily_rollover()
         self.current_daily_pnl_usd += pnl
         self.current_weekly_pnl_usd += pnl
 
@@ -62,6 +66,17 @@ class InstitutionalRiskEngine:
             self.consecutive_losses_count = 0
 
         self.update_recovery_state()
+
+    def _check_daily_rollover(self):
+        """Resets daily loss counter at UTC midnight so yesterday's losses never block today's trades."""
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if today_str != self.last_pnl_reset_date:
+            logger.info(f"🌅 [INSTITUTIONAL RISK ROLLOVER] New UTC day ({today_str}). Resetting daily PnL.")
+            self.last_pnl_reset_date = today_str
+            self.current_daily_pnl_usd = 0.0
+            # If halted due to yesterday's daily loss limit or consecutive losses older than 2 hours, auto-resume
+            if self.trading_halted:
+                self.reset_trading_halt()
 
     def update_recovery_state(self):
         """Transitions staged recovery state based on drawdown and consecutive losses."""
@@ -92,8 +107,22 @@ class InstitutionalRiskEngine:
 
     async def evaluate_risk_breakers(self) -> Dict[str, Any]:
         """Evaluates institutional risk limits and triggers automatic halts if violated."""
+        now = time.time()
         now_str = datetime.now(timezone.utc).isoformat()
         self.last_risk_audit_at = now_str
+
+        # 0. Check Daily UTC Rollover & Auto-Expiry of Cooldown
+        self._check_daily_rollover()
+
+        if self.trading_halted and self.halted_at:
+            elapsed_cooldown = now - self.halted_at
+            if elapsed_cooldown >= self.cooldown_period_sec:
+                logger.info(
+                    f"🟢 [INSTITUTIONAL RISK AUTO-RESUME] 2-hour cooling-off period ({elapsed_cooldown/3600:.1f}h) elapsed. "
+                    f"Lifting trading halt and transitioning to RECOVERY mode."
+                )
+                self.reset_trading_halt()
+                self.recovery_state = "RECOVERY"
 
         circuit_tripped = False
         trip_reasons = []
@@ -116,6 +145,7 @@ class InstitutionalRiskEngine:
         # 4. Automatic Trading Halt Action
         if circuit_tripped and not self.trading_halted:
             self.trading_halted = True
+            self.halted_at = now
             self.halt_reason = " | ".join(trip_reasons)
             logger.critical(f"🛑 [INSTITUTIONAL RISK BREAKER] TRADING HALTED! Reasons: {self.halt_reason}")
 
@@ -132,11 +162,15 @@ class InstitutionalRiskEngine:
             except Exception as e:
                 logger.error(f"Failed to record audit log: {e}")
 
+        cooldown_rem = max(0.0, self.cooldown_period_sec - (now - self.halted_at)) if (self.trading_halted and self.halted_at) else 0.0
+
         return {
             "status": "EVALUATED",
             "evaluated_at": now_str,
             "trading_halted": self.trading_halted,
             "halt_reason": self.halt_reason,
+            "halted_at": self.halted_at,
+            "cooldown_remaining_sec": round(cooldown_rem, 1),
             "daily_pnl_usd": round(self.current_daily_pnl_usd, 2),
             "weekly_pnl_usd": round(self.current_weekly_pnl_usd, 2),
             "daily_loss_limit_usd": self.daily_loss_limit_usd,
@@ -152,6 +186,7 @@ class InstitutionalRiskEngine:
         """Manual or scheduled override to resume trading after risk review."""
         self.trading_halted = False
         self.halt_reason = None
+        self.halted_at = None
         self.consecutive_losses_count = 0
-        logger.info("🟢 [INSTITUTIONAL RISK] Trading halt manually reset. Lumina trading resumed.")
+        logger.info("🟢 [INSTITUTIONAL RISK] Trading halt reset. Lumina trading resumed.")
         return {"status": "RESUMED", "trading_halted": False}
