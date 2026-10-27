@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 import urllib.request
 import websockets
 from app.core.config import settings
@@ -194,4 +195,4 @@ class BinanceWebSocketWorker:
             except Exception as e:
                 logger.debug(f"Universe bootstrap polling notice: {e}")
 
-            await asyncio.sleep(60.0)
+            await asyncio.sleep(20.0)
