@@ -87,6 +87,8 @@ class PortfolioGuard:
     def __init__(self):
         self._circuit_breaker_active = False
         self._circuit_breaker_date = None
+        self._circuit_breaker_tripped_at = 0.0
+        self._cooldown_period_sec = 7200.0  # 2-hour cooling off period
         self._slippage_feedback: Dict[str, List[Dict[str, Any]]] = {}
         self._total_swaps_executed = 0
         self._last_swap_timestamp = 0.0
@@ -142,12 +144,29 @@ class PortfolioGuard:
         }
 
     def _check_circuit_breaker_reset(self):
+        now = time.time()
         today = datetime.now(timezone.utc).date()
-        if self._circuit_breaker_active and self._circuit_breaker_date:
-            if today > self._circuit_breaker_date:
+        if self._circuit_breaker_active:
+            # Auto-reset on new UTC trading day
+            if self._circuit_breaker_date and today > self._circuit_breaker_date:
                 logger.info(f"[DAILY LOSS CIRCUIT BREAKER] Resetting circuit breaker for new trading day ({today})")
                 self._circuit_breaker_active = False
                 self._circuit_breaker_date = None
+                self._circuit_breaker_tripped_at = 0.0
+                return
+            # Auto-resume after 2-hour cooling-off period
+            if self._circuit_breaker_tripped_at and (now - self._circuit_breaker_tripped_at) >= self._cooldown_period_sec:
+                elapsed_hrs = (now - self._circuit_breaker_tripped_at) / 3600.0
+                logger.info(f"🟢 [PORTFOLIO GUARD AUTO-RESUME] {elapsed_hrs:.1f}h cooling-off period elapsed. Lifting daily circuit breaker and resuming trading.")
+                self._circuit_breaker_active = False
+                self._circuit_breaker_tripped_at = 0.0
+
+    def reset_circuit_breaker(self):
+        """Explicitly resets the daily loss circuit breaker."""
+        self._circuit_breaker_active = False
+        self._circuit_breaker_date = None
+        self._circuit_breaker_tripped_at = 0.0
+        logger.info("🟢 [PORTFOLIO GUARD] Daily loss circuit breaker manually reset. Trading resumed.")
 
     def _record_rejected_opportunity(self, opportunity: Dict[str, Any], msg: str, incoming_conf: float):
         try:
@@ -225,18 +244,26 @@ class PortfolioGuard:
             starting_daily_balance = balance - daily_realized_pnl if (balance - daily_realized_pnl) > 0 else balance
             daily_realized_pnl_pct = (daily_realized_pnl / starting_daily_balance) * 100.0 if starting_daily_balance > 0 else 0.0
             
-            if daily_realized_pnl_pct <= -5.0 or self._circuit_breaker_active:
+            # Micro-account protection (<$30): require minimum nominal loss (-$1.50)
+            # so normal 20-cent fees or tick noise does not trigger a 5% portfolio lockdown.
+            min_loss_dollar_threshold = -1.50 if starting_daily_balance < 30.0 else (starting_daily_balance * -0.05)
+            is_daily_loss_tripped = (
+                daily_realized_pnl_pct <= -5.0 and daily_realized_pnl <= min_loss_dollar_threshold
+            )
+
+            if is_daily_loss_tripped or self._circuit_breaker_active:
                 if not self._circuit_breaker_active:
                     self._circuit_breaker_active = True
                     self._circuit_breaker_date = datetime.now(timezone.utc).date()
-                log_msg = "[DAILY LOSS CIRCUIT BREAKER] Daily loss limit reached (-5%). Trading paused until next trading day."
+                    self._circuit_breaker_tripped_at = time.time()
+                log_msg = f"[DAILY LOSS CIRCUIT BREAKER] Daily loss limit reached ({daily_realized_pnl_pct:.1f}%, ${daily_realized_pnl:.2f}). Trading paused for cooling-off."
                 logger.warning(log_msg)
                 self._record_rejected_opportunity(opportunity, log_msg, incoming_conf)
                 return PortfolioDecision(approved=False, action_type="REJECT", reason=log_msg)
 
             # 1b. Daily Loss Budget Exhaustion Soft Guard (80% of daily loss budget used)
-            if daily_realized_pnl_pct <= -4.0 and proposed_side in ["BUY", "SELL"]:
-                log_msg = f"[DAILY LOSS BUDGET PAUSE] Daily loss budget nearly exhausted ({daily_realized_pnl_pct:.1f}% of -5.0% cap). Pausing new entries."
+            if daily_realized_pnl_pct <= -4.0 and daily_realized_pnl <= (min_loss_dollar_threshold * 0.8) and proposed_side in ["BUY", "SELL"]:
+                log_msg = f"[DAILY LOSS BUDGET PAUSE] Daily loss budget nearly exhausted ({daily_realized_pnl_pct:.1f}%, ${daily_realized_pnl:.2f}). Pausing new entries."
                 logger.warning(log_msg)
                 self._record_rejected_opportunity(opportunity, log_msg, incoming_conf)
                 return PortfolioDecision(approved=False, action_type="REJECT", reason=log_msg)

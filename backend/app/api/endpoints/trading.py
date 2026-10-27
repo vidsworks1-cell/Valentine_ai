@@ -2468,6 +2468,15 @@ async def emergency_liquidate_all(trading_mode: str = "LIVE"):
                     results[asset] = conv_res
     return {"status": "COMPLETED", "liquidations": results}
 
+@router.post("/portfolio-guard/reset-circuit-breaker")
+async def reset_portfolio_guard_circuit_breaker():
+    """Manually resets the PortfolioGuard daily loss circuit breaker."""
+    from app.trading.portfolio_guard import PortfolioGuard
+    pg = PortfolioGuard.get_instance()
+    pg.reset_circuit_breaker()
+    return {"status": "SUCCESS", "circuit_breaker_active": False, "message": "Daily loss circuit breaker reset successfully."}
+
+
 
 
 
