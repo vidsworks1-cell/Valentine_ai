@@ -252,8 +252,8 @@ class GuardPerformanceAuditor:
                     evaluated_any = True
                 continue
 
-            hi = cache.get_high_24h(r.symbol) or cur_price
-            lo = cache.get_low_24h(r.symbol) or cur_price
+            hi = getattr(cache, "get_high_24h", lambda s: None)(r.symbol) or getattr(cache, "_high_24h", {}).get(r.symbol) or cur_price
+            lo = getattr(cache, "get_low_24h", lambda s: None)(r.symbol) or getattr(cache, "_low_24h", {}).get(r.symbol) or cur_price
 
             hit_tp = (r.side == "BUY" and cur_price >= r.take_profit) or (r.side == "SELL" and cur_price <= r.take_profit)
             hit_sl = (r.side == "BUY" and cur_price <= r.stop_loss) or (r.side == "SELL" and cur_price >= r.stop_loss)

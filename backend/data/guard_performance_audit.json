@@ -1,5 +1,5 @@
 {
-  "updated_at": 1791971209.1999521,
+  "updated_at": 1793220038.8630054,
   "guard_tallies": {
     "MacroGuard": {
       "total_rejected": 146,
@@ -57,8 +57,8 @@
       "take_profit": 35.0,
       "confidence": 0.82,
       "timestamp": 1791917500.5988655,
-      "evaluated": false,
-      "classification": "PENDING",
+      "evaluated": true,
+      "classification": "EXPIRED_NEUTRAL",
       "counterfactual_pnl_r": 0.0
     },
     {
@@ -73,8 +73,8 @@
       "take_profit": 35.0,
       "confidence": 0.82,
       "timestamp": 1791917518.9911149,
-      "evaluated": false,
-      "classification": "PENDING",
+      "evaluated": true,
+      "classification": "EXPIRED_NEUTRAL",
       "counterfactual_pnl_r": 0.0
     },
     {
@@ -89,8 +89,8 @@
       "take_profit": 0.0,
       "confidence": 0.8,
       "timestamp": 1791968446.2196188,
-      "evaluated": false,
-      "classification": "PENDING",
+      "evaluated": true,
+      "classification": "EXPIRED_NEUTRAL",
       "counterfactual_pnl_r": 0.0
     },
     {
@@ -105,8 +105,8 @@
       "take_profit": 0.0,
       "confidence": 0.8,
       "timestamp": 1791971209.1997936,
-      "evaluated": false,
-      "classification": "PENDING",
+      "evaluated": true,
+      "classification": "EXPIRED_NEUTRAL",
       "counterfactual_pnl_r": 0.0
     }
   ]

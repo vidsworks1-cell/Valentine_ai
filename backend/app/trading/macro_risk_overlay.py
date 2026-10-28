@@ -204,8 +204,8 @@ class MacroRiskOverlayEngine:
         """
         cache = PriceCache.get_instance_sync()
         btc_price = cache.get_price("BTCUSDT") or 92500.0
-        btc_high = cache.get_high_24h("BTCUSDT") or (btc_price * 1.02)
-        btc_low = cache.get_low_24h("BTCUSDT") or (btc_price * 0.98)
+        btc_high = getattr(cache, "get_high_24h", lambda s: None)("BTCUSDT") or getattr(cache, "_high_24h", {}).get("BTCUSDT") or (btc_price * 1.02)
+        btc_low = getattr(cache, "get_low_24h", lambda s: None)("BTCUSDT") or getattr(cache, "_low_24h", {}).get("BTCUSDT") or (btc_price * 0.98)
 
         # 24H range location (0.0 = low of day, 1.0 = high of day)
         range_span = max(1.0, btc_high - btc_low)

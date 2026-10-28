@@ -242,6 +242,28 @@ class PriceCache:
         return inst._prices.copy()
 
     @classmethod
+    def get_high_24h(cls, symbol: str) -> Optional[float]:
+        """Retrieves 24-hour high price for symbol or dynamic fallback based on price."""
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        val = inst._high_24h.get(sym)
+        if val is not None and val > 0.0:
+            return val
+        px = inst.get_price(sym)
+        return (px * 1.015) if px > 0.0 else None
+
+    @classmethod
+    def get_low_24h(cls, symbol: str) -> Optional[float]:
+        """Retrieves 24-hour low price for symbol or dynamic fallback based on price."""
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        val = inst._low_24h.get(sym)
+        if val is not None and val > 0.0:
+            return val
+        px = inst.get_price(sym)
+        return (px * 0.985) if px > 0.0 else None
+
+    @classmethod
     def get_update_tally(cls, symbol: str) -> int:
         """Returns the number of WebSocket ticker updates received since startup."""
         inst = cls.get_instance_sync()
