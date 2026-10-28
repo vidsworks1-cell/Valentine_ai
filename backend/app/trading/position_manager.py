@@ -474,7 +474,19 @@ class PositionManager:
                                                 pos["trailing_stop"] = be_level
                                                 pos["breakeven_activated"] = True
                                                 logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $17.50). Locked Breakeven at {be_level} (+0.35% net) without splitting below Binance $5 limit.")
+                                        elif len(stages) > 2 and stage == stages[1]:
+                                            # TP2 reached: Ratchet trailing stop to bank guaranteed +0.7R profit (+0.70% to +1.0% net)
+                                            # and allow runner to reach Final TP (+2.2R to +3.5R asymmetric payoff)!
+                                            bank_profit_dist = total_dist * 0.40
+                                            bank_level = _round_price(entry + bank_profit_dist if side == "BUY" else entry - bank_profit_dist)
+                                            if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < bank_level:
+                                                pos["trailing_stop"] = bank_level
+                                                logger.info(f"💎 [MICRO-ACCOUNT TP2 PROFIT LOCK] Position notional (${pos_notional:.2f}). Ratcheted Stop to {bank_level} (+{bank_profit_dist/entry*100:.2f}% banked). Runner unleashed for Final TP target!")
+                                            elif side == "SELL" and (float(pos.get("trailing_stop", 0.0)) > bank_level or float(pos.get("trailing_stop", 0.0)) == 0.0):
+                                                pos["trailing_stop"] = bank_level
+                                                logger.info(f"💎 [MICRO-ACCOUNT TP2 PROFIT LOCK] Position notional (${pos_notional:.2f}). Ratcheted Stop to {bank_level} (+{bank_profit_dist/entry*100:.2f}% banked). Runner unleashed for Final TP target!")
                                         else:
+                                            # Final TP stage reached: Close 100% full position to bank full asymmetric win!
                                             await self._close_position(trade_id, current_price, stage["label"])
                                             stage_triggered = True
                                             break
@@ -1024,6 +1036,21 @@ class PositionManager:
                     InstitutionalRiskEngine.get_instance().record_trade_result(pnl)
                 except Exception as ir_err:
                     logger.debug(f"InstitutionalRiskEngine record trade error: {ir_err}")
+
+                # Record trade result in ModelGovernanceEngine for rolling safety circuit evaluation
+                try:
+                    from app.trading.model_governance import ModelGovernanceEngine
+                    ModelGovernanceEngine.get_instance().record_version_trade_outcome({
+                        "symbol": symbol,
+                        "side": side,
+                        "pnl": pnl,
+                        "profit_loss": pnl,
+                        "outcome": outcome,
+                        "strategy": pos.get("strategy_used", "Breakout Momentum"),
+                        "timestamp": time.time()
+                    })
+                except Exception as mg_err:
+                    logger.debug(f"ModelGovernanceEngine record trade error: {mg_err}")
 
                 # 1. Update Trade Record in DB
                 trade_update = TradeUpdate(

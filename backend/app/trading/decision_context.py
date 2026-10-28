@@ -38,13 +38,23 @@ def _default_rejection_handler(ctx: 'DecisionContext'):
         logger.debug(f"Event handler cooldown failed: {e}")
 
     # 2. Missed Opportunity Learner
+    sl_val = getattr(ctx, "stop_loss", 0.0)
+    tp_val = getattr(ctx, "take_profit", 0.0)
+    atr_val = getattr(ctx, "atr", 0.0)
+    if sl_val <= 0.0:
+        sl_dist = (atr_val * 1.5) if atr_val > 0 else (price * 0.008)
+        sl_val = (price - sl_dist) if side == "BUY" else (price + sl_dist)
+    if tp_val <= 0.0:
+        tp_dist = (atr_val * 3.0) if atr_val > 0 else (price * 0.020)
+        tp_val = (price + tp_dist) if side == "BUY" else (price - tp_dist)
+
     try:
         from app.ai.missed_opportunity_learner import MissedOpportunityLearner
         learner = MissedOpportunityLearner.get_instance()
         if learner:
             learner.record_missed_opportunity(
                 symbol=symbol, side=side, entry_price=price,
-                stop_loss=0.0, take_profit=0.0, strategy=strategy,
+                stop_loss=sl_val, take_profit=tp_val, strategy=strategy,
                 category=category, reason=reason,
                 confidence_score=ctx.adapted_confidence,
                 confidence_threshold=ctx.dynamic_threshold
@@ -61,7 +71,7 @@ def _default_rejection_handler(ctx: 'DecisionContext'):
     except Exception as e:
         logger.debug(f"Event handler execution analytics failed: {e}")
 
-    # 4. Module 7: Guard Performance Auditor
+    # 4. Module 7: Guard Performance Auditor (Counterfactual Tracking)
     try:
         from app.trading.guard_performance_auditor import GuardPerformanceAuditor
         GuardPerformanceAuditor.get_instance().record_rejection(
@@ -70,8 +80,8 @@ def _default_rejection_handler(ctx: 'DecisionContext'):
             side=side,
             strategy=strategy,
             entry_price=price,
-            stop_loss=0.0,
-            take_profit=0.0,
+            stop_loss=sl_val,
+            take_profit=tp_val,
             confidence=ctx.adapted_confidence,
             reason=reason
         )
@@ -113,6 +123,8 @@ class DecisionContext:
         self.side: str = side.upper()
         self.price: float = price
         self.atr: float = atr
+        self.stop_loss: float = 0.0
+        self.take_profit: float = 0.0
 
         # Decision & Model Versioning Metadata
         self.pipeline_version: str = "2.4.0-institutional"

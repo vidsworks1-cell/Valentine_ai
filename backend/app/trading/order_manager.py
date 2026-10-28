@@ -141,6 +141,31 @@ class OrderManager:
                 opportunity["position_size"] = round(old_size * macro_scaler, 4)
                 logger.info(f"⚖️ [MACRO RISK SCALER] Position size for {symbol} scaled from {old_size} to {opportunity['position_size']} ({macro_scaler * 100:.0f}% allocation due to {macro_overlay.get('risk_level', 'ELEVATED')}).")
 
+            # 0c-2. Pillar 2: Regime-Gated Strategy Direction Sizing Scaler
+            from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
+            regime_bias = MacroRiskOverlayEngine.get_instance().get_macro_regime_bias()
+            macro_regime_name = regime_bias.get("macro_regime", "CHOP_RANGING")
+            regime_scaler = 1.0
+            if macro_regime_name == "BEAR_DISTRIBUTION":
+                regime_scaler = 1.0 if side.upper() == "SELL" else regime_bias.get("buy_size_scaler", 0.60)
+            elif macro_regime_name == "BULL_EXPANSION":
+                regime_scaler = 1.0 if side.upper() == "BUY" else regime_bias.get("sell_size_scaler", 0.60)
+            elif macro_regime_name == "CHOP_RANGING":
+                regime_scaler = 0.65
+
+            if regime_scaler < 1.0:
+                old_sz = opportunity.get("position_size", 1.0)
+                opportunity["position_size"] = round(old_sz * regime_scaler, 4)
+                logger.info(f"⚖️ [REGIME SCALER] Position size for {symbol} scaled from {old_sz} to {opportunity['position_size']} ({regime_scaler*100:.0f}% allocation due to {macro_regime_name}).")
+
+            # 0c-3. Pillar 3: Model Governance Rolling Safety Circuit Throttle
+            from app.trading.model_governance import ModelGovernanceEngine
+            safety_scaler = ModelGovernanceEngine.get_instance().get_safety_scaler()
+            if safety_scaler < 1.0:
+                old_sz = opportunity.get("position_size", 1.0)
+                opportunity["position_size"] = round(old_sz * safety_scaler, 4)
+                logger.info(f"🚨 [SAFETY CIRCUIT SCALER] Position size for {symbol} scaled from {old_sz} to {opportunity['position_size']} (35% allocation due to tripped rolling safety circuit).")
+
             # 0d. Cross-Asset Correlation & Portfolio Heat Budget Check
             from app.trading.cross_asset_correlation import CrossAssetCorrelationEngine
             from app.trading.position_manager import PositionManager

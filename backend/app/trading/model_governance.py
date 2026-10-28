@@ -19,11 +19,12 @@ class ModelGovernanceEngine:
         # Current active subsystem versions
         self.active_versions: Dict[str, str] = {
             "strategy_engine": "v2.4.0",
-            "portfolio_guard": "v1.9.0",
+            "regime_gatekeeper": "v1.0.0",
+            "portfolio_guard": "v2.0.0",
             "meta_reasoning": "v3.1.0",
             "self_adaptation": "v2.2.0",
-            "confidence_model": "v3.3.0",
-            "sizing_engine": "v2.0.0"
+            "guard_auditor": "v1.5.0",
+            "sizing_engine": "v2.1.0"
         }
 
         # Registered version snapshots / checkpoints
@@ -39,13 +40,33 @@ class ModelGovernanceEngine:
                     "confidence_model": "v3.2.0",
                     "sizing_engine": "v1.9.0"
                 },
-                "status": "STABLE_BASELINE",
+                "status": "HISTORICAL_BASELINE",
                 "notes": "Verified baseline checkpoint prior to governance architecture deployment.",
                 "metrics": {
                     "total_trades": 120,
                     "win_rate_pct": 58.3,
                     "sharpe_ratio": 1.85,
                     "max_drawdown_pct": 4.2
+                }
+            },
+            {
+                "checkpoint_id": "CHK_BASELINE_v2.4",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "versions": {
+                    "strategy_engine": "v2.4.0",
+                    "regime_gatekeeper": "v1.0.0",
+                    "portfolio_guard": "v2.0.0",
+                    "meta_reasoning": "v3.1.0",
+                    "self_adaptation": "v2.2.0",
+                    "guard_auditor": "v1.5.0",
+                    "sizing_engine": "v2.1.0"
+                },
+                "status": "ACTIVE_BASELINE",
+                "notes": "Pillar 3 Production Baseline: rolling 20-trade safety circuit (PF >= 1.20, Max DD <= $0.75).",
+                "metrics": {
+                    "target_profit_factor": 1.20,
+                    "max_drawdown_limit_usd": 0.75,
+                    "rolling_window_trades": 20
                 }
             }
         ]
@@ -56,6 +77,11 @@ class ModelGovernanceEngine:
         # Version performance evaluation window
         self.version_trades: Dict[str, List[Dict[str, Any]]] = {}
         self.rollback_events: List[Dict[str, Any]] = []
+
+        # Rolling 20-Trade Safety Circuit (Pillar 3)
+        self._safety_circuit_tripped: bool = False
+        self._safety_throttle_scaler: float = 1.0
+        self._last_rolling_metrics: Dict[str, Any] = {}
 
     @classmethod
     def get_instance(cls) -> 'ModelGovernanceEngine':
@@ -93,8 +119,108 @@ class ModelGovernanceEngine:
 
         self.version_trades[checkpoint_id].append(trade_info)
         
-        # Evaluate automatic rollback trigger after recording outcome
+        # Evaluate automatic rollback trigger and rolling 20-trade safety circuit after recording outcome
         self.evaluate_version_rollback()
+        self.evaluate_rolling_safety_bounds()
+
+    def get_safety_scaler(self) -> float:
+        """Returns the dynamic risk allocation scaler governed by the Rolling Safety Circuit (0.35x when tripped, 1.0x normal)."""
+        return self._safety_throttle_scaler
+
+    def evaluate_rolling_safety_bounds(self) -> Dict[str, Any]:
+        """
+        Pillar 3: Rolling Performance Bounds (Automated Safety Circuit)
+        Evaluates the rolling 20-trade execution window:
+        - If rolling Profit Factor drops below 1.20, OR
+        - If cumulative drawdown in the window exceeds $0.75:
+        Automatically throttles risk to minimal sizes (0.35x), alerts Portfolio Guard,
+        and reverts to baseline checkpoint CHK_BASELINE_v2.4.
+        """
+        all_recent: List[Dict[str, Any]] = []
+        for chk_id, tr_list in self.version_trades.items():
+            all_recent.extend(tr_list)
+        # Sort by timestamp if available
+        all_recent.sort(key=lambda x: x.get("timestamp", 0.0))
+        window = all_recent[-20:]
+
+        if len(window) < 5:
+            return {
+                "circuit_tripped": False,
+                "reason": f"Accumulating rolling window sample ({len(window)}/20 trades).",
+                "safety_scaler": 1.0
+            }
+
+        wins = [float(t.get("pnl", t.get("profit_loss", 0.0))) for t in window if float(t.get("pnl", t.get("profit_loss", 0.0))) > 0.001]
+        losses = [abs(float(t.get("pnl", t.get("profit_loss", 0.0)))) for t in window if float(t.get("pnl", t.get("profit_loss", 0.0))) < -0.001]
+        win_sum = sum(wins)
+        loss_sum = sum(losses)
+        net_pnl = win_sum - loss_sum
+        rolling_pf = (win_sum / loss_sum) if loss_sum > 0 else (999.0 if win_sum > 0 else 1.0)
+        win_rate = (len(wins) / (len(wins) + len(losses)) * 100.0) if (len(wins) + len(losses)) > 0 else 0.0
+
+        # Peak-to-trough cumulative drawdown calculation across the rolling window
+        cum = 0.0
+        peak = 0.0
+        max_dd = 0.0
+        for t in window:
+            pnl_val = float(t.get("pnl", t.get("profit_loss", 0.0)))
+            cum += pnl_val
+            if cum > peak:
+                peak = cum
+            cur_dd = peak - cum
+            if cur_dd > max_dd:
+                max_dd = cur_dd
+
+        metrics = {
+            "window_size": len(window),
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate_pct": round(win_rate, 1),
+            "win_sum": round(win_sum, 4),
+            "loss_sum": round(loss_sum, 4),
+            "net_pnl": round(net_pnl, 4),
+            "rolling_profit_factor": round(rolling_pf, 2),
+            "max_drawdown_usd": round(max_dd, 4),
+            "timestamp": time.time()
+        }
+        self._last_rolling_metrics = metrics
+
+        # Safety Circuit Rule: Minimum sample >= 8 trades before enforcing strict trip
+        circuit_tripped = False
+        trip_reason = ""
+        if len(window) >= 8:
+            if rolling_pf < 1.20 and loss_sum >= 0.15:
+                circuit_tripped = True
+                trip_reason = f"Rolling Profit Factor ({rolling_pf:.2f}) degraded below 1.20 institutional safety floor."
+            elif max_dd >= 0.75:
+                circuit_tripped = True
+                trip_reason = f"Cumulative rolling drawdown (${max_dd:.2f}) breached $0.75 micro-account risk boundary."
+
+        if circuit_tripped:
+            if not self._safety_circuit_tripped:
+                logger.warning(
+                    f"🚨 [ROLLING SAFETY CIRCUIT ENGAGED] {trip_reason} "
+                    f"Throttling position sizes to 0.35x and enforcing baseline checkpoint 'CHK_BASELINE_v2.4'."
+                )
+            self._safety_circuit_tripped = True
+            self._safety_throttle_scaler = 0.35
+            # Enforce baseline checkpoint
+            target = next((c for c in self.version_history if c["checkpoint_id"] == "CHK_BASELINE_v2.4"), None)
+            if target:
+                self.active_versions = target["versions"].copy()
+        else:
+            if self._safety_circuit_tripped:
+                logger.info(f"✅ [ROLLING SAFETY CIRCUIT DISENGAGED] Rolling Profit Factor ({rolling_pf:.2f}) & Drawdown (${max_dd:.2f}) recovered to institutional baseline.")
+            self._safety_circuit_tripped = False
+            self._safety_throttle_scaler = 1.0
+
+        return {
+            "circuit_tripped": self._safety_circuit_tripped,
+            "safety_scaler": self._safety_throttle_scaler,
+            "reason": trip_reason or "Rolling window operating within verified baseline bounds.",
+            "metrics": metrics
+        }
+
 
     def create_version_checkpoint(self, new_versions: Dict[str, str], notes: str = "") -> Dict[str, Any]:
         """

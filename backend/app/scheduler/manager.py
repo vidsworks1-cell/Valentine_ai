@@ -28,6 +28,7 @@ class LayeredSchedulerManager:
         self.running = False
         self._recon_task: Optional[asyncio.Task] = None
         self._maintenance_task: Optional[asyncio.Task] = None
+        self._gov_task: Optional[asyncio.Task] = None
         
         # Core safeguards and modes - restored from persistent config if available
         self.global_trading_mode: str = "PAPER"  # OFF, PAPER, TESTNET, LIVE
@@ -163,6 +164,30 @@ class LayeredSchedulerManager:
             except asyncio.CancelledError:
                 break
 
+    async def _governance_and_counterfactual_loop(self):
+        """
+        Pillar 3 Governance & Counterfactual Daemon (runs every 60s):
+        1. Polls GuardPerformanceAuditor for counterfactual resolution (empirically upgrades guards on +2.0R missed winners).
+        2. Evaluates ModelGovernanceEngine rolling 20-trade safety circuit (PF >= 1.20, Max DD <= $0.75).
+        """
+        logger.info("Starting Pillar 3 Model Governance & Counterfactual Daemon (every 60s)...")
+        while self.running:
+            try:
+                await asyncio.sleep(60.0)
+                if not self.running:
+                    break
+                # 1. Counterfactual resolution check
+                from app.trading.guard_performance_auditor import GuardPerformanceAuditor
+                await GuardPerformanceAuditor.get_instance().poll_counterfactual_outcomes()
+
+                # 2. Rolling 20-trade safety circuit check
+                from app.trading.model_governance import ModelGovernanceEngine
+                ModelGovernanceEngine.get_instance().evaluate_rolling_safety_bounds()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in governance & counterfactual loop: {e}")
+
     async def start_all(self):
         """Starts all operational background layers."""
         if self.running:
@@ -188,8 +213,9 @@ class LayeredSchedulerManager:
             
         self._recon_task = asyncio.create_task(self._reconciliation_loop())
         self._maintenance_task = asyncio.create_task(self._dust_and_fee_maintenance_loop())
+        self._gov_task = asyncio.create_task(self._governance_and_counterfactual_loop())
         
-        logger.info("All layers (L2, L3, L4), Reconciliation Daemon, and 6h Dust/BNB Fee Sweeper are actively running.")
+        logger.info("All layers (L2, L3, L4), Reconciliation Daemon, Governance Safety Circuit, and Maintenance Sweepers are actively running.")
 
     async def stop_all(self):
         """Gracefully terminates background threads across all layers."""
@@ -216,6 +242,15 @@ class LayeredSchedulerManager:
             except asyncio.CancelledError:
                 pass
             self._maintenance_task = None
+
+        # Stop Governance & Counterfactual Task
+        if self._gov_task:
+            self._gov_task.cancel()
+            try:
+                await self._gov_task
+            except asyncio.CancelledError:
+                pass
+            self._gov_task = None
 
         # Stop Layer 3 Scanner
         await self.ai_engine.stop()

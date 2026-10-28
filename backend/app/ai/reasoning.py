@@ -384,6 +384,8 @@ class AiReasoningEngine:
                         original_strategy=strategy,
                         atr=atr
                     )
+                    ctx.stop_loss = stop_loss
+                    ctx.take_profit = take_profit
                     ctx.add_trace("Scanner", "PASS")
 
                     # =========================================================
@@ -398,6 +400,16 @@ class AiReasoningEngine:
                         ctx.record_rejection("MacroGuard", macro_msg, category="MACRO_RISK_LOCKDOWN")
                         continue
                     ctx.add_trace("MacroGuard", "PASS")
+
+                    # 1b. Pillar 2: Regime-Gated Strategy Bias Check
+                    regime_bias = MacroRiskOverlayEngine.get_instance().get_macro_regime_bias()
+                    macro_regime_name = regime_bias.get("macro_regime", "CHOP_RANGING")
+                    ctx.eval_cache["macro_regime_bias"] = regime_bias
+
+                    if macro_regime_name == "BEAR_DISTRIBUTION" and proposed_side == "BUY":
+                        ctx.eval_cache["regime_min_conf_override"] = regime_bias.get("buy_min_confidence", 0.85)
+                    elif macro_regime_name == "BULL_EXPANSION" and proposed_side == "SELL":
+                        ctx.eval_cache["regime_min_conf_override"] = regime_bias.get("sell_min_confidence", 0.85)
 
                     # 2. MTF Confirmation Alignment Pre-Check
                     from app.trading.mtf_confirmation import MTFConfirmationGuard
@@ -640,8 +652,19 @@ class AiReasoningEngine:
                         ctx.add_trace("ConfidenceFilter", "FAIL")
                         rejection_msg = f"Confidence filter failed ({adapted_confidence} < {dynamic_threshold})"
                         ctx.record_rejection("ConfidenceFilter", rejection_msg, category="CONFIDENCE_FILTER")
-                        continue
                     ctx.add_trace("ConfidenceFilter", "PASS")
+
+                    # Pillar 2: Regime-Gated High Conviction Threshold Enforcement
+                    regime_min_req = ctx.eval_cache.get("regime_min_conf_override")
+                    if regime_min_req and adapted_confidence < regime_min_req:
+                        ctx.add_trace("RegimeGatekeeper", "FAIL")
+                        rejection_msg = (
+                            f"Counter-trend {proposed_side} in {macro_regime_name} regime suppressed "
+                            f"(confidence {adapted_confidence:.2f} < {regime_min_req:.2f} required high-conviction threshold)"
+                        )
+                        ctx.record_rejection("RegimeGatekeeper", rejection_msg, category="REGIME_BIAS_MISMATCH")
+                        continue
+                    ctx.add_trace("RegimeGatekeeper", "PASS")
 
                     # Check Thesis Persistence Layer (suppress contradictory noise on active positions)
                     from app.trading.thesis_persistence import ThesisPersistenceEngine

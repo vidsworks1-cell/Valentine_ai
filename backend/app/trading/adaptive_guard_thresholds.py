@@ -109,6 +109,33 @@ class AdaptiveGuardThresholds:
 
         return round(effective, 2)
 
+    def upgrade_guard_threshold(self, guard_name: str, reason: str = ""):
+        """
+        Pillar 3 Counterfactual Upgrade:
+        When a guard caused a Missed Winner (+2.0R runner), empirically switches or relaxes
+        its rejection threshold by a safe bounded amount so profitable runners are not blocked.
+        """
+        mapping = {
+            "ConfidenceFilter": ("confidence_threshold", 0.02, 0.65),
+            "MTFGuard": ("mtf_alignment_pct", 2.0, 55.0),
+            "VolumeLiquidityGuard": ("volume_confluence_score", 2.0, 60.0),
+            "MacroGuard": ("macro_risk_limit", 2.0, 60.0),
+            "RegimeGatekeeper": ("confidence_threshold", 0.02, 0.70)
+        }
+        entry = mapping.get(guard_name)
+        if not entry:
+            logger.info(f"🧠 [GUARD UPGRADE NOTICE] Guard '{guard_name}' registered missed winner ({reason}).")
+            return
+
+        param_name, delta, floor_val = entry
+        current_val = self._baseline_thresholds.get(param_name, 70.0)
+        new_val = round(max(floor_val, current_val - delta), 2)
+        self._baseline_thresholds[param_name] = new_val
+        logger.info(
+            f"⭐ [GUARD THRESHOLD EMPIRICALLY UPGRADED] '{guard_name}' threshold relaxed: "
+            f"{param_name} ({current_val} -> {new_val}). Reason: {reason}"
+        )
+
     def update_regime_threshold(self, regime: str, guard_param: str, new_value: float):
         """Allows online learning algorithms to update learned regime threshold parameters."""
         regime_upper = regime.upper()

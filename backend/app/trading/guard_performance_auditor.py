@@ -198,7 +198,16 @@ class GuardPerformanceAuditor:
                     r.counterfactual_pnl_r = rrr
                     tallies["false_reject"] += 1
                     if rrr >= 2.0:
+                        r.classification = "MISSED_WINNER"
                         tallies["missed_winners"] += 1
+                        try:
+                            from app.trading.adaptive_guard_thresholds import AdaptiveGuardThresholds
+                            AdaptiveGuardThresholds.get_instance().upgrade_guard_threshold(
+                                guard_name=r.guard_name,
+                                reason=f"Counterfactual runner reached +{rrr:.2f}R on {r.symbol}"
+                            )
+                        except Exception as up_err:
+                            logger.debug(f"Failed upgrading guard threshold on missed winner: {up_err}")
                 else:
                     # Inconclusive/choppy: classified as safe preservation
                     r.classification = "GOOD_REJECT"
@@ -211,6 +220,54 @@ class GuardPerformanceAuditor:
                     f"(Counterfactual R: {r.counterfactual_pnl_r:+.2f}R). Guard: {r.guard_name}."
                 )
                 break
+
+    async def poll_counterfactual_outcomes(self):
+        """
+        Pillar 3: Active Counterfactual Tracking Daemon (2-Hour Window)
+        Monitors rejected trades against live price feeds in PriceCache:
+        - If rejected trade would have reached +2.0R TP (Missed Winner):
+          Upgrades the guard threshold so it stops blocking profitable runners.
+        - If rejected trade hit SL (Good Reject):
+          Confirms capital protection and reinforces guard credibility.
+        - Expires neutral after 2 hours (7200 seconds).
+        """
+        now = time.time()
+        try:
+            from app.workers.price_cache import PriceCache
+            cache = PriceCache.get_instance_sync()
+        except Exception:
+            return
+
+        evaluated_any = False
+        for r in list(self._records):
+            if r.evaluated:
+                continue
+
+            age_sec = now - r.timestamp
+            cur_price = cache.get_price(r.symbol)
+            if not cur_price or cur_price <= 0.0:
+                if age_sec > 7200:
+                    r.evaluated = True
+                    r.classification = "EXPIRED_NEUTRAL"
+                    evaluated_any = True
+                continue
+
+            hi = cache.get_high_24h(r.symbol) or cur_price
+            lo = cache.get_low_24h(r.symbol) or cur_price
+
+            hit_tp = (r.side == "BUY" and cur_price >= r.take_profit) or (r.side == "SELL" and cur_price <= r.take_profit)
+            hit_sl = (r.side == "BUY" and cur_price <= r.stop_loss) or (r.side == "SELL" and cur_price >= r.stop_loss)
+
+            if hit_tp or hit_sl:
+                self.evaluate_counterfactual(r.signal_id, subsequent_market_high=hi, subsequent_market_low=lo)
+                evaluated_any = True
+            elif age_sec > 7200:
+                r.evaluated = True
+                r.classification = "EXPIRED_NEUTRAL"
+                evaluated_any = True
+
+        if evaluated_any:
+            self._save_state()
 
     def get_guard_precision_report(self) -> Dict[str, Any]:
         """Calculates institutional precision scores for every guard."""

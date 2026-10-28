@@ -190,3 +190,78 @@ class MacroRiskOverlayEngine:
         if ctx is not None and hasattr(ctx, "eval_cache"):
             ctx.eval_cache["macro_risk"] = res
         return res
+
+    def get_macro_regime_bias(self) -> Dict[str, Any]:
+        """
+        Pillar 2: Regime-Gated Strategy Execution
+        Consults the Higher Timeframe Macro Market Regime (BTC & ETH 4h/24h position & momentum):
+        - BEAR_DISTRIBUTION: Market in distribution. SELL continuation given priority (1.0x).
+          Counter-trend BUY breakouts require institutional high-conviction (confidence >= 0.85)
+          and conservative sizing (0.6x).
+        - BULL_EXPANSION: Market in expansion. BUY breakouts given priority (1.0x).
+          Counter-trend SELL scalps require high-conviction (confidence >= 0.85).
+        - CHOP_RANGING: Market consolidating. Scaled to 0.6x for capital preservation.
+        """
+        cache = PriceCache.get_instance_sync()
+        btc_price = cache.get_price("BTCUSDT") or 92500.0
+        btc_high = cache.get_high_24h("BTCUSDT") or (btc_price * 1.02)
+        btc_low = cache.get_low_24h("BTCUSDT") or (btc_price * 0.98)
+
+        # 24H range location (0.0 = low of day, 1.0 = high of day)
+        range_span = max(1.0, btc_high - btc_low)
+        range_pos = (btc_price - btc_low) / range_span
+
+        # Short-term price momentum from cache history
+        hist = cache._price_history.get("BTCUSDT", [])
+        if len(hist) >= 10:
+            p_old = hist[0]
+            price_delta_pct = ((btc_price - p_old) / p_old) * 100.0
+        else:
+            price_delta_pct = 0.0
+
+        if range_pos <= 0.44 or price_delta_pct < -0.35:
+            regime = "BEAR_DISTRIBUTION"
+            dominant_side = "SELL"
+            buy_allowed = True
+            buy_min_confidence = 0.85
+            buy_size_scaler = 0.60
+            sell_allowed = True
+            sell_min_confidence = 0.70
+            sell_size_scaler = 1.0
+            summary = "Macro Bear / Distribution regime. Shorts prioritized (1.0x). Counter-trend Longs require high conviction (>=0.85)."
+        elif range_pos >= 0.58 or price_delta_pct > +0.35:
+            regime = "BULL_EXPANSION"
+            dominant_side = "BUY"
+            buy_allowed = True
+            buy_min_confidence = 0.70
+            buy_size_scaler = 1.0
+            sell_allowed = True
+            sell_min_confidence = 0.85
+            sell_size_scaler = 0.60
+            summary = "Macro Bull / Expansion regime. Longs prioritized (1.0x). Counter-trend Shorts require high conviction (>=0.85)."
+        else:
+            regime = "CHOP_RANGING"
+            dominant_side = "NEUTRAL"
+            buy_allowed = True
+            buy_min_confidence = 0.78
+            buy_size_scaler = 0.65
+            sell_allowed = True
+            sell_min_confidence = 0.78
+            sell_size_scaler = 0.65
+            summary = "Macro Consolidation / Chop regime. Capital preservation active (0.65x position sizing)."
+
+        return {
+            "macro_regime": regime,
+            "dominant_side": dominant_side,
+            "btc_price": btc_price,
+            "btc_range_position": round(range_pos, 3),
+            "btc_momentum_delta_pct": round(price_delta_pct, 2),
+            "buy_allowed": buy_allowed,
+            "buy_min_confidence": buy_min_confidence,
+            "buy_size_scaler": buy_size_scaler,
+            "sell_allowed": sell_allowed,
+            "sell_min_confidence": sell_min_confidence,
+            "sell_size_scaler": sell_size_scaler,
+            "summary": summary
+        }
+
