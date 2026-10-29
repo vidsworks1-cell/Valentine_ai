@@ -10,6 +10,7 @@ class PriceCache:
     def __init__(self):
         self._prices: Dict[str, float] = {}
         self._price_history: Dict[str, list] = {}
+        self._price_timeline: Dict[str, list] = {}
         self._updates_count: Dict[str, int] = {}
         self._symbol_last_update_time: Dict[str, float] = {}
         self._symbol_synchronized: Dict[str, bool] = {}
@@ -49,6 +50,16 @@ class PriceCache:
         inst._price_history[sym].append(price)
         if len(inst._price_history[sym]) > 100:
             inst._price_history[sym].pop(0)
+
+        # Record timestamped price history for 1-hour rolling lookback
+        if not hasattr(inst, "_price_timeline"):
+            inst._price_timeline = {}
+        if sym not in inst._price_timeline:
+            inst._price_timeline[sym] = []
+        inst._price_timeline[sym].append((now, price))
+        if len(inst._price_timeline[sym]) > 300:
+            cutoff = now - 7200.0
+            inst._price_timeline[sym] = [item for item in inst._price_timeline[sym] if item[0] >= cutoff]
 
         # Dynamic live high/low tracking as ticks stream in
         if sym in inst._high_24h and price > inst._high_24h[sym]:
@@ -262,6 +273,47 @@ class PriceCache:
             return val
         px = inst.get_price(sym)
         return (px * 0.985) if px > 0.0 else None
+
+    @classmethod
+    def get_price_change_1h(cls, symbol: str) -> float:
+        """
+        Returns % price change over the last 1 hour (3600s).
+        Uses rolling timeline snapshots, or falls back to oldest available price.
+        """
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        timeline = getattr(inst, "_price_timeline", {}).get(sym, [])
+        cur_px = inst.get_price(sym)
+        if not timeline or cur_px <= 0.0:
+            return 0.0
+        now = time.time()
+        cutoff_1h = now - 3600.0
+        # Select price closest to or before 1h ago
+        p_ref = timeline[0][1]
+        for ts, px in timeline:
+            if ts <= cutoff_1h:
+                p_ref = px
+            else:
+                break
+        if p_ref <= 0.0:
+            return 0.0
+        return round(((cur_px - p_ref) / p_ref) * 100.0, 3)
+
+    @classmethod
+    def get_high_low_1h(cls, symbol: str) -> Tuple[float, float]:
+        """Returns (high_1h, low_1h) over the last 1 hour, or dynamic fallback."""
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        timeline = getattr(inst, "_price_timeline", {}).get(sym, [])
+        cur_px = inst.get_price(sym)
+        if not timeline or cur_px <= 0.0:
+            return cur_px, cur_px
+        now = time.time()
+        cutoff_1h = now - 3600.0
+        recent = [px for ts, px in timeline if ts >= cutoff_1h]
+        if not recent:
+            recent = [cur_px]
+        return max(recent), min(recent)
 
     @classmethod
     def get_update_tally(cls, symbol: str) -> int:

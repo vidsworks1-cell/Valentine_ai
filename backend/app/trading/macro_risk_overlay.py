@@ -1,5 +1,8 @@
 import logging
 import asyncio
+import time
+import urllib.request
+import json
 from typing import Dict, Any, Tuple, Optional
 from datetime import datetime, timezone
 from app.workers.price_cache import PriceCache
@@ -25,6 +28,8 @@ class MacroRiskOverlayEngine:
     def __init__(self):
         self._manual_event_lockdown: bool = False
         self._lockdown_reason: Optional[str] = None
+        self._cached_1h_metrics: Dict[str, Any] = {}
+        self._last_1h_fetch: float = 0.0
 
     @classmethod
     def get_instance(cls) -> 'MacroRiskOverlayEngine':
@@ -191,35 +196,103 @@ class MacroRiskOverlayEngine:
             ctx.eval_cache["macro_risk"] = res
         return res
 
+    def _get_1h_kline_metrics(self) -> Dict[str, Any]:
+        """
+        Fetches official 1-hour candle metrics for BTCUSDT and ETHUSDT.
+        Cached in-memory for 60 seconds to ensure zero latency during high-frequency trading cycles.
+        """
+        now = time.time()
+        if self._cached_1h_metrics and (now - self._last_1h_fetch < 60.0):
+            return self._cached_1h_metrics
+
+        cache = PriceCache.get_instance_sync()
+        btc_fallback_px = cache.get_price("BTCUSDT") or 92500.0
+        eth_fallback_px = cache.get_price("ETHUSDT") or 2500.0
+
+        metrics = {
+            "btc_1h_change_pct": cache.get_price_change_1h("BTCUSDT"),
+            "btc_1h_high": btc_fallback_px * 1.005,
+            "btc_1h_low": btc_fallback_px * 0.995,
+            "eth_1h_change_pct": cache.get_price_change_1h("ETHUSDT"),
+            "eth_1h_high": eth_fallback_px * 1.005,
+            "eth_1h_low": eth_fallback_px * 0.995,
+            "source": "price_cache"
+        }
+
+        try:
+            for sym in ["BTCUSDT", "ETHUSDT"]:
+                url = f"https://fapi.binance.com/fapi/v1/klines?symbol={sym}&interval=1h&limit=2"
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=1.8) as resp:
+                    if resp.status == 200:
+                        raw = json.loads(resp.read().decode("utf-8"))
+                        if raw and len(raw) > 0:
+                            k = raw[-1]
+                            o, h, l, c = float(k[1]), float(k[2]), float(k[3]), float(k[4])
+                            pct = round(((c - o) / o) * 100.0, 3) if o > 0 else 0.0
+                            prefix = "btc" if sym.startswith("BTC") else "eth"
+                            metrics[f"{prefix}_1h_change_pct"] = pct
+                            metrics[f"{prefix}_1h_high"] = h
+                            metrics[f"{prefix}_1h_low"] = l
+                            metrics["source"] = "binance_1h_kline"
+            self._cached_1h_metrics = metrics
+            self._last_1h_fetch = now
+        except Exception as e:
+            logger.debug(f"1h kline fetch fell back to in-memory cache: {e}")
+            if not self._cached_1h_metrics:
+                self._cached_1h_metrics = metrics
+                self._last_1h_fetch = now
+
+        return self._cached_1h_metrics
+
     def get_macro_regime_bias(self) -> Dict[str, Any]:
         """
-        Pillar 2: Regime-Gated Strategy Execution
-        Consults the Higher Timeframe Macro Market Regime (BTC & ETH 4h/24h position & momentum):
-        - BEAR_DISTRIBUTION: Market in distribution. SELL continuation given priority (1.0x).
-          Counter-trend BUY breakouts require institutional high-conviction (confidence >= 0.85)
-          and conservative sizing (0.6x).
-        - BULL_EXPANSION: Market in expansion. BUY breakouts given priority (1.0x).
-          Counter-trend SELL scalps require high-conviction (confidence >= 0.85).
-        - CHOP_RANGING: Market consolidating. Scaled to 0.6x for capital preservation.
+        Pillar 2: Regime-Gated Strategy Execution (1-Hour Confluence for BTC & ETH)
+        Evaluates the active 1-hour macro market structure rather than lagging 24h metrics:
+        - Evaluates responsive 1-hour price action for BOTH BTC and ETH.
+        - Checks moving average trend bias & RSI from PriceCache technical analysis.
+        - BULL_EXPANSION: 1h momentum positive (> +0.25%) or bullish EMA alignment.
+          Long breakout continuation prioritized (1.0x); counter-trend Shorts throttled (0.6x, conf >= 0.85).
+        - BEAR_DISTRIBUTION: 1h momentum negative (< -0.25%) or bearish EMA alignment.
+          Short continuation prioritized (1.0x); counter-trend Longs throttled (0.6x, conf >= 0.85).
+        - CHOP_RANGING: 1h momentum flat or mixed. Scaled to 0.65x for capital preservation.
         """
         cache = PriceCache.get_instance_sync()
         btc_price = cache.get_price("BTCUSDT") or 92500.0
-        btc_high = getattr(cache, "get_high_24h", lambda s: None)("BTCUSDT") or getattr(cache, "_high_24h", {}).get("BTCUSDT") or (btc_price * 1.02)
-        btc_low = getattr(cache, "get_low_24h", lambda s: None)("BTCUSDT") or getattr(cache, "_low_24h", {}).get("BTCUSDT") or (btc_price * 0.98)
+        eth_price = cache.get_price("ETHUSDT") or 2500.0
 
-        # 24H range location (0.0 = low of day, 1.0 = high of day)
-        range_span = max(1.0, btc_high - btc_low)
-        range_pos = (btc_price - btc_low) / range_span
+        kline_data = self._get_1h_kline_metrics()
+        btc_1h_pct = kline_data.get("btc_1h_change_pct", 0.0)
+        eth_1h_pct = kline_data.get("eth_1h_change_pct", 0.0)
+        btc_1h_high = kline_data.get("btc_1h_high", btc_price * 1.005)
+        btc_1h_low = kline_data.get("btc_1h_low", btc_price * 0.995)
 
-        # Short-term price momentum from cache history
-        hist = cache._price_history.get("BTCUSDT", [])
-        if len(hist) >= 10:
-            p_old = hist[0]
-            price_delta_pct = ((btc_price - p_old) / p_old) * 100.0
-        else:
-            price_delta_pct = 0.0
+        # 1-Hour range location (0.0 = low of hour, 1.0 = high of hour)
+        range_span = max(0.5, btc_1h_high - btc_1h_low)
+        range_pos_1h = max(0.0, min(1.0, (btc_price - btc_1h_low) / range_span))
 
-        if range_pos <= 0.44 or price_delta_pct < -0.35:
+        # Technical Analysis trend bias from rolling tick cache
+        btc_ta = cache.get_technical_analysis("BTCUSDT")
+        eth_ta = cache.get_technical_analysis("ETHUSDT")
+        btc_bias = btc_ta.get("trend_bias", "NEUTRAL")
+        eth_bias = eth_ta.get("trend_bias", "NEUTRAL")
+
+        # Composite 1-hour macro momentum (60% BTC, 40% ETH)
+        macro_1h_momentum = round((btc_1h_pct * 0.60) + (eth_1h_pct * 0.40), 3)
+
+        # Classify regime based on responsive 1-hour structure
+        is_bullish_1h = (
+            macro_1h_momentum >= 0.25
+            or (btc_bias == "BULLISH" and macro_1h_momentum >= 0.0)
+            or (range_pos_1h >= 0.68 and macro_1h_momentum > 0.0)
+        )
+        is_bearish_1h = (
+            macro_1h_momentum <= -0.25
+            or (btc_bias == "BEARISH" and macro_1h_momentum <= 0.0)
+            or (range_pos_1h <= 0.32 and macro_1h_momentum < 0.0)
+        )
+
+        if is_bearish_1h and not is_bullish_1h:
             regime = "BEAR_DISTRIBUTION"
             dominant_side = "SELL"
             buy_allowed = True
@@ -228,8 +301,11 @@ class MacroRiskOverlayEngine:
             sell_allowed = True
             sell_min_confidence = 0.70
             sell_size_scaler = 1.0
-            summary = "Macro Bear / Distribution regime. Shorts prioritized (1.0x). Counter-trend Longs require high conviction (>=0.85)."
-        elif range_pos >= 0.58 or price_delta_pct > +0.35:
+            summary = (
+                f"1H Macro Bear Distribution (BTC 1h: {btc_1h_pct:+.2f}%, ETH 1h: {eth_1h_pct:+.2f}%, "
+                f"Comp: {macro_1h_momentum:+.2f}%). Shorts prioritized (1.0x). Longs require high conviction (>=0.85)."
+            )
+        elif is_bullish_1h and not is_bearish_1h:
             regime = "BULL_EXPANSION"
             dominant_side = "BUY"
             buy_allowed = True
@@ -238,7 +314,10 @@ class MacroRiskOverlayEngine:
             sell_allowed = True
             sell_min_confidence = 0.85
             sell_size_scaler = 0.60
-            summary = "Macro Bull / Expansion regime. Longs prioritized (1.0x). Counter-trend Shorts require high conviction (>=0.85)."
+            summary = (
+                f"1H Macro Bull Expansion (BTC 1h: {btc_1h_pct:+.2f}%, ETH 1h: {eth_1h_pct:+.2f}%, "
+                f"Comp: {macro_1h_momentum:+.2f}%). Longs prioritized (1.0x). Shorts require high conviction (>=0.85)."
+            )
         else:
             regime = "CHOP_RANGING"
             dominant_side = "NEUTRAL"
@@ -248,14 +327,22 @@ class MacroRiskOverlayEngine:
             sell_allowed = True
             sell_min_confidence = 0.78
             sell_size_scaler = 0.65
-            summary = "Macro Consolidation / Chop regime. Capital preservation active (0.65x position sizing)."
+            summary = (
+                f"1H Macro Consolidation / Chop (BTC 1h: {btc_1h_pct:+.2f}%, ETH 1h: {eth_1h_pct:+.2f}%, "
+                f"Comp: {macro_1h_momentum:+.2f}%). Capital preservation active (0.65x position sizing)."
+            )
 
         return {
             "macro_regime": regime,
             "dominant_side": dominant_side,
             "btc_price": btc_price,
-            "btc_range_position": round(range_pos, 3),
-            "btc_momentum_delta_pct": round(price_delta_pct, 2),
+            "eth_price": eth_price,
+            "btc_1h_change_pct": btc_1h_pct,
+            "eth_1h_change_pct": eth_1h_pct,
+            "macro_1h_momentum_pct": macro_1h_momentum,
+            "btc_1h_range_position": round(range_pos_1h, 3),
+            "btc_trend_bias": btc_bias,
+            "eth_trend_bias": eth_bias,
             "buy_allowed": buy_allowed,
             "buy_min_confidence": buy_min_confidence,
             "buy_size_scaler": buy_size_scaler,

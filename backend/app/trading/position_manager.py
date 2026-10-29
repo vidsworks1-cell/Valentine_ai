@@ -343,7 +343,59 @@ class PositionManager:
                                     except Exception:
                                         pass
 
-                        # B. Wish 2: Adaptive Volatility-Clustered Trailing & Chandelier Engine
+                        # B. Macro Inversion Defense:
+                        # If the 1-hour macro market regime turns abruptly against an active position:
+                        # 1. If the position is in positive territory (>= +0.20%), instantly locks breakeven.
+                        # 2. If flat or underwater, tightens stop to 0.65x ATR to prevent full -1.0R drawdown during a macro waterfall.
+                        try:
+                            from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
+                            macro_regime_data = MacroRiskOverlayEngine.get_instance().get_macro_regime_bias()
+                            macro_reg = macro_regime_data.get("macro_regime", "CHOP_RANGING")
+                            
+                            if side == "BUY" and macro_reg == "BEAR_DISTRIBUTION":
+                                if not pos.get("macro_inversion_defended", False):
+                                    pos["macro_inversion_defended"] = True
+                                    if favorable_move_pct >= 0.20:
+                                        be_level = _round_price(entry * 1.0020)
+                                        if float(pos.get("trailing_stop", 0.0)) < be_level:
+                                            pos["trailing_stop"] = be_level
+                                            pos["breakeven_activated"] = True
+                                            logger.warning(
+                                                f"🛡️ [MACRO INVERSION DEFENSE] Trade {trade_id} {symbol} BUY: 1H Macro flipped to BEAR_DISTRIBUTION! "
+                                                f"Instantly locked Stop at Breakeven {be_level} (+0.20%) to defend profits."
+                                            )
+                                    else:
+                                        tight_sl = _round_price(current_price - (atr * 0.65))
+                                        if tight_sl > float(pos.get("stop_loss", 0.0)) and tight_sl > float(pos.get("trailing_stop", 0.0)):
+                                            pos["trailing_stop"] = tight_sl
+                                            logger.warning(
+                                                f"🛡️ [MACRO INVERSION DEFENSE] Trade {trade_id} {symbol} BUY: 1H Macro flipped to BEAR_DISTRIBUTION! "
+                                                f"Tightened Stop to {tight_sl} (-0.65x ATR) to cap macro waterfall risk."
+                                            )
+                            elif side == "SELL" and macro_reg == "BULL_EXPANSION":
+                                if not pos.get("macro_inversion_defended", False):
+                                    pos["macro_inversion_defended"] = True
+                                    if favorable_move_pct >= 0.20:
+                                        be_level = _round_price(entry * 0.9980)
+                                        if float(pos.get("trailing_stop", 0.0)) > be_level or float(pos.get("trailing_stop", 0.0)) == 0.0:
+                                            pos["trailing_stop"] = be_level
+                                            pos["breakeven_activated"] = True
+                                            logger.warning(
+                                                f"🛡️ [MACRO INVERSION DEFENSE] Trade {trade_id} {symbol} SELL: 1H Macro flipped to BULL_EXPANSION! "
+                                                f"Instantly locked Stop at Breakeven {be_level} (+0.20%) to defend profits."
+                                            )
+                                    else:
+                                        tight_sl = _round_price(current_price + (atr * 0.65))
+                                        if tight_sl < float(pos.get("stop_loss", 0.0)) and (float(pos.get("trailing_stop", 0.0)) == 0.0 or tight_sl < float(pos.get("trailing_stop", 0.0))):
+                                            pos["trailing_stop"] = tight_sl
+                                            logger.warning(
+                                                f"🛡️ [MACRO INVERSION DEFENSE] Trade {trade_id} {symbol} SELL: 1H Macro flipped to BULL_EXPANSION! "
+                                                f"Tightened Stop to {tight_sl} (+0.65x ATR) to cap macro short squeeze risk."
+                                            )
+                        except Exception as macro_err:
+                            logger.debug(f"Macro Inversion Defense check failed: {macro_err}")
+
+                        # C. Wish 2: Adaptive Volatility-Clustered Trailing & Chandelier Engine
                         try:
                             from app.trading.adaptive_trailing_engine import AdaptiveTrailingEngine
                             from app.trading.orderbook_l2_engine import OrderBookL2Engine
