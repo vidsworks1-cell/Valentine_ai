@@ -226,6 +226,7 @@ class PriceCache:
         inst = cls.get_instance_sync()
         STABLECOIN_PREFIXES = ("USDC", "FDUSD", "TUSD", "BUSD", "EUR", "DAI", "USDP", "AEUR", "USD1", "UUSDT")
         MEME_PREFIXES = ("PUMP", "PEPE", "1000PEPE", "SHIB", "1000SHIB", "FLOKI", "1000FLOKI", "BONK", "1000BONK", "MEME", "WIF", "DOGS", "BOME")
+        tracked = []
 
         for sym, px in inst._prices.items():
             if not sym.endswith("USDT") or px <= 0:

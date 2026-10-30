@@ -1295,6 +1295,7 @@ class PositionManager:
                             realized_r=r_mult,
                             pnl=pnl
                         )
+                        time_open_sec = holding_minutes * 60.0
                         ContextualTradeMemory.get_instance().record_completed_trade(
                             trade_id=str(trade_id),
                             symbol=symbol,
