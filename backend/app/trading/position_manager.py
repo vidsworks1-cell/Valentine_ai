@@ -550,10 +550,21 @@ class PositionManager:
                                             break
                                         else:
                                             close_size = round(size * close_pct, 4)
+                                            remaining_size = round(float(pos.get("position_size", 0.0)) - close_size, 4)
+                                            remaining_notional = remaining_size * current_price
+
+                                            # Dust Prevention Guard: If remaining size is below $5.05 Binance limit,
+                                            # close 100% to take full profits and avoid leaving untradeable microscopic fragments
+                                            if remaining_notional < 5.05:
+                                                logger.info(f"⚡ [CLEAN EXIT] Remaining notional (${remaining_notional:.2f} < $5.05) would leave sub-penny dust. Closing 100% full position cleanly.")
+                                                await self._close_position(trade_id, current_price, f"{stage['label']}_FULL_CLEAN")
+                                                stage_triggered = True
+                                                break
+
                                             if close_size > 0 and float(pos.get("position_size", 0.0)) > close_size:
                                                 await self._partial_close_position(trade_id, current_price, close_size, stage["label"])
                                                 # Reduce active position size
-                                                pos["position_size"] = round(float(pos.get("position_size", 0.0)) - close_size, 4)
+                                                pos["position_size"] = remaining_size
                                                 
                                                 # Lock in profits: raise stop loss to entry (break-even)
                                                 if side == "BUY":

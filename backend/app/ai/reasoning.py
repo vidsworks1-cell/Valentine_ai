@@ -408,10 +408,18 @@ class AiReasoningEngine:
                     macro_regime_name = regime_bias.get("macro_regime", "CHOP_RANGING")
                     ctx.eval_cache["macro_regime_bias"] = regime_bias
 
+                    # Hard Macro Directional Gate: If macro regime forbids the direction, abort immediately
+                    if proposed_side == "BUY" and not regime_bias.get("buy_allowed", True):
+                        ctx.record_rejection("RegimeGatekeeper", f"Longs strictly blocked in {macro_regime_name} regime. Trend is down.", category="REGIME_BIAS_MISMATCH")
+                        continue
+                    if proposed_side == "SELL" and not regime_bias.get("sell_allowed", True):
+                        ctx.record_rejection("RegimeGatekeeper", f"Shorts strictly blocked in {macro_regime_name} regime. Trend is up.", category="REGIME_BIAS_MISMATCH")
+                        continue
+
                     if macro_regime_name == "BEAR_DISTRIBUTION" and proposed_side == "BUY":
-                        ctx.eval_cache["regime_min_conf_override"] = regime_bias.get("buy_min_confidence", 0.85)
+                        ctx.eval_cache["regime_min_conf_override"] = 0.95
                     elif macro_regime_name == "BULL_EXPANSION" and proposed_side == "SELL":
-                        ctx.eval_cache["regime_min_conf_override"] = regime_bias.get("sell_min_confidence", 0.85)
+                        ctx.eval_cache["regime_min_conf_override"] = 0.95
                     elif macro_regime_name == "CHOP_RANGING":
                         # In macro consolidation, majors (BTC/ETH) can trade mean reversion at 0.78,
                         # but altcoins and mid-caps require tighter conviction (>=0.82) to avoid false breakouts

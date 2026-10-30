@@ -681,13 +681,19 @@ class OrderManager:
                     factor = 10 ** prec
                     position_size = round(position_size, prec)
 
-                    # In LIVE/TESTNET Binance Futures: Pre-configure ISOLATED margin and dynamic persona leverage (12x-15x)
+                    # In LIVE/TESTNET Binance Futures: Dynamic high-conviction leverage (15x-20x) and accelerated margin scaling
                     from app.trading.trading_persona import TradingPersonaPresetEngine
                     active_persona = TradingPersonaPresetEngine.get_instance().get_active_persona()
-                    max_lev = int(active_persona.get("max_leverage", 15))
-                    min_lev = int(active_persona.get("min_leverage", 12))
                     conf_score = float(opportunity.get("confidence_score", opportunity.get("confidence", 0.75)))
-                    target_leverage = max_lev if conf_score >= 0.76 else min_lev
+                    meta_conviction = float(opportunity.get("meta_conviction_score", 70.0))
+
+                    # Dynamic leverage: 20x for high conviction (>=80), 18x for moderate (>=75), 15x baseline
+                    if conf_score >= 0.80 or meta_conviction >= 80.0:
+                        target_leverage = 20
+                    elif conf_score >= 0.74 or meta_conviction >= 74.0:
+                        target_leverage = 18
+                    else:
+                        target_leverage = 15
 
                     if trading_mode in ["TESTNET", "LIVE"]:
                         try:
@@ -697,26 +703,47 @@ class OrderManager:
                             logger.warning(f"Futures margin/leverage setup notice for {opportunity['symbol']}: {fset_err}")
 
                         notional_val = position_size * price
-                        target_min_notional = max(5.05, min_notional_req + 0.05)
+
+                        # High-Conviction Accelerated Growth:
+                        # On accounts with balance < $15.00, scale the position target notional from $5.05 to $10.00 - $14.00
+                        # on high conviction setups, using $0.70 - $1.00 margin instead of bare minimum $0.33.
+                        if balance >= 2.50:
+                            if conf_score >= 0.78 or meta_conviction >= 78.0:
+                                # Target $12.00 notional (~$0.60 - $0.80 margin)
+                                accelerated_notional = min(balance * float(target_leverage) * 0.28, 14.0)
+                                target_min_notional = max(5.05, accelerated_notional)
+                            else:
+                                target_min_notional = max(5.05, min_notional_req + 0.05)
+                        else:
+                            target_min_notional = max(5.05, min_notional_req + 0.05)
+
                         if notional_val < target_min_notional:
                             min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
                             req_margin = (min_target_qty * price) / float(target_leverage)
                             if balance >= req_margin:
                                 position_size = min_target_qty
-                                logger.info(f"⚡ [BINANCE FUTURES NOTIONAL ADJUSTMENT] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at {target_leverage}x) to satisfy Futures MIN_NOTIONAL (${min_notional_req:.2f}).")
+                                logger.info(f"⚡ [ACCELERATED GROWTH SIZING] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at {target_leverage}x). High-conviction margin scaling active.")
                             else:
-                                logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available Futures margin (${balance:.2f} USDT) is insufficient for minimum trade margin of ${req_margin:.2f} USDT at {target_leverage}x.")
-                                ExecutionStateTracker.get_instance().transition(
-                                    symbol=opportunity["symbol"],
-                                    state=ExecutionState.REJECTED,
-                                    side=opportunity["side"],
-                                    stage="RISK_SIZING",
-                                    reason=f"Available Futures margin (${balance:.2f} USDT) insufficient for minimum trade (${req_margin:.2f} margin required)",
-                                    price=price,
-                                    quantity=position_size,
-                                    trading_mode=trading_mode
-                                )
-                                return
+                                # Fall back to minimum legal notional if balance cannot cover accelerated target
+                                base_target_notional = max(5.05, min_notional_req + 0.05)
+                                min_target_qty = math.ceil((base_target_notional / price) * factor) / float(factor)
+                                req_margin = (min_target_qty * price) / float(target_leverage)
+                                if balance >= req_margin:
+                                    position_size = min_target_qty
+                                    logger.info(f"⚡ [MIN NOTIONAL FALLBACK] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at {target_leverage}x).")
+                                else:
+                                    logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available Futures margin (${balance:.2f} USDT) is insufficient for trade margin of ${req_margin:.2f} USDT at {target_leverage}x.")
+                                    ExecutionStateTracker.get_instance().transition(
+                                        symbol=opportunity["symbol"],
+                                        state=ExecutionState.REJECTED,
+                                        side=opportunity["side"],
+                                        stage="RISK_SIZING",
+                                        reason=f"Available Futures margin (${balance:.2f} USDT) insufficient for trade (${req_margin:.2f} margin required)",
+                                        price=price,
+                                        quantity=position_size,
+                                        trading_mode=trading_mode
+                                    )
+                                    return
                 else:
                     filters = await connector.get_symbol_lot_size_filters(opportunity["symbol"], trading_mode)
                     prec = filters.get("precision", 4)
@@ -945,14 +972,14 @@ class OrderManager:
                         # Auto-cooldown symbols rejected by exchange-level constraints (-4411 agreement, -2027 leverage tier)
                         if err_code in [-4411, -2027, -4003]:
                             try:
-                                from app.ai.reasoning import AIReasoningEngine
-                                AIReasoningEngine.get_instance().set_cooldown(
+                                from app.ai.reasoning import AiReasoningEngine
+                                AiReasoningEngine.get_instance().set_cooldown(
                                     opportunity["symbol"],
                                     "ALL",
                                     category="EXCHANGE_REJECTED",
                                     reason=f"Binance code {err_code}: {err_msg}",
                                     price=price,
-                                    duration_seconds=1800.0
+                                    duration_seconds=86400.0  # 24 hour cooldown
                                 )
                             except Exception:
                                 pass

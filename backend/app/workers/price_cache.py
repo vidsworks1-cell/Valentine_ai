@@ -224,14 +224,30 @@ class PriceCache:
         Enforces a strict $30M daily quote volume floor to filter out illiquid mid-caps with spread friction.
         """
         inst = cls.get_instance_sync()
-        tracked = []
+        STABLECOIN_PREFIXES = ("USDC", "FDUSD", "TUSD", "BUSD", "EUR", "DAI", "USDP", "AEUR", "USD1", "UUSDT")
+        MEME_PREFIXES = ("PUMP", "PEPE", "1000PEPE", "SHIB", "1000SHIB", "FLOKI", "1000FLOKI", "BONK", "1000BONK", "MEME", "WIF", "DOGS", "BOME")
+
         for sym, px in inst._prices.items():
             if not sym.endswith("USDT") or px <= 0:
                 continue
-            # Exclude TradFi commodity contracts (Gold/Silver) requiring manual agreement signatures in Binance UI
-            if sym.startswith(("XAU", "XAG", "XAUT")):
+
+            # 1. Exclude Stablecoin / Fiat Pegged pairs (zero volatility, useless churn)
+            if sym.startswith(STABLECOIN_PREFIXES) or sym in ["USDCUSDT", "FDUSDUSDT", "TUSDUSDT", "EURUSDT", "USD1USDT"]:
                 continue
+
+            # 2. Exclude TradFi equity/commodity perpetual contracts requiring manual agreement signatures in Binance UI (-4411)
+            if sym.startswith(("XAU", "XAG", "XAUT", "KORU", "SOXL", "NVDA", "TSLA", "AAPL", "AMZN", "MSFT", "GOOG")):
+                continue
+
             vol = inst._volume_24h.get(sym, 0.0)
+
+            # 3. Higher volume floor for Meme Coins ($60M) to prevent low-liquidity wick traps
+            if sym.startswith(MEME_PREFIXES):
+                if vol >= 60_000_000.0:
+                    tracked.append((sym, vol))
+                continue
+
+            # 4. Standard crypto universe: minimum $30M volume floor or market anchors
             if vol >= min_quote_volume or sym in ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]:
                 tracked.append((sym, vol))
 
@@ -239,8 +255,8 @@ class PriceCache:
         tracked.sort(key=lambda x: x[1], reverse=True)
         result = [item[0] for item in tracked[:top_n]]
         if not result and inst._prices:
-            # Fallback if volume is still populating
-            result = [s for s in list(inst._prices.keys()) if s.endswith("USDT")][:top_n]
+            # Fallback excluding stablecoins
+            result = [s for s in list(inst._prices.keys()) if s.endswith("USDT") and not s.startswith(STABLECOIN_PREFIXES)][:top_n]
         return result
 
     @classmethod

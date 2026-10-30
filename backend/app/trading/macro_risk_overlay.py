@@ -295,15 +295,15 @@ class MacroRiskOverlayEngine:
         if is_bearish_1h and not is_bullish_1h:
             regime = "BEAR_DISTRIBUTION"
             dominant_side = "SELL"
-            buy_allowed = True
-            buy_min_confidence = 0.85
-            buy_size_scaler = 0.60
+            buy_allowed = False  # HARD BLOCK: Zero counter-trend Longs permitted when macro is dumping
+            buy_min_confidence = 0.99
+            buy_size_scaler = 0.0
             sell_allowed = True
             sell_min_confidence = 0.70
             sell_size_scaler = 1.0
             summary = (
                 f"1H Macro Bear Distribution (BTC 1h: {btc_1h_pct:+.2f}%, ETH 1h: {eth_1h_pct:+.2f}%, "
-                f"Comp: {macro_1h_momentum:+.2f}%). Shorts prioritized (1.0x). Longs require high conviction (>=0.85)."
+                f"Comp: {macro_1h_momentum:+.2f}%). Shorts ONLY (1.0x). Counter-trend Longs 100% blocked."
             )
         elif is_bullish_1h and not is_bearish_1h:
             regime = "BULL_EXPANSION"
@@ -311,12 +311,12 @@ class MacroRiskOverlayEngine:
             buy_allowed = True
             buy_min_confidence = 0.70
             buy_size_scaler = 1.0
-            sell_allowed = True
-            sell_min_confidence = 0.85
-            sell_size_scaler = 0.60
+            sell_allowed = False  # HARD BLOCK: Zero counter-trend Shorts permitted when macro is pumping
+            sell_min_confidence = 0.99
+            sell_size_scaler = 0.0
             summary = (
                 f"1H Macro Bull Expansion (BTC 1h: {btc_1h_pct:+.2f}%, ETH 1h: {eth_1h_pct:+.2f}%, "
-                f"Comp: {macro_1h_momentum:+.2f}%). Longs prioritized (1.0x). Shorts require high conviction (>=0.85)."
+                f"Comp: {macro_1h_momentum:+.2f}%). Longs ONLY (1.0x). Counter-trend Shorts 100% blocked."
             )
         else:
             regime = "CHOP_RANGING"
