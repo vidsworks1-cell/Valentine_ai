@@ -1216,16 +1216,26 @@ class PositionManager:
                     except Exception as tpe_err:
                         logger.error(f"Failed to conclude thesis in ThesisPersistenceEngine: {tpe_err}")
 
-                    # Enforce 300s post-trade cooldown on closed symbol to prevent rapid churn
+                    # Enforce post-trade cooldown on closed symbol to prevent rapid churn:
+                    # - On LOSS (or consecutive cuts): 18 minutes (1080s) strict cooldown to avoid chop traps.
+                    # - On WIN / BREAKEVEN: 5 minutes (300s) cooldown to allow runner re-entries.
                     try:
                         from app.ai.reasoning import AiReasoningEngine
+                        is_loss = (outcome_type == "LOSS" or (pnl is not None and float(pnl) < -0.001))
+                        cooldown_sec = 1080.0 if is_loss else 300.0
+                        reason_msg = (
+                            f"Post-loss 18m cooldown on {symbol} to prevent rapid chop re-entry ({outcome})."
+                            if is_loss else
+                            f"Post-win 5m stabilization cooldown on {symbol} ({outcome})."
+                        )
                         AiReasoningEngine.get_instance().set_cooldown(
                             symbol=symbol,
                             side="ALL",
-                            category="POST_TRADE_COOLDOWN",
-                            duration_seconds=300.0,
-                            reason=f"Post-trade cooldown after {outcome_type} ({outcome}) to prevent rapid churn."
+                            category="POST_LOSS_COOLDOWN" if is_loss else "POST_TRADE_COOLDOWN",
+                            duration_seconds=cooldown_sec,
+                            reason=reason_msg
                         )
+                        logger.info(f"⏳ [SYMBOL COOLDOWN] {symbol}: Applied {cooldown_sec/60:.0f}m cooldown after {outcome_type} (PnL: {pnl:+.4f} USDT).")
                     except Exception as cd_err:
                         logger.debug(f"Failed to set post-trade cooldown: {cd_err}")
 

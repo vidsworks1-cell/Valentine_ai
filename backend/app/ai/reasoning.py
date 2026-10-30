@@ -34,6 +34,8 @@ class AiReasoningEngine:
         "CORRELATION_CLUSTER": 180.0,    # 180s: Wait for cluster risk to subside
         "SELF_ADAPTATION_BLOCK": 180.0,  # 180s: Strategy regime mismatch cooldown
         "DIRECTIONAL_WHIPSAW": 300.0,   # 300s: Cooldown when opposite direction signal is rejected to prevent whipsaws
+        "POST_LOSS_COOLDOWN": 1080.0,    # 1080s (18m): Post-loss anti-chop cooldown
+        "POST_TRADE_COOLDOWN": 300.0,    # 300s (5m): Post-win/breakeven dwell time
         "MARKET_DATA_STALE": 30.0,       # 30s: Short retry for price feed updates
         "EMERGENCY_SAFETY": 600.0,       # 600s (10m): Extended safety hold on system errors
         "DEFAULT": 120.0
@@ -171,8 +173,8 @@ class AiReasoningEngine:
         
         while self.running:
             try:
-                # Dynamically retrieve liquid contracts across the exchange universe (Top 70 with >= $10M 24h volume)
-                liquid_symbols = cache.get_liquid_symbols(min_quote_volume=10_000_000.0, top_n=70)
+                # Dynamically retrieve liquid contracts across the exchange universe (Top 50 with >= $30M 24h volume)
+                liquid_symbols = cache.get_liquid_symbols(min_quote_volume=30_000_000.0, top_n=50)
                 dynamic_symbols = liquid_symbols if len(liquid_symbols) >= 10 else default_baseline_symbols
 
                 # Poll cache for setups across all liquid exchange contracts
@@ -410,6 +412,12 @@ class AiReasoningEngine:
                         ctx.eval_cache["regime_min_conf_override"] = regime_bias.get("buy_min_confidence", 0.85)
                     elif macro_regime_name == "BULL_EXPANSION" and proposed_side == "SELL":
                         ctx.eval_cache["regime_min_conf_override"] = regime_bias.get("sell_min_confidence", 0.85)
+                    elif macro_regime_name == "CHOP_RANGING":
+                        # In macro consolidation, majors (BTC/ETH) can trade mean reversion at 0.78,
+                        # but altcoins and mid-caps require tighter conviction (>=0.82) to avoid false breakouts
+                        is_major = symbol.upper() in ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
+                        chop_min_conf = 0.78 if is_major else 0.82
+                        ctx.eval_cache["regime_min_conf_override"] = chop_min_conf
 
                     # 2. MTF Confirmation Alignment Pre-Check
                     from app.trading.mtf_confirmation import MTFConfirmationGuard
@@ -431,6 +439,32 @@ class AiReasoningEngine:
                         ctx.record_rejection("VolumeLiquidityGuard", vol_msg, category="VOLUME_LIQUIDITY_INSUFFICIENT")
                         continue
                     ctx.add_trace("VolumeLiquidityGuard", "PASS")
+
+                    # 4. 1-Minute Candle Breakout & RVOL Confirmation Guard (Anti-Fakeout)
+                    # Requires the 1-minute candle to close in the breakout direction with positive volume momentum
+                    m1_data = cache.get_1m_candle_metrics(symbol)
+                    rvol_surge = cache.get_volume_surge_ratio(symbol)
+                    ctx.eval_cache["1m_candle"] = m1_data
+                    ctx.eval_cache["rvol_surge"] = rvol_surge
+
+                    if m1_data.get("samples_count", 0) >= 2:
+                        candle_dir = m1_data.get("candle_direction", "NEUTRAL")
+                        close_loc = m1_data.get("close_location", 0.5)
+
+                        is_opposed = (
+                            (proposed_side == "BUY" and candle_dir == "BEARISH" and close_loc < 0.40) or
+                            (proposed_side == "SELL" and candle_dir == "BULLISH" and close_loc > 0.60)
+                        )
+                        # Weeds out false wick spikes lacking volume expansion (RVOL < 1.15 on opposed 1m tick)
+                        if is_opposed and rvol_surge < 1.15:
+                            wick_reason = (
+                                f"1M Candle Wick Rejection: Opposing 1m candle ({candle_dir}, close at {close_loc*100:.0f}% of range) "
+                                f"with weak volume delta (RVOL {rvol_surge:.2f}x < 1.15x threshold). False breakout weeded out."
+                            )
+                            ctx.record_rejection("Candle1MConfirmationGuard", wick_reason, category="FALSE_WICK_BREAKOUT")
+                            continue
+
+                    ctx.add_trace("Candle1MConfirmationGuard", "PASS")
 
                     # =========================================================
                     # PHASE 2: STOCHASTIC & EVOLUTION ENGINES (High Overhead)

@@ -218,8 +218,11 @@ class PriceCache:
 
 
     @classmethod
-    def get_liquid_symbols(cls, min_quote_volume: float = 10_000_000.0, top_n: int = 70) -> list:
-        """Returns liquid USDT contracts sorted by 24h volume across top liquid exchange universe (Top 70, min $10M volume)."""
+    def get_liquid_symbols(cls, min_quote_volume: float = 30_000_000.0, top_n: int = 50) -> list:
+        """
+        Returns liquid USDT contracts sorted by 24h volume across top liquid exchange universe.
+        Enforces a strict $30M daily quote volume floor to filter out illiquid mid-caps with spread friction.
+        """
         inst = cls.get_instance_sync()
         tracked = []
         for sym, px in inst._prices.items():
@@ -314,6 +317,58 @@ class PriceCache:
         if not recent:
             recent = [cur_px]
         return max(recent), min(recent)
+
+    @classmethod
+    def get_1m_candle_metrics(cls, symbol: str) -> Dict[str, Any]:
+        """
+        Calculates 1-minute candle confirmation metrics:
+        - open, high, low, close over the last 60 seconds of tick history.
+        - candle_change_pct: % price change across the 1m window.
+        - candle_direction: 'BULLISH' if close > open, 'BEARISH' if close < open, else 'DOJI'.
+        - close_location: position of close relative to the 1m range (0.0 to 1.0).
+        - is_breakout_confirmed: close is in top 20% for BUY or bottom 20% for SELL.
+        """
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        timeline = getattr(inst, "_price_timeline", {}).get(sym, [])
+        cur_px = inst.get_price(sym)
+        if not timeline or cur_px <= 0.0:
+            return {
+                "candle_change_pct": 0.0,
+                "candle_direction": "NEUTRAL",
+                "close_location": 0.5,
+                "is_bullish_close": True,
+                "is_bearish_close": True,
+                "samples_count": 0
+            }
+
+        now = time.time()
+        cutoff_60s = now - 60.0
+        m1_ticks = [px for ts, px in timeline if ts >= cutoff_60s]
+        if len(m1_ticks) < 2:
+            m1_ticks = [timeline[-1][1], cur_px]
+
+        o = m1_ticks[0]
+        h = max(m1_ticks)
+        l = min(m1_ticks)
+        c = m1_ticks[-1]
+
+        rng = max(1e-8, h - l)
+        close_loc = (c - l) / rng
+        change_pct = round(((c - o) / o) * 100.0, 3) if o > 0 else 0.0
+
+        return {
+            "open": o,
+            "high": h,
+            "low": l,
+            "close": c,
+            "candle_change_pct": change_pct,
+            "candle_direction": "BULLISH" if c > o else ("BEARISH" if c < o else "DOJI"),
+            "close_location": round(close_loc, 3),
+            "is_bullish_close": c > o and close_loc >= 0.55,
+            "is_bearish_close": c < o and close_loc <= 0.45,
+            "samples_count": len(m1_ticks)
+        }
 
     @classmethod
     def get_update_tally(cls, symbol: str) -> int:
