@@ -1,5 +1,6 @@
 {
   "global_trading_mode": "LIVE",
+  "trading_venue": "FUTURES",
   "emergency_stop_active": false,
-  "updated_at": "2026-08-25T07:25:00+00:00"
+  "updated_at": "2026-10-30T11:00:00+00:00"
 }

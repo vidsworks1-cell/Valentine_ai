@@ -16,3 +16,7 @@
 local.properties
 .env
 debug.keystore
+*.db
+*.sqlite
+*.sqlite3
+backend/lumina_backend.db

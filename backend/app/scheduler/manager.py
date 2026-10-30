@@ -32,7 +32,7 @@ class LayeredSchedulerManager:
         
         # Core safeguards and modes - restored from persistent config if available
         self.global_trading_mode: str = "PAPER"  # OFF, PAPER, TESTNET, LIVE
-        self.trading_venue: str = os.getenv("TRADING_VENUE", os.getenv("BINANCE_VENUE", "SPOT")).upper() # SPOT or FUTURES
+        self.trading_venue: str = os.getenv("TRADING_VENUE", os.getenv("BINANCE_VENUE", "FUTURES")).upper() # SPOT or FUTURES
         self.emergency_stop_active: bool = False
         self.load_persistent_config()
 
