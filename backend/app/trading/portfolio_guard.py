@@ -504,7 +504,7 @@ class PortfolioGuard:
                     is_hedge=True
                 )
 
-            # 4. Check Maximum Open Positions (Modulated by Market Quality Engine) & Opportunistic Alpha Position Swap
+            # 4. Check Maximum Open Positions (Modulated by Market Quality Engine & Free-Roll Slot Recycling)
             effective_max_open = self.MAX_OPEN_POSITIONS
             try:
                 from app.trading.market_quality import MarketQualityEngine
@@ -514,6 +514,13 @@ class PortfolioGuard:
                     effective_max_open = min(self.MAX_OPEN_POSITIONS, mq_cap)
             except Exception:
                 pass
+
+            # Free-Roll Slot Recycling: If active positions are already locked at Breakeven (zero downside risk),
+            # expand capacity to 4 slots for high-conviction setups without increasing portfolio heat.
+            risk_neutral_count = sum(1 for p in active_positions if p.get("breakeven_activated") or float(p.get("profit_loss", 0.0)) > 0.05)
+            if risk_neutral_count >= 1 and incoming_conf >= 0.76:
+                effective_max_open = max(effective_max_open, 4)
+                logger.info(f"💎 [FREE-ROLL SLOT RECYCLING] {risk_neutral_count} active position(s) risk-neutral. Capacity expanded to {effective_max_open} slots for high-conviction setup {symbol}.")
 
             if open_count >= effective_max_open:
                 now_ts = time.time()

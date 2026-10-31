@@ -718,16 +718,20 @@ class OrderManager:
 
                         notional_val = position_size * price
 
-                        # High-Conviction Accelerated Growth:
-                        # On accounts with balance < $15.00, scale the position target notional from $5.05 to $10.00 - $14.00
-                        # on high conviction setups, using $0.70 - $1.00 margin instead of bare minimum $0.33.
+                        # Continuous Geometric Equity Compounding:
+                        # Dynamically allocates up to 32% of available margin on high-conviction setups (>=78%),
+                        # and 20% on standard setups, allowing notional to scale smoothly as balance grows ($4 -> $10 -> $25+).
                         if balance >= 2.50:
                             if conf_score >= 0.78 or meta_conviction >= 78.0:
-                                # Target $12.00 notional (~$0.60 - $0.80 margin)
-                                accelerated_notional = min(balance * float(target_leverage) * 0.28, 14.0)
-                                target_min_notional = max(5.05, accelerated_notional)
+                                # High Conviction: Allocate up to 32% of wallet margin (e.g. $1.15 margin on $3.60 balance -> ~$23 notional at 20x)
+                                target_margin_alloc = balance * 0.32
+                                accelerated_notional = target_margin_alloc * float(target_leverage)
+                                target_min_notional = max(5.05, min(accelerated_notional, balance * float(target_leverage) * 0.45))
                             else:
-                                target_min_notional = max(5.05, min_notional_req + 0.05)
+                                # Standard Setup: Allocate up to 20% of wallet margin
+                                target_margin_alloc = balance * 0.20
+                                accelerated_notional = target_margin_alloc * float(target_leverage)
+                                target_min_notional = max(5.05, accelerated_notional)
                         else:
                             target_min_notional = max(5.05, min_notional_req + 0.05)
 
