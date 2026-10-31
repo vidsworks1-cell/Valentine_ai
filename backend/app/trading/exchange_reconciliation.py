@@ -84,23 +84,14 @@ class ExchangeReconciliationEngine:
                                 # Auto-remediate margin to ISOLATED and harmonize leverage to 15x if needed
                                 margin_type = str(p.get("marginType", "")).upper()
                                 lev_val = int(p.get("leverage", 20))
-                                if margin_type != "ISOLATED" or lev_val > 15:
+                                if margin_type != "ISOLATED":
                                     try:
-                                        # Binance returns -4048 if attempting to change margin type while an open position exists.
-                                        # Only attempt margin type change if position is zero; otherwise note it for next trade cycle.
-                                        if margin_type != "ISOLATED":
-                                            if abs(pos_amt) > 0.00001:
-                                                logger.debug(f"ℹ️ [RECONCILIATION] {sym} is currently {margin_type} with active position; cannot switch margin type until position closes.")
-                                            else:
-                                                await connector.set_futures_margin_type(sym, "ISOLATED", active_mode)
-                                        if lev_val > 15:
-                                            lev_res = await connector.set_futures_leverage(sym, 15, active_mode)
-                                            if isinstance(lev_res, dict) and int(lev_res.get("leverage", 0)) == 15:
-                                                logger.info(f"⚡ [RECONCILIATION HARMONIZATION] Harmonized {sym} leverage from {lev_val}x to 15x.")
-                                            elif isinstance(lev_res, dict) and lev_res.get("code") == -2028:
-                                                logger.debug(f"ℹ️ [RECONCILIATION] Insufficient free margin to lower {sym} leverage from {lev_val}x to 15x while position is open; keeping existing position leverage.")
+                                        if abs(pos_amt) > 0.00001:
+                                            logger.debug(f"ℹ️ [RECONCILIATION] {sym} is currently {margin_type} with active position; cannot switch margin type until position closes.")
+                                        else:
+                                            await connector.set_futures_margin_type(sym, "ISOLATED", active_mode)
                                     except Exception as rem_err:
-                                        logger.warning(f"Reconciliation margin/leverage notice for {sym}: {rem_err}")
+                                        logger.debug(f"Reconciliation margin notice for {sym}: {rem_err}")
 
                                 exchange_positions.append({
                                     "symbol": sym,
