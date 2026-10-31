@@ -274,8 +274,8 @@ class AdaptiveTrailingEngine:
             tier_label = "Tier 2 (>= +1.5R Half-Runner Lock)"
             locked_amount = risk_dist * 0.75
             floor_sl = _round_price(entry + locked_amount if side == "BUY" else entry - locked_amount)
-        elif peak_r >= 0.85:
-            # Lock Breakeven + fee buffer (+0.25%)
+        elif peak_r >= 0.50:
+            # Lock Breakeven + fee buffer (+0.25% net profit) as soon as trade reaches +0.50R (+4% to +6% ROI)
             tier_label = "Tier 1 (Breakeven + Fees)"
             fee_buffer = entry * 0.0025
             floor_sl = _round_price(entry + fee_buffer if side == "BUY" else entry - fee_buffer)

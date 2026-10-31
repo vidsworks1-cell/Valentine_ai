@@ -580,12 +580,18 @@ class PositionManager:
                         fixed_sl_val = float(pos.get("stop_loss", 0.0))
                         effective_sl = trailing_sl_val if trailing_sl_val > 0 else fixed_sl_val
                         
-                        # Spread Buffer Guard: Ensure effective SL is not placed inside the bid-ask spread (min 0.35% distance)
+                        # Spread Buffer Guard: For initial stop loss, ensure SL is not placed inside the bid-ask spread (min 0.35% below entry).
+                        # CRITICAL: If trailing stop or breakeven is already active above entry, NEVER drag it backwards below entry!
                         if entry > 0 and effective_sl > 0:
-                            if side == "BUY" and (entry - effective_sl) / entry < 0.0035:
-                                effective_sl = round(entry * 0.9965, 6)
-                            elif side == "SELL" and (effective_sl - entry) / entry < 0.0035:
-                                effective_sl = round(entry * 1.0035, 6)
+                            if trailing_sl_val <= 0:
+                                # Initial SL only: enforce minimum 0.35% distance from entry
+                                if side == "BUY" and (entry - effective_sl) / entry < 0.0035:
+                                    effective_sl = round(entry * 0.9965, 6)
+                                elif side == "SELL" and (effective_sl - entry) / entry < 0.0035:
+                                    effective_sl = round(entry * 1.0035, 6)
+                            else:
+                                # Trailing stop is active: preserve ratchet level without overriding to a losing level
+                                effective_sl = trailing_sl_val
 
                         holding_sec = time.time() - float(pos.get("opened_at", time.time()))
                         is_sl_hit = False
