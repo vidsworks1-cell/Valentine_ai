@@ -632,6 +632,20 @@ class OrderManager:
                     position_size = max(position_size, 0.0001)
                     logger.info(f"⚖️ [CONFIDENCE ADAPTIVE SIZING] Position size for {symbol} scaled from {old_size} to {position_size} ({conf_scaler:.2f}x allocation based on confidence score {conf_score:.2f})")
 
+                # High-Volatility Loss Capper:
+                # On volatile altcoins, if raw ATR stop distance exceeds 1.0% of entry price,
+                # clamp the stop-loss strictly to 0.95% to guarantee maximum loss never exceeds ~$0.05 on minimum notional.
+                stop_dist = abs(price - stop_loss)
+                stop_pct = (stop_dist / price) if price > 0 else 0.01
+                if stop_pct > 0.010:
+                    clamped_dist = price * 0.0095
+                    if opportunity["side"].upper() == "BUY":
+                        stop_loss = round(price - clamped_dist, 6)
+                    else:
+                        stop_loss = round(price + clamped_dist, 6)
+                    opportunity["stop_loss"] = stop_loss
+                    logger.info(f"🛡️ [VOLATILITY LOSS CAPPER] {opportunity['symbol']}: Wide stop ({stop_pct*100:.2f}%) clamped to 0.95% (${stop_loss}) to prevent outsized loss.")
+
                 allowed_risk_amt = balance * risk_pct
 
                 order_dict = {

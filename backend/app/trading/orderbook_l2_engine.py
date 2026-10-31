@@ -205,12 +205,27 @@ class OrderBookL2Engine:
                 if bid_wall["distance_pct"] < 0.10:
                     is_safe = False
 
-        # Spread penalty: wide spread increases slippage risk
-        if spread_bps > 8.0:
-            confidence_delta -= 0.03
-            reasons.append(f"Elevated spread ({spread_bps:.1f} bps). Higher execution friction.")
+        # Spread-to-ATR Friction Guard:
+        # If bid-ask spread consumes > 8.0% of expected true range, or spread > 15 bps (0.15%),
+        # block entry to eliminate slippage drag before orders reach exchange.
+        cache = PriceCache.get_instance_sync()
+        ta = cache.get_technical_analysis(symbol)
+        atr_val = float(ta.get("atr", 0.0))
+        cur_px = float(cache.get_price(symbol) or 1.0)
+        atr_bps = (atr_val / cur_px) * 10000.0 if cur_px > 0 and atr_val > 0 else 100.0
+        friction_ratio = (spread_bps / atr_bps) if atr_bps > 0 else 0.0
 
-        final_delta = round(max(-0.10, min(0.08, confidence_delta)), 3)
+        if friction_ratio > 0.08 or spread_bps > 15.0:
+            is_safe = False
+            reasons.append(
+                f"🚫 [SPREAD FRICTION REJECTION] Spread ({spread_bps:.1f} bps) consumes {friction_ratio*100:.1f}% of ATR ({atr_bps:.1f} bps > 8.0% limit). High slippage risk."
+            )
+            confidence_delta -= 0.08
+        elif spread_bps > 7.0:
+            confidence_delta -= 0.03
+            reasons.append(f"Elevated spread ({spread_bps:.1f} bps). Moderate execution friction.")
+
+        final_delta = round(max(-0.12, min(0.08, confidence_delta)), 3)
 
         return {
             "symbol": symbol,
