@@ -360,6 +360,10 @@ class BinanceConnector:
                         "_zero_positions_omitted": len(data) - len(active_positions)
                     }
 
+                # Suppress dumping hundreds of contract definitions when caching exchange metadata
+                if "exchangeInfo" in path:
+                    log_data = f"<ExchangeInfo: {len(data.get('symbols', [])) if isinstance(data, dict) else len(data)} symbols cached>"
+
                 logger.info(
                     f"[BinanceConnector] Response Received | Environment: {exec_env} | Mode: {mode_upper} | "
                     f"BaseURL: {base_url} | Path: {path} | HTTP Status: {response.status_code} | "
