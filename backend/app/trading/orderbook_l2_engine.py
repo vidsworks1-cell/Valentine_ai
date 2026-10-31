@@ -206,8 +206,8 @@ class OrderBookL2Engine:
                     is_safe = False
 
         # Spread-to-ATR Friction Guard:
-        # If bid-ask spread consumes > 8.0% of expected true range, or spread > 15 bps (0.15%),
-        # block entry to eliminate slippage drag before orders reach exchange.
+        # Blocks illiquid, wide-spread coins (like COW with 17.0 bps spread consuming 34% of ATR).
+        # For highly liquid contracts (like SUI/SOL with spread < 8 bps), do not block normal 4-5 bps spreads.
         cache = PriceCache.get_instance_sync()
         ta = cache.get_technical_analysis(symbol)
         atr_val = float(ta.get("atr", 0.0))
@@ -215,13 +215,15 @@ class OrderBookL2Engine:
         atr_bps = (atr_val / cur_px) * 10000.0 if cur_px > 0 and atr_val > 0 else 100.0
         friction_ratio = (spread_bps / atr_bps) if atr_bps > 0 else 0.0
 
-        if friction_ratio > 0.08 or spread_bps > 15.0:
+        # True illiquid slippage trap: spread > 15 bps (0.15%), OR spread >= 8 bps consuming > 18% of ATR
+        is_illiquid_trap = spread_bps > 15.0 or (spread_bps >= 8.0 and friction_ratio > 0.18)
+        if is_illiquid_trap:
             is_safe = False
             reasons.append(
-                f"🚫 [SPREAD FRICTION REJECTION] Spread ({spread_bps:.1f} bps) consumes {friction_ratio*100:.1f}% of ATR ({atr_bps:.1f} bps > 8.0% limit). High slippage risk."
+                f"🚫 [SPREAD FRICTION REJECTION] Spread ({spread_bps:.1f} bps) consumes {friction_ratio*100:.1f}% of ATR ({atr_bps:.1f} bps). High slippage risk."
             )
             confidence_delta -= 0.08
-        elif spread_bps > 7.0:
+        elif spread_bps > 10.0 or friction_ratio > 0.12:
             confidence_delta -= 0.03
             reasons.append(f"Elevated spread ({spread_bps:.1f} bps). Moderate execution friction.")
 
