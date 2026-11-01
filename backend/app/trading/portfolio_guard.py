@@ -78,10 +78,12 @@ class PortfolioGuard:
 
     # Correlation Clusters Mapping
     CORRELATION_CLUSTERS = {
-        "LAYER_1": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "AVAXUSDT", "BNBUSDT", "SUIUSDT", "ADAUSDT", "DOTUSDT", "MATICUSDT", "NEARUSDT", "LTCUSDT", "TIAUSDT", "XRPUSDT"],
-        "DEFI": ["UNIUSDT", "AAVEUSDT", "MKRUSDT", "LINKUSDT", "PENDLEUSDT", "INJUSDT"],
-        "AI_TOKENS": ["TAOUSDT", "FETUSDT", "NEARUSDT", "RENDERUSDT"],
-        "MEMES": ["DOGEUSDT", "PEPEUSDT", "SHIBUSDT", "WIFUSDT", "BONKUSDT"]
+        "LAYER_1": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "AVAXUSDT", "BNBUSDT", "SUIUSDT", "ADAUSDT", "DOTUSDT", "MATICUSDT", "NEARUSDT", "LTCUSDT", "TIAUSDT", "XRPUSDT", "TRXUSDT", "BCHUSDT"],
+        "DEFI": ["UNIUSDT", "AAVEUSDT", "MKRUSDT", "LINKUSDT", "PENDLEUSDT", "INJUSDT", "CRVUSDT", "HYPEUSDT", "DYDXUSDT", "SNXUSDT", "JUPUSDT", "ENAUSDT"],
+        "AI_TOKENS": ["TAOUSDT", "FETUSDT", "NEARUSDT", "RENDERUSDT", "WLDUSDT", "IOUSDT", "ARKMUSDT"],
+        "MEMES": ["DOGEUSDT", "PEPEUSDT", "SHIBUSDT", "WIFUSDT", "BONKUSDT", "1000PEPEUSDT", "FLOKIUSDT", "BOMEUSDT", "POPCATUSDT", "MEMEUSDT"],
+        "GAMING": ["ESPORTSUSDT", "GALAUSDT", "AXSUSDT", "SANDUSDT", "BEAMXUSDT", "RONINUSDT"],
+        "COMMODITIES": ["CLUSDT", "PAXGUSDT", "XAUUSDT"]
     }
     
     def __init__(self):
@@ -617,8 +619,9 @@ class PortfolioGuard:
                     return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
 
             # 5. Correlation Cluster Limit Check
-            if len(same_side_sector_pos) >= self.MAX_CLUSTER_POSITIONS:
-                msg = f"[CORRELATION GUARD] Cluster '{sector}' already has {len(same_side_sector_pos)} active {proposed_side} position(s). Limit: {self.MAX_CLUSTER_POSITIONS}."
+            max_cluster_pos = 2 if sector == "GENERAL_ALT" else self.MAX_CLUSTER_POSITIONS
+            if len(same_side_sector_pos) >= max_cluster_pos:
+                msg = f"[CORRELATION GUARD] Cluster '{sector}' already has {len(same_side_sector_pos)} active {proposed_side} position(s). Limit: {max_cluster_pos}."
                 logger.warning(msg)
                 self._record_rejected_opportunity(opportunity, msg, incoming_conf)
                 try:
