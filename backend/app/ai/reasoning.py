@@ -408,21 +408,20 @@ class AiReasoningEngine:
                     macro_regime_name = regime_bias.get("macro_regime", "CHOP_RANGING")
                     ctx.eval_cache["macro_regime_bias"] = regime_bias
 
-                    # Hard Macro Directional Gate: If macro regime forbids the direction, abort immediately
+                    # High-Degree Counter-Trend Gate:
+                    # Default is strict trend-following. Counter-trend trades are only evaluated if they achieve
+                    # an elite conviction degree (>= 85/100 Meta-Conviction & >= 0.85 Confidence) at stage 7.
+                    is_counter_trend = False
                     if proposed_side == "BUY" and not regime_bias.get("buy_allowed", True):
-                        ctx.record_rejection("RegimeGatekeeper", f"Longs strictly blocked in {macro_regime_name} regime. Trend is down.", category="REGIME_BIAS_MISMATCH")
-                        continue
-                    if proposed_side == "SELL" and not regime_bias.get("sell_allowed", True):
-                        ctx.record_rejection("RegimeGatekeeper", f"Shorts strictly blocked in {macro_regime_name} regime. Trend is up.", category="REGIME_BIAS_MISMATCH")
-                        continue
+                        is_counter_trend = True
+                    elif proposed_side == "SELL" and not regime_bias.get("sell_allowed", True):
+                        is_counter_trend = True
 
-                    if macro_regime_name == "BEAR_DISTRIBUTION" and proposed_side == "BUY":
-                        ctx.eval_cache["regime_min_conf_override"] = 0.95
-                    elif macro_regime_name == "BULL_EXPANSION" and proposed_side == "SELL":
-                        ctx.eval_cache["regime_min_conf_override"] = 0.95
+                    ctx.eval_cache["is_counter_trend"] = is_counter_trend
+                    if is_counter_trend:
+                        ctx.eval_cache["regime_min_conf_override"] = 0.85
+                        ctx.eval_cache["regime_min_conviction_override"] = 85.0
                     elif macro_regime_name == "CHOP_RANGING":
-                        # In macro consolidation, majors (BTC/ETH) can trade mean reversion at 0.78,
-                        # but altcoins and mid-caps require tighter conviction (>=0.82) to avoid false breakouts
                         is_major = symbol.upper() in ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
                         chop_min_conf = 0.78 if is_major else 0.82
                         ctx.eval_cache["regime_min_conf_override"] = chop_min_conf
@@ -706,11 +705,28 @@ class AiReasoningEngine:
 
                     # Pillar 2: Regime-Gated High Conviction Threshold Enforcement
                     regime_min_req = ctx.eval_cache.get("regime_min_conf_override")
-                    if regime_min_req and adapted_confidence < regime_min_req:
+                    regime_min_conv = ctx.eval_cache.get("regime_min_conviction_override", 0.0)
+                    is_counter = ctx.eval_cache.get("is_counter_trend", False)
+
+                    if is_counter:
+                        if adapted_confidence < regime_min_req or meta_conviction_score < regime_min_conv:
+                            ctx.add_trace("RegimeGatekeeper", "FAIL")
+                            rejection_msg = (
+                                f"Counter-trend {proposed_side} in {macro_regime_name} regime blocked "
+                                f"(Conviction {meta_conviction_score:.1f}/100 < {regime_min_conv:.0f} or Conf {adapted_confidence:.2f} < {regime_min_req:.2f} required for counter-trend). Trend alignment is enforced."
+                            )
+                            ctx.record_rejection("RegimeGatekeeper", rejection_msg, category="REGIME_BIAS_MISMATCH")
+                            continue
+                        else:
+                            logger.info(
+                                f"🛡️ [HIGH-DEGREE COUNTER-TREND PASSED] {symbol} {proposed_side} approved in {macro_regime_name} "
+                                f"(Conviction: {meta_conviction_score:.1f}/100 >= {regime_min_conv}, Conf: {adapted_confidence:.2f} >= {regime_min_req}). Elite setup cleared."
+                            )
+                    elif regime_min_req and adapted_confidence < regime_min_req:
                         ctx.add_trace("RegimeGatekeeper", "FAIL")
                         rejection_msg = (
-                            f"Counter-trend {proposed_side} in {macro_regime_name} regime suppressed "
-                            f"(confidence {adapted_confidence:.2f} < {regime_min_req:.2f} required high-conviction threshold)"
+                            f"Trade in {macro_regime_name} regime suppressed "
+                            f"(confidence {adapted_confidence:.2f} < {regime_min_req:.2f} required threshold)"
                         )
                         ctx.record_rejection("RegimeGatekeeper", rejection_msg, category="REGIME_BIAS_MISMATCH")
                         continue

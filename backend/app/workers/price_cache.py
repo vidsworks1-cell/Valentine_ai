@@ -236,8 +236,8 @@ class PriceCache:
             if sym.startswith(STABLECOIN_PREFIXES) or sym in ["USDCUSDT", "FDUSDUSDT", "TUSDUSDT", "EURUSDT", "USD1USDT"]:
                 continue
 
-            # 2. Exclude TradFi equity/commodity perpetual contracts requiring manual agreement signatures in Binance UI (-4411)
-            if sym.startswith(("XAU", "XAG", "XAUT", "KORU", "SOXL", "NVDA", "TSLA", "AAPL", "AMZN", "MSFT", "GOOG")):
+            # 2. Exclude TradFi equity contracts (-4411) and toxic illiquid micro-cap meme perps (whipsaw traps)
+            if sym.startswith(("XAU", "XAG", "XAUT", "KORU", "SOXL", "NVDA", "TSLA", "AAPL", "AMZN", "MSFT", "GOOG", "JCT", "GUSDT", "QUSDT", "IDOL", "BLESS", "COW")):
                 continue
 
             vol = inst._volume_24h.get(sym, 0.0)
@@ -249,15 +249,15 @@ class PriceCache:
                 continue
 
             # 4. Standard crypto universe: minimum $30M volume floor or market anchors
-            if vol >= min_quote_volume or sym in ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]:
+            if vol >= min_quote_volume or sym in ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "AVAXUSDT", "SUIUSDT", "AAVEUSDT", "NEARUSDT", "XRPUSDT", "TRXUSDT"]:
                 tracked.append((sym, vol))
 
         # Sort by 24h quote volume descending so top liquid symbols with minimal spread are prioritized
         tracked.sort(key=lambda x: x[1], reverse=True)
         result = [item[0] for item in tracked[:top_n]]
-        if not result and inst._prices:
-            # Fallback excluding stablecoins
-            result = [s for s in list(inst._prices.keys()) if s.endswith("USDT") and not s.startswith(STABLECOIN_PREFIXES)][:top_n]
+        if not result:
+            # Hardened fallback strictly to curated liquid majors, NEVER arbitrary 756 contracts
+            result = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "AVAXUSDT", "SUIUSDT", "AAVEUSDT", "NEARUSDT", "XRPUSDT", "DOGEUSDT", "LINKUSDT", "TRXUSDT"]
         return result
 
     @classmethod

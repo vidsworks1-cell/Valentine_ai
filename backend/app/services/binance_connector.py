@@ -897,10 +897,12 @@ class BinanceConnector:
         symbol: str,
         side: str,
         order_type: str,
-        quantity: float,
+        quantity: Optional[float] = None,
         price: Optional[float] = None,
         time_in_force: str = "GTC",
-        reduce_only: bool = False
+        reduce_only: bool = False,
+        stop_price: Optional[float] = None,
+        close_position: bool = False
     ) -> Dict[str, Any]:
         """
         Submits an order to Binance USD(S)-M Futures (/fapi/v1/order).
@@ -909,6 +911,7 @@ class BinanceConnector:
         - Shorts: side="SELL"
         - Exits: reduce_only=True (guarantees exit without accidentally reversing position)
         - Maker Post-Only: timeInForce="GTX"
+        - Exchange-Level Stop-Loss: order_type="STOP_MARKET", stop_price=float, reduce_only=True or close_position=True
         """
         mode_upper = (mode or "PAPER").upper()
         if mode_upper == "PAPER":
@@ -919,8 +922,8 @@ class BinanceConnector:
                 "status": "FILLED",
                 "side": side.upper(),
                 "price": str(price or 0.0),
-                "origQty": str(quantity),
-                "executedQty": str(quantity)
+                "origQty": str(quantity or 0.0),
+                "executedQty": str(quantity or 0.0)
             }
 
         sym_filters = await self.get_futures_symbol_filters(symbol, mode_upper)
@@ -931,11 +934,18 @@ class BinanceConnector:
             "symbol": symbol.upper(),
             "side": side.upper(),
             "type": order_type.upper(),
-            "quantity": f"{quantity:.{qty_prec}f}"
         }
 
-        if reduce_only:
-            params["reduceOnly"] = "true"
+        if close_position:
+            params["closePosition"] = "true"
+        else:
+            if quantity is not None and quantity > 0:
+                params["quantity"] = f"{quantity:.{qty_prec}f}"
+            if reduce_only:
+                params["reduceOnly"] = "true"
+
+        if stop_price is not None and stop_price > 0:
+            params["stopPrice"] = f"{stop_price:.{price_prec}f}"
 
         if order_type.upper() in ["LIMIT", "LIMIT_MAKER"]:
             if price is None:
@@ -944,8 +954,16 @@ class BinanceConnector:
             params["price"] = f"{price:.{price_prec}f}"
             params["timeInForce"] = "GTX" if time_in_force.upper() == "GTX" else "GTC"
 
-        logger.info(f"🚀 [BINANCE FUTURES DISPATCH] Sending {params['side']} order for {params['quantity']} {symbol} (Type: {params['type']}, ReduceOnly: {reduce_only}) to Binance Futures...")
+        logger.info(f"🚀 [BINANCE FUTURES DISPATCH] Sending {params['side']} order for {params.get('quantity', 'ALL')} {symbol} (Type: {params['type']}, StopPrice: {params.get('stopPrice', 'N/A')}, ReduceOnly: {reduce_only}) to Binance Futures...")
         return await self._request("POST", "/fapi/v1/order", mode_upper, params=params, venue="FUTURES", signed=True)
+
+    async def cancel_all_futures_open_orders(self, mode: str, symbol: str) -> Dict[str, Any]:
+        """Cancels all open and conditional orders for a symbol on Binance USD(S)-M Futures (DELETE /fapi/v1/allOpenOrders)."""
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "PAPER":
+            return {"code": 200, "msg": "success"}
+        params = {"symbol": symbol.upper()}
+        return await self._request("DELETE", "/fapi/v1/allOpenOrders", mode_upper, params=params, venue="FUTURES", signed=True)
 
     async def cancel_futures_order(self, mode: str, symbol: str, order_id: Any) -> Dict[str, Any]:
         """Cancels an existing order on Binance USD(S)-M Futures."""

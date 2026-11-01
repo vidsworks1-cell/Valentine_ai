@@ -76,14 +76,17 @@ class ExchangeReconciliationEngine:
                     if isinstance(positions_res, list):
                         for p in positions_res:
                             pos_amt = float(p.get("positionAmt", 0.0))
-                            if abs(pos_amt) > 0.00001:
+                            entry_px = float(p.get("entryPrice", 0.0))
+                            mark_px = float(p.get("markPrice", entry_px))
+                            eff_px = mark_px if mark_px > 0 else entry_px
+                            notional_val = abs(pos_amt) * eff_px
+                            
+                            # Filter out sub-$3.50 dust from step-size rounding / partial fills so zombies are never adopted
+                            if abs(pos_amt) > 0.00001 and notional_val >= 3.50:
                                 sym = p.get("symbol", "").upper()
                                 side = "BUY" if pos_amt > 0 else "SELL"
-                                entry_px = float(p.get("entryPrice", 0.0))
-                                mark_px = float(p.get("markPrice", entry_px))
-                                # Auto-remediate margin to ISOLATED and harmonize leverage to 15x if needed
+                                # Auto-remediate margin to ISOLATED
                                 margin_type = str(p.get("marginType", "")).upper()
-                                lev_val = int(p.get("leverage", 20))
                                 if margin_type != "ISOLATED":
                                     try:
                                         if abs(pos_amt) > 0.00001:

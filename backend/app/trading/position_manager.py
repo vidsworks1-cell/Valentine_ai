@@ -960,6 +960,10 @@ class PositionManager:
                     return
                 else:
                     logger.info(f"✅ [BINANCE FUTURES CLOSED] Contract position for {symbol} cleanly liquidated into USDT: {binance_res}")
+                    try:
+                        await connector.cancel_all_futures_open_orders(trading_mode, symbol)
+                    except Exception as ce:
+                        logger.debug(f"Cancel open orders notice for {symbol}: {ce}")
             else:
                 filters = await connector.get_symbol_lot_size_filters(symbol, trading_mode)
                 prec = filters.get("precision", 4)
