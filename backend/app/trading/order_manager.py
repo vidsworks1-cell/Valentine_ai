@@ -285,8 +285,10 @@ class OrderManager:
                         total_wallet = float(equity_status.get("wallet_balance_usdt", 0.0))
                         unrealized_pnl = float(equity_status.get("unrealized_pnl", 0.0))
 
-                        if available_margin < 2.0:
-                            insufficient_msg = f"Insufficient available Futures USDT margin (${available_margin:.2f} USDT). Minimum margin is $2.00 USDT."
+                        # In Binance Futures at 15x-20x leverage, an order requires only $0.25 to $0.35 margin to meet the $5 MIN_NOTIONAL.
+                        # Lower the hard cutoff to $0.40 so available margin ($1.99) is not falsely rejected.
+                        if available_margin < 0.40:
+                            insufficient_msg = f"Insufficient available Futures USDT margin (${available_margin:.2f} USDT). Minimum margin is $0.40 USDT."
                             logger.warning(f"🛑 [INSUFFICIENT BALANCE] {insufficient_msg}")
                             ExecutionStateTracker.get_instance().transition(
                                 symbol=symbol,
