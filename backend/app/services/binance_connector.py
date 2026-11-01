@@ -373,6 +373,12 @@ class BinanceConnector:
                 if response.status_code != 200:
                     binance_code = data.get("code", response.status_code) if isinstance(data, dict) else response.status_code
                     binance_msg = data.get("msg", response.text) if isinstance(data, dict) else response.text
+
+                    # Benign response: margin type already set to target (e.g. ISOLATED)
+                    if binance_code == -4046 and "marginType" in path:
+                        logger.info(f"⚡ [FUTURES MARGIN TYPE] Margin type is already configured.")
+                        return {"code": 200, "msg": "No need to change margin type."}
+
                     err_title, err_advice = self.describe_binance_error(binance_code, str(binance_msg))
                     logger.error(
                         f"❌ [BINANCE REJECTION - HTTP {response.status_code}] {err_title} (Code {binance_code}): {binance_msg}\n"
@@ -905,21 +911,19 @@ class BinanceConnector:
         close_position: bool = False
     ) -> Dict[str, Any]:
         """
-        Submits an order to Binance USD(S)-M Futures (/fapi/v1/order).
-        Supports:
-        - Longs: side="BUY"
-        - Shorts: side="SELL"
-        - Exits: reduce_only=True (guarantees exit without accidentally reversing position)
-        - Maker Post-Only: timeInForce="GTX"
-        - Exchange-Level Stop-Loss: order_type="STOP_MARKET", stop_price=float, reduce_only=True or close_position=True
+        Submits an order to Binance USD(S)-M Futures.
+        - Standard Orders (MARKET, LIMIT): /fapi/v1/order
+        - Algorithmic Conditional Orders (STOP_MARKET, TAKE_PROFIT_MARKET, STOP, TAKE_PROFIT): /fapi/v1/algoOrder
         """
         mode_upper = (mode or "PAPER").upper()
         if mode_upper == "PAPER":
             return {
                 "symbol": symbol.upper(),
                 "orderId": int(time.time() * 1000),
+                "algoId": int(time.time() * 1000),
                 "clientOrderId": f"paper_f_{int(time.time())}",
                 "status": "FILLED",
+                "algoStatus": "NEW",
                 "side": side.upper(),
                 "price": str(price or 0.0),
                 "origQty": str(quantity or 0.0),
@@ -929,6 +933,32 @@ class BinanceConnector:
         sym_filters = await self.get_futures_symbol_filters(symbol, mode_upper)
         qty_prec = sym_filters.get("precision", 3)
         price_prec = sym_filters.get("price_precision", 2)
+
+        # Route Conditional / Algo Orders to dedicated Binance Algo Order API (/fapi/v1/algoOrder)
+        if order_type.upper() in ["STOP_MARKET", "TAKE_PROFIT_MARKET", "STOP", "TAKE_PROFIT", "TRAILING_STOP_MARKET"]:
+            algo_params: Dict[str, Any] = {
+                "algoType": "CONDITIONAL",
+                "symbol": symbol.upper(),
+                "side": side.upper(),
+                "type": order_type.upper(),
+                "workingType": "MARK_PRICE"
+            }
+            if stop_price is not None and stop_price > 0:
+                algo_params["triggerPrice"] = f"{stop_price:.{price_prec}f}"
+
+            if close_position:
+                algo_params["closePosition"] = "true"
+            else:
+                if quantity is not None and quantity > 0:
+                    algo_params["quantity"] = f"{quantity:.{qty_prec}f}"
+                if reduce_only:
+                    algo_params["reduceOnly"] = "true"
+
+            if order_type.upper() in ["STOP", "TAKE_PROFIT"] and price is not None:
+                algo_params["price"] = f"{price:.{price_prec}f}"
+
+            logger.info(f"🚀 [BINANCE FUTURES ALGO DISPATCH] Sending {algo_params['side']} {order_type} for {algo_params.get('quantity', 'ALL')} {symbol} (TriggerPrice: {algo_params.get('triggerPrice', 'N/A')}, ReduceOnly: {reduce_only}) to /fapi/v1/algoOrder...")
+            return await self._request("POST", "/fapi/v1/algoOrder", mode_upper, params=algo_params, venue="FUTURES", signed=True)
 
         params: Dict[str, Any] = {
             "symbol": symbol.upper(),
@@ -944,9 +974,6 @@ class BinanceConnector:
             if reduce_only:
                 params["reduceOnly"] = "true"
 
-        if stop_price is not None and stop_price > 0:
-            params["stopPrice"] = f"{stop_price:.{price_prec}f}"
-
         if order_type.upper() in ["LIMIT", "LIMIT_MAKER"]:
             if price is None:
                 raise ValueError("Price is mandatory for Futures LIMIT orders")
@@ -954,16 +981,23 @@ class BinanceConnector:
             params["price"] = f"{price:.{price_prec}f}"
             params["timeInForce"] = "GTX" if time_in_force.upper() == "GTX" else "GTC"
 
-        logger.info(f"🚀 [BINANCE FUTURES DISPATCH] Sending {params['side']} order for {params.get('quantity', 'ALL')} {symbol} (Type: {params['type']}, StopPrice: {params.get('stopPrice', 'N/A')}, ReduceOnly: {reduce_only}) to Binance Futures...")
+        logger.info(f"🚀 [BINANCE FUTURES DISPATCH] Sending {params['side']} order for {params.get('quantity', 'ALL')} {symbol} (Type: {params['type']}, ReduceOnly: {reduce_only}) to Binance Futures...")
         return await self._request("POST", "/fapi/v1/order", mode_upper, params=params, venue="FUTURES", signed=True)
 
     async def cancel_all_futures_open_orders(self, mode: str, symbol: str) -> Dict[str, Any]:
-        """Cancels all open and conditional orders for a symbol on Binance USD(S)-M Futures (DELETE /fapi/v1/allOpenOrders)."""
+        """Cancels all open and conditional orders for a symbol on Binance USD(S)-M Futures (standard + algo)."""
         mode_upper = (mode or "PAPER").upper()
         if mode_upper == "PAPER":
             return {"code": 200, "msg": "success"}
         params = {"symbol": symbol.upper()}
-        return await self._request("DELETE", "/fapi/v1/allOpenOrders", mode_upper, params=params, venue="FUTURES", signed=True)
+        # 1. Cancel standard open orders (/fapi/v1/allOpenOrders)
+        res_orders = await self._request("DELETE", "/fapi/v1/allOpenOrders", mode_upper, params=params, venue="FUTURES", signed=True)
+        # 2. Cancel open algo conditional orders (/fapi/v1/algoOpenOrders)
+        try:
+            await self._request("DELETE", "/fapi/v1/algoOpenOrders", mode_upper, params=params, venue="FUTURES", signed=True)
+        except Exception as e:
+            logger.debug(f"Notice cancelling algo open orders for {symbol}: {e}")
+        return res_orders
 
     async def cancel_futures_order(self, mode: str, symbol: str, order_id: Any) -> Dict[str, Any]:
         """Cancels an existing order on Binance USD(S)-M Futures."""

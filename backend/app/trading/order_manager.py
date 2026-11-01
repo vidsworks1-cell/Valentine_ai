@@ -820,6 +820,12 @@ class OrderManager:
                         else:
                             target_min_notional = max(5.05, min_notional_req + 0.05)
 
+                        from app.trading.model_governance import ModelGovernanceEngine
+                        safety_scaler = ModelGovernanceEngine.get_instance().get_safety_scaler()
+                        if safety_scaler < 1.0:
+                            target_min_notional = max(5.05, min_notional_req + 0.05, target_min_notional * safety_scaler)
+                            logger.info(f"🚨 [SAFETY CIRCUIT THROTTLE] Target notional throttled to ${target_min_notional:.2f} (safety scaler: {safety_scaler:.2f}x).")
+
                         if notional_val < target_min_notional:
                             min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
                             req_margin = (min_target_qty * price) / float(target_leverage)
@@ -1235,8 +1241,9 @@ class OrderManager:
                                 stop_price=stop_loss,
                                 reduce_only=True
                             )
-                            if isinstance(sl_res, dict) and ("orderId" in sl_res or sl_res.get("status") in ["NEW", "FILLED"]):
-                                logger.info(f"✅ [EXCHANGE STOP-LOSS ACTIVE] Binance Futures confirmed native STOP_MARKET (Order ID: {sl_res.get('orderId')}) at {stop_loss}. Liquidation protection 100% active.")
+                            if isinstance(sl_res, dict) and ("algoId" in sl_res or "orderId" in sl_res or sl_res.get("status") in ["NEW", "FILLED"] or sl_res.get("algoStatus") in ["NEW", "TRIGGERED"]):
+                                confirmed_id = sl_res.get("algoId") or sl_res.get("orderId")
+                                logger.info(f"✅ [EXCHANGE STOP-LOSS ACTIVE] Binance Futures confirmed native STOP_MARKET (Algo/Order ID: {confirmed_id}) at {stop_loss}. Liquidation protection 100% active.")
                             else:
                                 logger.warning(f"⚠️ [EXCHANGE STOP-LOSS NOTICE] Exchange response for STOP_MARKET: {sl_res}. Software trailing SL remains active.")
                         except Exception as sl_err:
