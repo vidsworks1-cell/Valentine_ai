@@ -472,6 +472,14 @@ class AiReasoningEngine:
                             ctx.record_rejection("Candle1MConfirmationGuard", wick_reason, category="FALSE_WICK_BREAKOUT")
                             continue
 
+                        # 1M Volume Exhaustion Climax Guard:
+                        # Prevent buying the exact top of an extended wick when 1M RSI is severely overbought (>74) or selling deep oversold (<26)
+                        if (proposed_side == "BUY" and rsi_val >= 74.0 and close_loc < 0.65) or \
+                           (proposed_side == "SELL" and rsi_val <= 26.0 and close_loc > 0.35):
+                            climax_reason = f"1M Volume Exhaustion Climax: Extreme RSI ({rsi_val:.1f}) with stalled candle close ({close_loc*100:.0f}%). Rejection likely."
+                            ctx.record_rejection("Candle1MConfirmationGuard", climax_reason, category="EXHAUSTION_CLIMAX")
+                            continue
+
                     ctx.add_trace("Candle1MConfirmationGuard", "PASS")
 
                     # =========================================================

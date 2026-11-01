@@ -718,20 +718,30 @@ class OrderManager:
 
                         notional_val = position_size * price
 
-                        # Continuous Geometric Equity Compounding:
-                        # Dynamically allocates up to 32% of available margin on high-conviction setups (>=78%),
-                        # and 20% on standard setups, allowing notional to scale smoothly as balance grows ($4 -> $10 -> $25+).
+                        # Continuous Geometric Equity Compounding (with Liquidity-Tiered Notional Caps):
+                        # Majors (TRX, AVAX, SUI, ETH, SOL, BNB, etc.): Full aggressive 32% wallet compounding (up to $25 - $35 notional)
+                        # Micro / High-Beta Meme Tokens (BIRB, JCT, PUMP, PEPE, BEAMX): Capped at $8.50 max notional to cap stop-out risk to -$0.03
+                        is_micro_token = symbol.upper().startswith(("BIRB", "JCT", "PUMP", "PEPE", "1000PEPE", "BEAMX", "BLESS", "COW", "IDOL", "MAGMA", "AIOT", "STX"))
+
                         if balance >= 2.50:
                             if conf_score >= 0.78 or meta_conviction >= 78.0:
-                                # High Conviction: Allocate up to 32% of wallet margin (e.g. $1.15 margin on $3.60 balance -> ~$23 notional at 20x)
+                                # High Conviction: Allocate up to 32% of wallet margin
                                 target_margin_alloc = balance * 0.32
                                 accelerated_notional = target_margin_alloc * float(target_leverage)
-                                target_min_notional = max(5.05, min(accelerated_notional, balance * float(target_leverage) * 0.45))
+                                calculated_cap = balance * float(target_leverage) * 0.45
+                                
+                                if is_micro_token:
+                                    # Strict dollar loss protection on micro/meme tokens (loss capped at <= $0.04)
+                                    target_min_notional = max(5.05, min(accelerated_notional, 8.50))
+                                    logger.info(f"🛡️ [MICRO-TOKEN RISK CAP] {opportunity['symbol']}: Notional capped at ${target_min_notional:.2f} to prevent outsized slippage.")
+                                else:
+                                    target_min_notional = max(5.05, min(accelerated_notional, calculated_cap))
                             else:
                                 # Standard Setup: Allocate up to 20% of wallet margin
                                 target_margin_alloc = balance * 0.20
                                 accelerated_notional = target_margin_alloc * float(target_leverage)
-                                target_min_notional = max(5.05, accelerated_notional)
+                                max_std_cap = 6.50 if is_micro_token else accelerated_notional
+                                target_min_notional = max(5.05, min(accelerated_notional, max_std_cap))
                         else:
                             target_min_notional = max(5.05, min_notional_req + 0.05)
 
