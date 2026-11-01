@@ -34,6 +34,9 @@ class AiReasoningEngine:
         "CORRELATION_CLUSTER": 180.0,    # 180s: Wait for cluster risk to subside
         "SELF_ADAPTATION_BLOCK": 180.0,  # 180s: Strategy regime mismatch cooldown
         "DIRECTIONAL_WHIPSAW": 300.0,   # 300s: Cooldown when opposite direction signal is rejected to prevent whipsaws
+        "ORDERBOOK_L2_BLOCK": 180.0,     # 180s (3m): Wait for book depth and spread to normalize
+        "SPREAD_FRICTION": 300.0,        # 300s (5m): Wait for illiquid wide-spread altcoins to stabilize
+        "ANTI_WHIPSAW": 1200.0,          # 1200s (20m): Strict lockout on 2-loss churn coins
         "POST_LOSS_COOLDOWN": 1080.0,    # 1080s (18m): Post-loss anti-chop cooldown
         "POST_TRADE_COOLDOWN": 300.0,    # 300s (5m): Post-win/breakeven dwell time
         "MARKET_DATA_STALE": 30.0,       # 30s: Short retry for price feed updates
@@ -480,6 +483,18 @@ class AiReasoningEngine:
                             continue
 
                     ctx.add_trace("Candle1MConfirmationGuard", "PASS")
+
+                    # 5. Order Book Microstructure & Spread Friction Guard (Phase 1 Fast Filter)
+                    from app.trading.orderbook_l2_engine import OrderBookL2Engine
+                    ob_l2 = OrderBookL2Engine.get_instance()
+                    ob_confluence = ob_l2.evaluate_microstructure_confluence(symbol, proposed_side)
+                    if not ob_confluence.get("is_safe_to_enter", True):
+                        ob_reasons = ob_confluence.get("reasons", ["Unfavorable orderbook microstructure"])
+                        ob_msg = f"Orderbook Microstructure Guard: {', '.join(ob_reasons)}"
+                        cat = "SPREAD_FRICTION" if "SPREAD" in ob_msg else "ORDERBOOK_L2_BLOCK"
+                        ctx.record_rejection("OrderBookMicrostructureGuard", ob_msg, category=cat)
+                        continue
+                    ctx.add_trace("OrderBookMicrostructureGuard", "PASS")
 
                     # =========================================================
                     # PHASE 2: STOCHASTIC & EVOLUTION ENGINES (High Overhead)

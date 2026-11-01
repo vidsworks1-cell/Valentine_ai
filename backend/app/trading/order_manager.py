@@ -51,6 +51,7 @@ class OrderManager:
             # 0. Check central circuit breakers and global trading modes
             from app.scheduler.manager import LayeredSchedulerManager
             scheduler = await LayeredSchedulerManager.get_instance()
+            trading_mode = getattr(scheduler, "global_trading_mode", "LIVE")
             allowed, reason = await scheduler.is_trading_enabled()
             if not allowed:
                 logger.warning(f"⚠️ ORDER PIPELINE REJECTED: {reason}")
@@ -138,6 +139,16 @@ class OrderManager:
                     if len(recent_trades) >= 2 and all(float(t.profit_loss or 0.0) < -0.001 for t in recent_trades):
                         whipsaw_reason = f"🛑 [ANTI-WHIPSAW LOCKOUT] {symbol} had 2 consecutive losses in past 2 hours. Locked out to prevent whipsaw churn."
                         logger.warning(whipsaw_reason)
+                        try:
+                            from app.ai.reasoning import AiReasoningEngine
+                            AiReasoningEngine.get_instance().set_cooldown(
+                                symbol, "ALL", category="ANTI_WHIPSAW", duration_seconds=1200.0,
+                                reason=whipsaw_reason, price=float(opportunity.get("entry_price", 0.0))
+                            )
+                        except Exception as cd_err:
+                            logger.debug(f"Failed to set anti-whipsaw cooldown: {cd_err}")
+                        if opportunity.get("decision_context"):
+                            opportunity["decision_context"].record_rejection("AntiWhipsawGuard", whipsaw_reason, category="ANTI_WHIPSAW")
                         ExecutionStateTracker.get_instance().transition(
                             symbol=symbol,
                             state=ExecutionState.REJECTED,
@@ -226,6 +237,16 @@ class OrderManager:
             if not heat_info.get("is_within_budget", True) and heat_scaler <= 0.0:
                 reject_reason = f"⚠️ [PORTFOLIO HEAT EXHAUSTED] {heat_info['summary']}"
                 logger.warning(reject_reason)
+                try:
+                    from app.ai.reasoning import AiReasoningEngine
+                    AiReasoningEngine.get_instance().set_cooldown(
+                        symbol, side, category="PORTFOLIO_RISK_HEAT", duration_seconds=120.0,
+                        reason=reject_reason, price=float(opportunity.get("entry_price", 0.0))
+                    )
+                except Exception as cd_err:
+                    logger.debug(f"Failed to set heat cooldown: {cd_err}")
+                if opportunity.get("decision_context"):
+                    opportunity["decision_context"].record_rejection("PortfolioHeatGuard", reject_reason, category="PORTFOLIO_RISK_HEAT")
                 ExecutionStateTracker.get_instance().transition(
                     symbol=symbol,
                     state=ExecutionState.REJECTED,
@@ -247,6 +268,18 @@ class OrderManager:
             if not ob_confluence.get("is_safe_to_enter", True):
                 ob_reason = f"🚫 [ORDERBOOK L2 WALL REJECTION] Blocked {symbol} {side}: {', '.join(ob_confluence['reasons'])}"
                 logger.warning(ob_reason)
+                cat = "SPREAD_FRICTION" if "SPREAD" in ob_reason else "ORDERBOOK_L2_BLOCK"
+                dur = 300.0 if cat == "SPREAD_FRICTION" else 180.0
+                try:
+                    from app.ai.reasoning import AiReasoningEngine
+                    AiReasoningEngine.get_instance().set_cooldown(
+                        symbol, side, category=cat, duration_seconds=dur,
+                        reason=ob_reason, price=float(opportunity.get("entry_price", 0.0))
+                    )
+                except Exception as cd_err:
+                    logger.debug(f"Failed to set L2 orderbook cooldown: {cd_err}")
+                if opportunity.get("decision_context"):
+                    opportunity["decision_context"].record_rejection("OrderBookL2Guard", ob_reason, category=cat)
                 ExecutionStateTracker.get_instance().transition(
                     symbol=symbol,
                     state=ExecutionState.REJECTED,
@@ -275,6 +308,16 @@ class OrderManager:
             )
             if not thesis_allowed:
                 logger.info(f"🚫 [THESIS PERSISTENCE LAYER] Suppressed noise signal: {thesis_reason}")
+                try:
+                    from app.ai.reasoning import AiReasoningEngine
+                    AiReasoningEngine.get_instance().set_cooldown(
+                        symbol, side, category="DIRECTIONAL_WHIPSAW", duration_seconds=180.0,
+                        reason=thesis_reason, price=float(opportunity.get("entry_price", 0.0))
+                    )
+                except Exception as cd_err:
+                    logger.debug(f"Failed to set thesis cooldown: {cd_err}")
+                if opportunity.get("decision_context"):
+                    opportunity["decision_context"].record_rejection("ThesisPersistence", thesis_reason, category="DIRECTIONAL_WHIPSAW")
                 ExecutionStateTracker.get_instance().transition(
                     symbol=symbol,
                     state=ExecutionState.REJECTED,
