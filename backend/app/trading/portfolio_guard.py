@@ -205,7 +205,8 @@ class PortfolioGuard:
         self,
         opportunity: Dict[str, Any],
         incoming_risk_pct: float = 0.02,
-        balance: float = 100000.0
+        balance: float = 100000.0,
+        trading_mode: Optional[str] = None
     ) -> PortfolioDecision:
         """
         Active Exposure & Portfolio Decision Engine.
@@ -222,9 +223,12 @@ class PortfolioGuard:
             incoming_conf = float(opportunity.get("confidence_score", opportunity.get("confidence", 0.78)))
 
             # Obtain current active trading mode
-            from app.scheduler.manager import LayeredSchedulerManager
-            scheduler = await LayeredSchedulerManager.get_instance()
-            active_mode = getattr(scheduler, "global_trading_mode", "PAPER").upper()
+            if not trading_mode:
+                from app.scheduler.manager import LayeredSchedulerManager
+                scheduler = await LayeredSchedulerManager.get_instance()
+                active_mode = getattr(scheduler, "global_trading_mode", "PAPER").upper()
+            else:
+                active_mode = trading_mode.upper()
 
             # 1. Daily Loss Circuit Breaker Check
             today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -669,6 +673,33 @@ class PortfolioGuard:
         except Exception as e:
             logger.error(f"Error evaluating portfolio action decision: {e}")
             return PortfolioDecision(approved=True, action_type="APPROVE", reason="PASSED_ON_ERROR", adjusted_risk_pct=incoming_risk_pct)
+
+    async def evaluate_portfolio_impact(
+        self,
+        opportunity: Dict[str, Any],
+        trading_mode_or_risk: Any = None,
+        incoming_risk_pct: float = 0.02,
+        balance: float = 100000.0
+    ) -> PortfolioDecision:
+        """
+        Evaluates portfolio capacity and impact for opportunities.
+        Accepts:
+          - evaluate_portfolio_impact(opportunity, trading_mode)
+          - evaluate_portfolio_impact(opportunity, incoming_risk_pct, balance)
+        """
+        resolved_mode = None
+        resolved_risk = incoming_risk_pct
+        if isinstance(trading_mode_or_risk, str):
+            resolved_mode = trading_mode_or_risk
+        elif isinstance(trading_mode_or_risk, (int, float)):
+            resolved_risk = float(trading_mode_or_risk)
+
+        return await self.evaluate_portfolio_action(
+            opportunity=opportunity,
+            incoming_risk_pct=resolved_risk,
+            balance=balance,
+            trading_mode=resolved_mode
+        )
 
     async def evaluate_trade(self, opportunity: Dict[str, Any], incoming_risk_pct: float = 0.02, balance: float = 100000.0) -> Tuple[bool, str]:
         """Backward-compatible wrapper for evaluate_trade."""
