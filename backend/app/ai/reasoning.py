@@ -340,9 +340,11 @@ class AiReasoningEngine:
 
                     dec_prec = 8 if price < 0.001 else (6 if price < 1.0 else (4 if price < 50.0 else 2))
                     min_dist = max(sl_multiplier * atr, price * 0.0045)
+                    min_tp1_dist = max(tp_stage1_mult * atr, min_dist * 1.6, price * 0.010)
+                    min_tp2_dist = max(tp_stage2_mult * atr, min_dist * 2.5, price * 0.018)
                     stop_loss = round(price - min_dist if proposed_side == "BUY" else price + min_dist, dec_prec)
-                    take_profit = round(price + (tp_stage2_mult * atr) if proposed_side == "BUY" else price - (tp_stage2_mult * atr), dec_prec)
-                    tp_stage1_price = round(price + (tp_stage1_mult * atr) if proposed_side == "BUY" else price - (tp_stage1_mult * atr), dec_prec)
+                    take_profit = round(price + min_tp2_dist if proposed_side == "BUY" else price - min_tp2_dist, dec_prec)
+                    tp_stage1_price = round(price + min_tp1_dist if proposed_side == "BUY" else price - min_tp1_dist, dec_prec)
 
                     tp_stages = [
                         {

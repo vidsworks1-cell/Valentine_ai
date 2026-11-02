@@ -111,21 +111,21 @@ class PositionManager:
         if "stop_loss" not in position_details or position_details["stop_loss"] is None:
             position_details["stop_loss"] = float(position_details.get("trailing_stop", 0.0))
 
-        # Spacing based on final take profit, enforcing a minimum distance (1.5%) to ensure profits exceed fees
-        min_tp_dist = entry * 0.015 if entry > 0 else 0.05
+        # Spacing based on final take profit, enforcing a minimum distance (1.8%) to ensure profits exceed fees
+        min_tp_dist = entry * 0.018 if entry > 0 else 0.05
         raw_dist = abs(tp - entry) if tp > 0 else (entry * 0.05)
         total_dist = max(raw_dist, min_tp_dist)
         
         if side == "BUY":
             position_details["tp_stages"] = [
-                {"level": _round_price(entry + total_dist * 0.35), "percentage": 0.30, "hit": False, "label": "Partial TP1 (30%)"},
-                {"level": _round_price(entry + total_dist * 0.70), "percentage": 0.30, "hit": False, "label": "Partial TP2 (30%)"},
+                {"level": _round_price(entry + total_dist * 0.50), "percentage": 0.30, "hit": False, "label": "Partial TP1 (30%)"},
+                {"level": _round_price(entry + total_dist * 0.80), "percentage": 0.30, "hit": False, "label": "Partial TP2 (30%)"},
                 {"level": _round_price(tp if tp > 0 else entry + total_dist), "percentage": 0.40, "hit": False, "label": "Final TP (40%)"}
             ]
         else:
             position_details["tp_stages"] = [
-                {"level": _round_price(entry - total_dist * 0.35), "percentage": 0.30, "hit": False, "label": "Partial TP1 (30%)"},
-                {"level": _round_price(entry - total_dist * 0.70), "percentage": 0.30, "hit": False, "label": "Partial TP2 (30%)"},
+                {"level": _round_price(entry - total_dist * 0.50), "percentage": 0.30, "hit": False, "label": "Partial TP1 (30%)"},
+                {"level": _round_price(entry - total_dist * 0.80), "percentage": 0.30, "hit": False, "label": "Partial TP2 (30%)"},
                 {"level": _round_price(tp if tp > 0 else entry - total_dist), "percentage": 0.40, "hit": False, "label": "Final TP (40%)"}
             ]
             
@@ -289,14 +289,14 @@ class PositionManager:
                         favorable_move_pct = (favorable_move / entry * 100.0) if entry > 0 else 0.0
                         peak_move_pct = (peak_move / entry * 100.0) if entry > 0 else 0.0
 
-                        # Upgrade 1: Auto-Breakeven Ratchet (+0.20% Profit Lock)
-                        # Triggers when favorable move reaches >= +0.80% OR ATR regime trigger is hit
-                        is_ratchet_hit = (favorable_move_pct >= 0.80 or peak_move_pct >= 0.80)
+                        # Upgrade 1: Auto-Breakeven Ratchet (+0.35% / +0.45% Profit Lock)
+                        # Triggers when favorable move reaches >= +1.00% OR ATR regime trigger is hit
+                        is_ratchet_hit = (favorable_move_pct >= 1.00 or peak_move_pct >= 1.00)
                         is_atr_be_hit = (move_in_atr >= be_trigger_atr or peak_in_atr >= be_trigger_atr)
 
                         if is_ratchet_hit or is_atr_be_hit:
-                            # If ATR hit, lock +0.35%; if ratchet hit, lock at least +0.20% net profit
-                            pct_buffer = 0.0035 if is_atr_be_hit else 0.0020
+                            # If ATR hit, lock +0.45%; if ratchet hit, lock at least +0.35% net profit
+                            pct_buffer = 0.0045 if is_atr_be_hit else 0.0035
                             be_level = _round_price(entry * (1.0 + pct_buffer) if side == "BUY" else entry * (1.0 - pct_buffer))
                             current_sl = float(pos.get("trailing_stop", 0.0))
                             
@@ -307,7 +307,7 @@ class PositionManager:
                                     pos["breakeven_price"] = be_level
                                     logger.info(
                                         f"🛡️ [AUTO-BREAKEVEN RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +0.80% threshold)! "
+                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +1.00% threshold)! "
                                         f"Stop-Loss ratcheted to {be_level} (+{pct_buffer*100:.2f}% locked, exchange fees 100% covered). Free-roll active!"
                                     )
                                     try:
@@ -517,19 +517,19 @@ class PositionManager:
                                     close_pct = stage["percentage"]
                                     
                                     # For small accounts (position notional < $17.50), orders cannot be split below Binance's $5.00 MIN_NOTIONAL.
-                                    # On TP1, lock in Breakeven (+0.35% net profit); on TP2/Final, close 100% full position in one legal order!
+                                    # On TP1, lock in Breakeven (+0.45% net profit); on TP2/Final, close 100% full position in one legal order!
                                     pos_notional = float(pos.get("position_size", 0.0)) * current_price
                                     if pos_notional < 17.50:
                                         if stage == stages[0]:
-                                            be_level = _round_price(entry * 1.0035 if side == "BUY" else entry * 0.9965)
+                                            be_level = _round_price(entry * 1.0045 if side == "BUY" else entry * 0.9955)
                                             if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < be_level:
                                                 pos["trailing_stop"] = be_level
                                                 pos["breakeven_activated"] = True
-                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $17.50). Locked Breakeven at {be_level} (+0.35% net) without splitting below Binance $5 limit.")
+                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $17.50). Locked Breakeven at {be_level} (+0.45% net) without splitting below Binance $5 limit.")
                                         elif len(stages) > 2 and stage == stages[1]:
-                                            # TP2 reached: Ratchet trailing stop to bank guaranteed +0.7R profit (+0.70% to +1.0% net)
-                                            # and allow runner to reach Final TP (+2.2R to +3.5R asymmetric payoff)!
-                                            bank_profit_dist = total_dist * 0.40
+                                            # TP2 reached: Ratchet trailing stop to bank guaranteed +1.0R profit (+0.90% to +1.5% net)
+                                            # and allow runner to reach Final TP (+2.5R to +3.5R asymmetric payoff)!
+                                            bank_profit_dist = total_dist * 0.55
                                             bank_level = _round_price(entry + bank_profit_dist if side == "BUY" else entry - bank_profit_dist)
                                             if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < bank_level:
                                                 pos["trailing_stop"] = bank_level

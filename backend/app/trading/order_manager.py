@@ -533,9 +533,11 @@ class OrderManager:
                     stop_loss = raw_sl
 
                 raw_tp = float(opportunity.get("take_profit", 0.0))
-                if raw_tp <= 0.0 or abs(price - raw_tp) < (price * 0.005):
-                    repaired_tp = round(price + (min_stop_distance * 2.0) if opp_side == "BUY" else price - (min_stop_distance * 2.0), dec)
-                    logger.warning(f"🛡️ [TP CALIBRATION - {vol_bracket['volatility_regime']}] Calibrated TP for {symbol} to: {repaired_tp}")
+                actual_sl_dist = abs(price - stop_loss)
+                min_required_tp_dist = max(actual_sl_dist * 2.0, min_stop_distance * 2.0, price * 0.015)
+                if raw_tp <= 0.0 or abs(price - raw_tp) < min_required_tp_dist:
+                    repaired_tp = round(price + min_required_tp_dist if opp_side == "BUY" else price - min_required_tp_dist, dec)
+                    logger.info(f"🛡️ [TP CALIBRATION - {vol_bracket['volatility_regime']}] Calibrated TP for {symbol} to: {repaired_tp} (>= 2.0x R:R)")
                     opportunity["take_profit"] = repaired_tp
 
                 # PIPELINE STEP 1: Adaptive Sizing

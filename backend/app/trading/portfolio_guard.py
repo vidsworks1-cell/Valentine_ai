@@ -517,12 +517,18 @@ class PortfolioGuard:
             except Exception:
                 pass
 
-            # Free-Roll Slot Recycling: If active positions are already locked at Breakeven (zero downside risk),
-            # expand capacity to 4 slots for high-conviction setups without increasing portfolio heat.
-            risk_neutral_count = sum(1 for p in active_positions if p.get("breakeven_activated") or float(p.get("profit_loss", 0.0)) > 0.05)
-            if risk_neutral_count >= 1 and incoming_conf >= 0.76:
-                effective_max_open = max(effective_max_open, 4)
-                logger.info(f"💎 [FREE-ROLL SLOT RECYCLING] {risk_neutral_count} active position(s) risk-neutral. Capacity expanded to {effective_max_open} slots for high-conviction setup {symbol}.")
+            # Micro-Account Capital Concentration (< $15.0 USDT balance):
+            # Enforce 1 active trade at a time to prevent margin fragmentation and fees from compounding across simultaneous positions.
+            if balance < 15.0:
+                effective_max_open = 1
+                logger.info(f"🛡️ [MICRO-ACCOUNT DISCIPLINE] Balance (${balance:.2f} USDT < $15). Capping concurrent positions to 1 for maximum capital focus.")
+            else:
+                # Free-Roll Slot Recycling: If active positions are already locked at Breakeven (zero downside risk),
+                # expand capacity to 4 slots for high-conviction setups without increasing portfolio heat.
+                risk_neutral_count = sum(1 for p in active_positions if p.get("breakeven_activated") or float(p.get("profit_loss", 0.0)) > 0.05)
+                if risk_neutral_count >= 1 and incoming_conf >= 0.76:
+                    effective_max_open = max(effective_max_open, 4)
+                    logger.info(f"💎 [FREE-ROLL SLOT RECYCLING] {risk_neutral_count} active position(s) risk-neutral. Capacity expanded to {effective_max_open} slots for high-conviction setup {symbol}.")
 
             if open_count >= effective_max_open:
                 now_ts = time.time()
