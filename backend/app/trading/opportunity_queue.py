@@ -347,3 +347,6 @@ class OpportunityQueueEngine:
             "total_expired": self._total_expired,
             "candidates": [item.to_dict() for item in self._queue]
         }
+
+# Alias for backwards compatibility
+OpportunityQueue = OpportunityQueueEngine
