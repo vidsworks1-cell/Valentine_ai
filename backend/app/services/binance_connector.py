@@ -992,12 +992,23 @@ class BinanceConnector:
         params = {"symbol": symbol.upper()}
         # 1. Cancel standard open orders (/fapi/v1/allOpenOrders)
         res_orders = await self._request("DELETE", "/fapi/v1/allOpenOrders", mode_upper, params=params, venue="FUTURES", signed=True)
-        # 2. Cancel open algo conditional orders (/fapi/v1/algoOpenOrders)
+        # 2. Cancel open algo conditional orders (/fapi/v1/openAlgoOrders + /fapi/v1/algoOrder)
         try:
-            await self._request("DELETE", "/fapi/v1/algoOpenOrders", mode_upper, params=params, venue="FUTURES", signed=True)
+            algo_res = await self._request("GET", "/fapi/v1/openAlgoOrders", mode_upper, params=params, venue="FUTURES", signed=True)
+            if isinstance(algo_res, list):
+                for ao in algo_res:
+                    algo_id = ao.get("algoId")
+                    if algo_id:
+                        await self._request("DELETE", "/fapi/v1/algoOrder", mode_upper, params={"symbol": symbol.upper(), "algoId": str(algo_id)}, venue="FUTURES", signed=True)
+                        logger.info(f"🗑️ [BINANCE FUTURES ALGO CANCELLED] Cancelled algo order {algo_id} for {symbol}.")
         except Exception as e:
             logger.debug(f"Notice cancelling algo open orders for {symbol}: {e}")
         return res_orders
+
+    async def cancel_futures_algo_order(self, mode: str, symbol: str, algo_id: Any) -> Dict[str, Any]:
+        """Cancels a specific conditional/algo order on Binance USD(S)-M Futures."""
+        params = {"symbol": symbol.upper(), "algoId": str(algo_id)}
+        return await self._request("DELETE", "/fapi/v1/algoOrder", mode, params=params, venue="FUTURES", signed=True)
 
     async def cancel_futures_order(self, mode: str, symbol: str, order_id: Any) -> Dict[str, Any]:
         """Cancels an existing order on Binance USD(S)-M Futures."""

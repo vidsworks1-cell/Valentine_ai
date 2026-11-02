@@ -959,6 +959,8 @@ class OrderManager:
 
                 # If we are in TESTNET or LIVE mode, we place the real order on Binance first!
                 binance_order_id = None
+                sl_algo_id = None
+                tp_algo_id = None
                 order_submit_start_ms = time.time() * 1000.0
 
                 if trading_mode in ["TESTNET", "LIVE"]:
@@ -1226,30 +1228,53 @@ class OrderManager:
                     elif "avgPrice" in binance_res and float(binance_res.get("avgPrice", 0.0)) > 0:
                         price = round(float(binance_res["avgPrice"]), 6)
 
-                    # Exchange-Native STOP_MARKET Protection:
-                    # Immediately place a conditional STOP_MARKET order directly on Binance Futures matching engine.
-                    # This guarantees that even in the event of millisecond flash wicks or connection lag,
-                    # Binance exchange itself triggers and executes the stop loss, physically eliminating any liquidation risk.
-                    if trading_venue == "FUTURES" and stop_loss > 0.0:
-                        try:
-                            sl_side = "SELL" if opportunity["side"].upper() == "BUY" else "BUY"
-                            logger.info(f"🛡️ [EXCHANGE STOP-LOSS DISPATCH] Submitting native STOP_MARKET for {opportunity['symbol']} ({sl_side} at {stop_loss}) to Binance Futures...")
-                            sl_res = await connector.create_futures_order(
-                                mode=trading_mode,
-                                symbol=opportunity["symbol"],
-                                side=sl_side,
-                                order_type="STOP_MARKET",
-                                quantity=position_size,
-                                stop_price=stop_loss,
-                                reduce_only=True
-                            )
-                            if isinstance(sl_res, dict) and ("algoId" in sl_res or "orderId" in sl_res or sl_res.get("status") in ["NEW", "FILLED"] or sl_res.get("algoStatus") in ["NEW", "TRIGGERED"]):
-                                confirmed_id = sl_res.get("algoId") or sl_res.get("orderId")
-                                logger.info(f"✅ [EXCHANGE STOP-LOSS ACTIVE] Binance Futures confirmed native STOP_MARKET (Algo/Order ID: {confirmed_id}) at {stop_loss}. Liquidation protection 100% active.")
-                            else:
-                                logger.warning(f"⚠️ [EXCHANGE STOP-LOSS NOTICE] Exchange response for STOP_MARKET: {sl_res}. Software trailing SL remains active.")
-                        except Exception as sl_err:
-                            logger.error(f"Failed to place exchange STOP_MARKET order on Binance Futures: {sl_err}")
+                    # Exchange-Native Bracket Protection (STOP_MARKET + TAKE_PROFIT_MARKET):
+                    # Immediately place native conditional bracket orders directly on Binance Futures matching engine.
+                    # Using close_position=True guarantees 100% position closure at exchange level without LOT_SIZE filter issues.
+                    take_profit_price = float(opportunity.get("take_profit", 0.0))
+
+                    if trading_venue == "FUTURES":
+                        bracket_side = "SELL" if opportunity["side"].upper() == "BUY" else "BUY"
+
+                        # 1. Native Exchange STOP_MARKET Protection
+                        if stop_loss > 0.0:
+                            try:
+                                logger.info(f"🛡️ [EXCHANGE STOP-LOSS DISPATCH] Submitting native STOP_MARKET for {opportunity['symbol']} ({bracket_side} at {stop_loss}) with close_position=True to Binance Futures...")
+                                sl_res = await connector.create_futures_order(
+                                    mode=trading_mode,
+                                    symbol=opportunity["symbol"],
+                                    side=bracket_side,
+                                    order_type="STOP_MARKET",
+                                    stop_price=stop_loss,
+                                    close_position=True
+                                )
+                                if isinstance(sl_res, dict) and ("algoId" in sl_res or "orderId" in sl_res or sl_res.get("status") in ["NEW", "FILLED"] or sl_res.get("algoStatus") in ["NEW", "TRIGGERED"]):
+                                    sl_algo_id = sl_res.get("algoId") or sl_res.get("orderId")
+                                    logger.info(f"✅ [EXCHANGE STOP-LOSS ACTIVE] Binance Futures confirmed native STOP_MARKET (Algo ID: {sl_algo_id}) at {stop_loss}. Liquidation protection 100% active.")
+                                else:
+                                    logger.warning(f"⚠️ [EXCHANGE STOP-LOSS NOTICE] Exchange response for STOP_MARKET: {sl_res}. Software trailing SL remains active.")
+                            except Exception as sl_err:
+                                logger.error(f"Failed to place exchange STOP_MARKET order on Binance Futures: {sl_err}")
+
+                        # 2. Native Exchange TAKE_PROFIT_MARKET Target Lock
+                        if take_profit_price > 0.0:
+                            try:
+                                logger.info(f"🎯 [EXCHANGE TAKE-PROFIT DISPATCH] Submitting native TAKE_PROFIT_MARKET for {opportunity['symbol']} ({bracket_side} at {take_profit_price}) with close_position=True to Binance Futures...")
+                                tp_res = await connector.create_futures_order(
+                                    mode=trading_mode,
+                                    symbol=opportunity["symbol"],
+                                    side=bracket_side,
+                                    order_type="TAKE_PROFIT_MARKET",
+                                    stop_price=take_profit_price,
+                                    close_position=True
+                                )
+                                if isinstance(tp_res, dict) and ("algoId" in tp_res or "orderId" in tp_res or tp_res.get("status") in ["NEW", "FILLED"] or tp_res.get("algoStatus") in ["NEW", "TRIGGERED"]):
+                                    tp_algo_id = tp_res.get("algoId") or tp_res.get("orderId")
+                                    logger.info(f"✅ [EXCHANGE TAKE-PROFIT ACTIVE] Binance Futures confirmed native TAKE_PROFIT_MARKET (Algo ID: {tp_algo_id}) at {take_profit_price}. Target lock active.")
+                                else:
+                                    logger.warning(f"⚠️ [EXCHANGE TAKE-PROFIT NOTICE] Exchange response for TAKE_PROFIT_MARKET: {tp_res}.")
+                            except Exception as tp_err:
+                                logger.error(f"Failed to place exchange TAKE_PROFIT_MARKET order on Binance Futures: {tp_err}")
 
                     # Record successful live fill in Execution Outcome Database
                     try:
@@ -1342,7 +1367,13 @@ class OrderManager:
                     market_regime=opportunity["market_regime"],
                     confidence_score=opportunity["confidence_score"],
                     entry_reason=opportunity["entry_reason"],
-                    indicators=json.dumps({"binance_order_id": binance_order_id}) if binance_order_id else "{}",
+                    indicators=json.dumps({
+                        k: v for k, v in {
+                            "binance_order_id": str(binance_order_id) if binance_order_id else None,
+                            "sl_algo_id": str(sl_algo_id) if sl_algo_id else None,
+                            "tp_algo_id": str(tp_algo_id) if tp_algo_id else None
+                        }.items() if v is not None
+                    }),
                     atr=opportunity["atr"],
                     risk_amount=allowed_risk_amt,
                     risk_pct=risk_pct * 100.0,
