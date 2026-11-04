@@ -1,0 +1,149 @@
+vmi3653665:~/Valentine_ai# systemctl restart lumina.service
+journalctl -u lumina.service -f
+Nov 03 19:30:12 vmi3653665 uvicorn[354899]: 2026-11-03 19:30:12,386 [INFO] lumina.ai.reasoning: AI Reasoning & Opportunity Scanner stopped.
+Nov 03 19:30:12 vmi3653665 uvicorn[354899]: 2026-11-03 19:30:12,386 [INFO] lumina.trading.position_manager: Layer 4 Position Manager stopped.
+Nov 03 19:30:17 vmi3653665 uvicorn[354899]: 2026-11-03 19:30:17,717 [INFO] lumina.workers.websocket: Binance WebSocket feed terminated.
+Nov 03 19:30:17 vmi3653665 uvicorn[354899]: 2026-11-03 19:30:17,717 [INFO] lumina.scheduler.manager: All background layers shutdown successfully.
+Nov 03 19:30:17 vmi3653665 uvicorn[354899]: INFO:     Application shutdown complete.
+Nov 03 19:30:17 vmi3653665 uvicorn[354899]: INFO:     Finished server
+process [354899]
+Nov 03 19:30:17 vmi3653665 systemd[1]: lumina.service: Deactivated successfully.
+Nov 03 19:30:17 vmi3653665 systemd[1]: Stopped lumina.service - Lumina AI Trading Engine.
+Nov 03 19:30:17 vmi3653665 systemd[1]: lumina.service: Consumed 56min 37.567s CPU time.
+Nov 04 19:52:12 vmi3653665 systemd[1]: Started lumina.service - Lumina AI Trading Engine.
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: INFO:     Started server process [398910]
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: INFO:     Waiting for application startup.
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,088 [INFO] lumina.trading.state_recovery: 🔄 [STATE RECOVERY] State restoration COMPLETED from '/root/Valentine_ai/backend/app/trading/../../data/system_state_checkpoint.json'. Restored: {'global_trading_mode': 'LIVE', 'positions': 0, 'cooldowns': 0, 'strategy_stats': 0, 'capital_allocations': 5}
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,093 [INFO] lumina.scheduler.manager: 💾 Loaded persistent global trading mode: LIVE from '/root/Valentine_ai/backend/app/scheduler/../../data/system_config.json'
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,093 [INFO] lumina.scheduler.manager: 💾 Loaded persistent trading venue: FUTURES from '/root/Valentine_ai/backend/app/scheduler/../../data/system_config.json'
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,093 [INFO] lumina.scheduler.manager: 💾 Loaded persistent global trading mode: LIVE from '/root/Valentine_ai/backend/app/scheduler/../../data/system_config.json'
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,093 [INFO] lumina.scheduler.manager: 💾 Loaded persistent trading venue: FUTURES from '/root/Valentine_ai/backend/app/scheduler/../../data/system_config.json'
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,094 [INFO] lumina.scheduler.manager: Initializing multi-layer trading daemon orchestration...
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,094 [INFO] lumina.workers.websocket: Binance WebSocket Ticker feed worker started.
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,112 [INFO] lumina.workers.websocket: Connecting to Binance FUTURES WebSocket at: wss://fstream.binance.com/ws (Mode=LIVE, Testnet=False)
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,113 [INFO] lumina.workers.websocket: Connecting to Binance WebSocket: wss://fstream.binance.com/ws
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,267 [INFO] lumina.trading.position_manager: Layer 4 Trailing Stop & Position Manager started.
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,267 [INFO] lumina.ai.reasoning: AI Reasoning & Opportunity Scanner started with Evaluation Cooldown Guard.
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,392 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured
+Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET |
+Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,871 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1793818336392&signature=f9b128d8d98ee0c158bad7bf3756a153d34ef45c94e9b068b0980b0007febaaf "HTTP/1.1 200 OK"
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,893 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [], '_zero_positions_omitted': 942}
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,913 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #1 (LIVE) IN SYNC. Audited: 0 | Zero discrepancies.
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,914 [INFO] lumina.scheduler.manager: All layers (L2, L3, L4), Reconciliation Daemon, Governance Safety Circuit, and Maintenance Sweepers are actively running.
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,915 [INFO] lumina.scheduler.manager: Starting periodic exchange state reconciliation daemon (every 60s)...
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,915 [INFO] lumina.scheduler.manager: Maintenance daemon initialized (automated Spot dust conversion disabled; managed manually by user).
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:16,915 [INFO] lumina.scheduler.manager: Starting Pillar 3 Model Governance & Counterfactual Daemon (every 60s)...
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: INFO:     Application startup complete.
+Nov 04 19:52:16 vmi3653665 uvicorn[398910]: INFO:     Uvicorn running
+on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Nov 04 19:52:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:17,037 [INFO] lumina.workers.websocket: ⚡ [UNIVERSE BOOTSTRAP] Synced 756 active USDT contracts from Binance FUTURES into PriceCache.
+Nov 04 19:52:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:17,081 [INFO] lumina.workers.websocket: Connected to Binance FUTURES Market Stream
+Nov 04 19:52:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:17,118 [INFO] lumina.workers.websocket: Subscribed to !miniTicker@arr (All-Market Stream for FUTURES)
+Nov 04 19:52:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:52:17,451 [INFO] lumina.workers.websocket: Subscribed to all-market ticker stream
+successfully
+Nov 04 19:53:16 vmi3653665 uvicorn[398910]: 2026-11-04 19:53:16,922 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured
+Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET |
+Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Nov 04 19:53:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:53:17,048 [INFO] lumina.trading.adaptive_guard_thresholds: ⭐ [GUARD THRESHOLD EMPIRICALLY UPGRADED] 'MacroGuard' threshold relaxed: macro_risk_limit (65.0 -> 63.0). Reason: Counterfactual runner reached +2.50R on ETHUSDT
+Nov 04 19:53:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:53:17,051 [INFO] lumina.trading.guard_performance_auditor: ⚖️ [GUARD AUDIT] Rejection REJ-ETHUSDT-1793807052985 on ETHUSDT evaluated -> MISSED_WINNER (Counterfactual R: +2.50R). Guard: MacroGuard.
+Nov 04 19:53:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:53:17,358 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1793818396923&signature=3a942102602b60ba60980eec1a0f40c74e135a7269137a7f77e59ea86f2d1f8c "HTTP/1.1 200 OK"
+Nov 04 19:53:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:53:17,375 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [], '_zero_positions_omitted': 942}
+Nov 04 19:53:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:53:17,384 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #2 (LIVE) IN SYNC. Audited: 0 | Zero discrepancies.
+Nov 04 19:54:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:54:17,387 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured
+Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET |
+Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Nov 04 19:54:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:54:17,704 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1793818457388&signature=624ba43c7549f9cfeb950fc83fa4dbbe39601dcfd9dccef86d482fbcf3f1f74c "HTTP/1.1 200 OK"
+Nov 04 19:54:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:54:17,719 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [], '_zero_positions_omitted': 942}
+Nov 04 19:54:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:54:17,726 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #3 (LIVE) IN SYNC. Audited: 0 | Zero discrepancies.
+Nov 04 19:55:17 vmi3653665 uvicorn[398910]: 2026-11-04 19:55:17,728 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured
+Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET |
+Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Nov 04 19:55:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:55:18,043 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1793818517729&signature=16ef168e1d675f20f57b548634b1e054f1e1179d3efbb0dfe93b24e92fad0819 "HTTP/1.1 200 OK"
+Nov 04 19:55:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:55:18,052 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [], '_zero_positions_omitted': 942}
+Nov 04 19:55:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:55:18,059 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #4 (LIVE) IN SYNC. Audited: 0 | Zero discrepancies.
+Nov 04 19:56:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:56:18,063 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured
+Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET |
+Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Nov 04 19:56:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:56:18,386 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1793818578063&signature=9efedb8c313b8d2a04dec2b982dd27f238170f8efe5d6083cf93954d8743dd38 "HTTP/1.1 200 OK"
+Nov 04 19:56:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:56:18,393 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [], '_zero_positions_omitted': 942}
+Nov 04 19:56:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:56:18,399 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #5 (LIVE) IN SYNC. Audited: 0 | Zero discrepancies.
+Nov 04 19:57:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:57:18,402 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured
+Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET |
+Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Nov 04 19:57:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:57:18,728 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1793818638402&signature=97daffcfbdbb03be6cd27a89f108dd4973e8b2dcca4132157d88014cd583cf56 "HTTP/1.1 200 OK"
+Nov 04 19:57:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:57:18,737 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [], '_zero_positions_omitted': 942}
+Nov 04 19:57:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:57:18,748 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #6 (LIVE) IN SYNC. Audited: 0 | Zero discrepancies.
+Nov 04 19:58:18 vmi3653665 uvicorn[398910]: 2026-11-04 19:58:18,749 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured
+Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET |
+Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Nov 04 19:58:19 vmi3653665 uvicorn[398910]: 2026-11-04 19:58:19,071 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1793818698750&signature=8207aca2ad6163ef849317ff5e5fe3cf0ee0fa85a6f4e6511a68538772b7eb85 "HTTP/1.1 200 OK"
+Nov 04 19:58:19 vmi3653665 uvicorn[398910]: 2026-11-04 19:58:19,082 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [], '_zero_positions_omitted': 942}
+Nov 04 19:58:19 vmi3653665 uvicorn[398910]: 2026-11-04 19:58:19,092 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #7 (LIVE) IN SYNC. Audited: 0 | Zero discrepancies.
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,047 [INFO] lumina.trading.decision_quality: DecisionQualityEngine registered to DecisionContext event bus.
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,048 [WARNING] lumina.trading.decision_context: 🚫 [DECISION PIPELINE REJECTED] [OrderBookMicrostructureGuard] SPCXUSDT SELL (Minervini VCP Breakout): Orderbook Microstructure Guard: Hostile book skew (OBI 0.28 >= +0.18): Buyers heavily stacking bids below (Bluff/Spoof risk).
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,048 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed SPCXUSDT (SELL) on 180s cooldown [Category: ORDERBOOK_L2_BLOCK]. Reason: Orderbook Microstructure Guard: Hostile book skew (OBI 0.28 >= +0.18): Buyers heavily stacking bids below (Bluff/Spoof risk).
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,048 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] SPCXUSDT SELL via Minervini VCP Breakout [Category: ORDERBOOK_L2_BLOCK]. Entry: $134.74, SL: $135.25, TP: $130.70. Reason: Orderbook Microstructure Guard: Hostile book skew (OBI 0.28 >= +0.18): Buyers heavily stacking bids below (Bluff/Spoof risk).
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,050 [WARNING] lumina.trading.execution_analytics: 🚫 [MISSED FILL RECORDED]
+SPCXUSDT SELL via Minervini VCP Breakout: Orderbook Microstructure Guard: Hostile book skew (OBI 0.28 >= +0.18): Buyers heavily stacking bids below (Bluff/Spoof risk).
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,050 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] SPCXUSDT SELL via Minervini VCP Breakout [Category: MISSED_FILL]. Entry: $134.74, SL: $137.43, TP: $129.35. Reason: Orderbook Microstructure Guard: Hostile book skew (OBI 0.28 >= +0.18): Buyers heavily stacking bids below (Bluff/Spoof risk).
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,052 [INFO] lumina.trading.portfolio_attribution: 🛡️ [ATTRIBUTION] Subsystem 'orderbookmicrostructureguard' prevented estimated $150.00 loss: Orderbook Microstructure Guard: Hostile book skew (OBI 0.28 >= +0.18): Buyers heavily stacking bids below (Bluff/Spoof risk).
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,064 [INFO] lumina.trading.mtf_confirmation: 🧠 [MTF GUARD WEIGHTED DIVERGENCE] UNIUSDT SELL (Minervini VCP Breakout): Unweighted=66.7%, Weighted=65.0% (Threshold: 66.0%). Result: FAIL
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,064 [WARNING] lumina.trading.decision_context: 🚫 [DECISION PIPELINE REJECTED] [Candle1MConfirmationGuard] UNIUSDT SELL (Minervini VCP Breakout):
+Anti-Bluff [Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,064 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed UNIUSDT (SELL) on 120s cooldown [Category: FALSE_WICK_BREAKOUT]. Reason: Anti-Bluff
+[Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,064 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] UNIUSDT SELL via Minervini VCP Breakout [Category: FALSE_WICK_BREAKOUT]. Entry: $7.62, SL: $7.65, TP: $7.40. Reason: Anti-Bluff [Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick.
+Breakdown bluff weeded out.
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,065 [WARNING] lumina.trading.execution_analytics: 🚫 [MISSED FILL RECORDED]
+UNIUSDT SELL via Minervini VCP Breakout: Anti-Bluff [Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,065 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] UNIUSDT SELL via Minervini VCP Breakout [Category: MISSED_FILL]. Entry:
+$7.62, SL: $7.78, TP: $7.32. Reason: Anti-Bluff [Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 19:59:14 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:14,065 [INFO] lumina.trading.portfolio_attribution: 🛡️ [ATTRIBUTION] Subsystem 'candle1mconfirmationguard' prevented estimated $150.00 loss: Anti-Bluff [Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 19:59:19 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:19,095 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured
+Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET |
+Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Nov 04 19:59:19 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:19,424 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1793818759095&signature=44ca82834295135e3344a8e6b057d1e5fd0a70bf55e107f13b38ceee8d8696bb "HTTP/1.1 200 OK"
+Nov 04 19:59:19 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:19,434 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [], '_zero_positions_omitted': 942}
+Nov 04 19:59:19 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:19,443 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #8 (LIVE) IN SYNC. Audited: 0 | Zero discrepancies.
+Nov 04 19:59:53 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:53,335 [INFO] lumina.trading.mtf_confirmation: 🛡️ [MTF GUARD REJECT] SKHYUSDT
+SELL blocked by hard 1h macro contradiction (Weighted: 20.0%)
+Nov 04 19:59:53 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:53,336 [WARNING] lumina.trading.decision_context: 🚫 [DECISION PIPELINE REJECTED] [MTFGuard] SKHYUSDT SELL (Minervini VCP Breakout): Insufficient MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 19:59:53 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:53,336 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed SKHYUSDT (SELL) on 300s cooldown [Category: MTF_DISAGREEMENT]. Reason: Insufficient
+MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 19:59:53 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:53,336 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] SKHYUSDT SELL via Minervini VCP Breakout [Category: MTF_DISAGREEMENT]. Entry: $143.29, SL: $143.83, TP: $138.99. Reason: Insufficient MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 19:59:53 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:53,336 [WARNING] lumina.trading.execution_analytics: 🚫 [MISSED FILL RECORDED]
+SKHYUSDT SELL via Minervini VCP Breakout: Insufficient MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 19:59:53 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:53,336 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] SKHYUSDT SELL via Minervini VCP Breakout [Category: MISSED_FILL]. Entry: $143.29, SL: $146.16, TP: $137.56. Reason: Insufficient MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 19:59:53 vmi3653665 uvicorn[398910]: 2026-11-04 19:59:53,337 [INFO] lumina.trading.portfolio_attribution: 🛡️ [ATTRIBUTION] Subsystem 'mtfguard' prevented estimated $150.00 loss: Insufficient MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,394 [INFO] lumina.trading.mtf_confirmation: 🧠 [MTF GUARD WEIGHTED DIVERGENCE] EWYUSDT SELL (Minervini VCP Breakout): Unweighted=66.7%, Weighted=55.0% (Threshold: 66.0%). Result: FAIL
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,394 [WARNING] lumina.trading.decision_context: 🚫 [DECISION PIPELINE REJECTED] [Candle1MConfirmationGuard] EWYUSDT SELL (Minervini VCP Breakout):
+Anti-Bluff [Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,394 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed EWYUSDT (SELL) on 120s cooldown [Category: FALSE_WICK_BREAKOUT]. Reason: Anti-Bluff
+[Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,394 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] EWYUSDT SELL via Minervini VCP Breakout [Category: FALSE_WICK_BREAKOUT]. Entry: $152.99, SL: $153.56, TP: $148.40. Reason: Anti-Bluff [Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection
+wick. Breakdown bluff weeded out.
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,394 [WARNING] lumina.trading.execution_analytics: 🚫 [MISSED FILL RECORDED]
+EWYUSDT SELL via Minervini VCP Breakout: Anti-Bluff [Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,394 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] EWYUSDT SELL via Minervini VCP Breakout [Category: MISSED_FILL]. Entry:
+$152.99, SL: $156.05, TP: $146.87. Reason: Anti-Bluff [Bear Trap]: 1m
+candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,395 [INFO] lumina.trading.portfolio_attribution: 🛡️ [ATTRIBUTION] Subsystem 'candle1mconfirmationguard' prevented estimated $150.00 loss: Anti-Bluff [Bear Trap]: 1m candle closed in top 100% of range with heavy lower rejection wick. Breakdown bluff weeded out.
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,401 [INFO] lumina.trading.mtf_confirmation: 🛡️ [MTF GUARD REJECT] MRVLUSDT
+BUY blocked by hard 1h macro contradiction (Weighted: 20.0%)
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,401 [WARNING] lumina.trading.decision_context: 🚫 [DECISION PIPELINE REJECTED] [MTFGuard] MRVLUSDT BUY (Minervini VCP Breakout): Insufficient MTF
+alignment (20.0%, agree: 1/3 TFs)
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,401 [INFO] lumina.ai.reasoning: ⏳ [ADAPTIVE COOLDOWN] Placed MRVLUSDT (BUY) on 300s cooldown [Category: MTF_DISAGREEMENT]. Reason: Insufficient MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,401 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] MRVLUSDT BUY via Minervini VCP Breakout [Category: MTF_DISAGREEMENT]. Entry: $157.48, SL: $156.89, TP: $162.20. Reason: Insufficient MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,401 [WARNING] lumina.trading.execution_analytics: 🚫 [MISSED FILL RECORDED]
+MRVLUSDT BUY via Minervini VCP Breakout: Insufficient MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,401 [INFO] lumina.ai.missed_opportunity: 📥 [MISSED OPPORTUNITY RECORDED] MRVLUSDT BUY via Minervini VCP Breakout [Category: MISSED_FILL]. Entry:
+$157.48, SL: $154.33, TP: $163.78. Reason: Insufficient MTF alignment
+(20.0%, agree: 1/3 TFs)
+Nov 04 20:00:15 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:15,477 [INFO] lumina.trading.portfolio_attribution: 🛡️ [ATTRIBUTION] Subsystem 'mtfguard' prevented estimated $150.00 loss: Insufficient MTF alignment (20.0%, agree: 1/3 TFs)
+Nov 04 20:00:19 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:19,445 [INFO] lumina.services.binance_connector: [BinanceConnector] Structured
+Log | Environment: LIVE | Venue: FUTURES | Mode: LIVE | Method: GET |
+Path: /fapi/v2/positionRisk | BaseURL: https://fapi.binance.com | Key: Bi7cow... | Signed: True
+Nov 04 20:00:19 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:19,804 [INFO] httpx: HTTP Request: GET https://fapi.binance.com/fapi/v2/positionRisk?recvWindow=60000&timestamp=1793818819445&signature=7787f05801328a56682b185bd65f578862e0d28971ed830ae334ccc6f53bcb0b "HTTP/1.1 200 OK"
+Nov 04 20:00:19 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:19,818 [INFO] lumina.services.binance_connector: [BinanceConnector] Response Received | Environment: LIVE | Mode: LIVE | BaseURL: https://fapi.binance.com | Path: /fapi/v2/positionRisk | HTTP Status: 200 | Response: {'active_futures_positions': [], '_zero_positions_omitted': 942}
+Nov 04 20:00:19 vmi3653665 uvicorn[398910]: 2026-11-04 20:00:19,979 [INFO] lumina.trading.exchange_reconciliation: 🔄 [EXCHANGE RECONCILIATION] Run #9 (LIVE) IN SYNC. Audited: 0 | Zero discrepancies.

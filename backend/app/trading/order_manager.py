@@ -26,26 +26,36 @@ class OrderManager:
             cls._instance = OrderManager()
         return cls._instance
 
+    async def execute_opportunity(self, opportunity: Dict[str, Any], balance: Optional[float] = None):
+        """Alias for receive_opportunity for backwards compatibility with historical replay and smart re-entry."""
+        return await self.receive_opportunity(opportunity)
+
     async def receive_opportunity(self, opportunity: Dict[str, Any]):
         """Receives a setup from Layer 3, evaluates risk profile, and executes if cleared."""
         async with self._lock:
             symbol = opportunity["symbol"]
             side = opportunity["side"]
             
-            logger.info(f"[STAGE: SIGNAL] Reviewing trade opportunity from AI Scanner: {symbol} ({side}) at {opportunity['entry_price']} via {opportunity['strategy_used']}")
+            strat = opportunity.get("strategy_used") or opportunity.get("strategy", "Volatility Expansion Breakout")
+            opportunity["strategy_used"] = strat
+            opportunity["strategy"] = strat
+            opportunity.setdefault("market_regime", "TRENDING")
+            entry_px = float(opportunity.get("entry_price", 0.0))
+            
+            logger.info(f"[STAGE: SIGNAL] Reviewing trade opportunity from AI Scanner: {symbol} ({side}) at {entry_px} via {strat}")
             ExecutionStateTracker.get_instance().transition(
                 symbol=symbol,
                 state=ExecutionState.SIGNAL_DETECTED,
                 side=side,
                 stage="SCANNER_SIGNAL",
-                price=float(opportunity.get("entry_price", 0.0))
+                price=entry_px
             )
             ExecutionStateTracker.get_instance().transition(
                 symbol=symbol,
                 state=ExecutionState.OPPORTUNITY_APPROVED,
                 side=side,
                 stage="META_REASONING",
-                price=float(opportunity.get("entry_price", 0.0))
+                price=entry_px
             )
             
             # 0. Check central circuit breakers and global trading modes
@@ -366,7 +376,9 @@ class OrderManager:
                 "Minervini VCP Breakout",
                 "High-RVOL Breakout (In Play)",
                 "Volatility Expansion Breakout",
-                "Breakout Momentum"
+                "Breakout Momentum",
+                "Institutional First Pullback (Raschke/VWAP)",
+                "Smart Re-Entry"
             }
 
             strategy_used = opportunity.get("strategy_used", opportunity.get("strategy", ""))
@@ -377,10 +389,11 @@ class OrderManager:
             is_ribbon_aligned = bool(opportunity.get("ribbon_info", {}).get("is_ribbon_aligned", False))
             has_oi_fuel = bool(opportunity.get("oi_fuel_info", {}).get("has_squeeze_fuel", False))
             squeeze_state = str(opportunity.get("squeeze_info", {}).get("squeeze_state", "")).upper()
+            is_reentry = bool(opportunity.get("is_reentry", False) or "First Pullback" in strategy_used or "Re-entry" in strategy_used or "Re-Entry" in strategy_used)
 
             # Qualification check: Must match an allowed long-run strategy AND satisfy at least one runner pillar
-            is_qualified_long_run = is_allowed_strategy and (
-                is_htf or is_big_move or (is_ribbon_aligned and squeeze_state in ["SQUEEZE_FIRING", "SQUEEZE_ACTIVE"]) or has_oi_fuel
+            is_qualified_long_run = (is_allowed_strategy or is_reentry) and (
+                is_htf or is_big_move or (is_ribbon_aligned and squeeze_state in ["SQUEEZE_FIRING", "SQUEEZE_ACTIVE"]) or has_oi_fuel or is_reentry or opportunity.get("allow_long_runs", False)
             )
 
             if not is_qualified_long_run:

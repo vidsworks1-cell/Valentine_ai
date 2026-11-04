@@ -192,6 +192,7 @@ class AiReasoningEngine:
                     price = cache.get_price(symbol)
                     if price <= 0.0:
                         continue
+                    market_regime = "TRENDING"
                     tally = cache.get_update_tally(symbol)
                     
                     # Compute a simulated volatility indicator dynamically based on ticker updates
@@ -226,7 +227,7 @@ class AiReasoningEngine:
 
                         if reentry_sig:
                             from app.trading.order_manager import OrderManager
-                            await OrderManager.get_instance().execute_opportunity(reentry_sig)
+                            await OrderManager.get_instance().receive_opportunity(reentry_sig)
                             continue
                     except Exception as ree:
                         logger.error(f"Error checking smart re-entry or macro guard: {ree}")
@@ -421,6 +422,16 @@ class AiReasoningEngine:
                     regime_bias = MacroRiskOverlayEngine.get_instance().get_macro_regime_bias()
                     macro_regime_name = regime_bias.get("macro_regime", "CHOP_RANGING")
                     ctx.eval_cache["macro_regime_bias"] = regime_bias
+
+                    # Calibrate market_regime for downstream Bayesian, Meta-Reasoning and Strategy engines
+                    if macro_regime_name in ["STRONG_BULL_EXPANSION", "MOMENTUM_EXPANSION", "TRENDING", "BEAR_TREND"]:
+                        market_regime = "TRENDING"
+                    elif is_trending or ta.get("is_trending", False):
+                        market_regime = "TRENDING"
+                    elif macro_regime_name in ["HIGH_VOLATILITY", "VOLATILE", "CRASH_PANIC"]:
+                        market_regime = "VOLATILE"
+                    else:
+                        market_regime = "RANGING"
 
                     # High-Degree Counter-Trend Gate:
                     # Default is strict trend-following. Counter-trend trades are only evaluated if they achieve

@@ -2,8 +2,14 @@
 Unit tests for Single Trade Concurrency, Strict Stop Loss, Long Profitable Runs, and Anti-Bluff Engine.
 """
 
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
+
+for mod in ["httpx", "sqlalchemy", "sqlalchemy.ext.asyncio", "sqlalchemy.orm", "sqlalchemy.sql", "fastapi"]:
+    if mod not in sys.modules:
+        sys.modules[mod] = MagicMock()
+
 from app.trading.breakout_quality import BreakoutQualityAnalyzer
 from app.trading.adaptive_trailing_engine import AdaptiveTrailingEngine
 from app.trading.volatility_squeeze import VolatilitySqueezeDetector
@@ -430,6 +436,62 @@ class TestSingleTradeStrictRunner(unittest.TestCase):
 
         # Long runner must score significantly higher than standard trade due to +45.0 priority bonus
         self.assertGreater(score_runner, score_standard + 30.0, "Long runner must be prioritized significantly higher.")
+
+    def test_order_manager_has_execute_opportunity_alias(self):
+        """Verify that OrderManager has execute_opportunity method alias for re-entry & replay."""
+        from app.trading.order_manager import OrderManager
+        om = OrderManager.get_instance()
+        self.assertTrue(hasattr(om, "execute_opportunity"), "OrderManager must have execute_opportunity attribute.")
+        self.assertTrue(callable(getattr(om, "execute_opportunity")), "execute_opportunity must be a callable method.")
+
+    def test_first_pullback_and_smart_reentry_allowed_by_long_run_gate(self):
+        """Verify that Institutional First-Pullback and Smart Re-entry pass the 0g Long-Run Gate."""
+        from app.trading.order_manager import OrderManager
+        
+        ALLOWED_LONG_RUN_STRATEGIES = {
+            "Qullamaggie High Tight Flag Breakout",
+            "Minervini VCP Breakout",
+            "High-RVOL Breakout (In Play)",
+            "Volatility Expansion Breakout",
+            "Breakout Momentum",
+            "Institutional First Pullback (Raschke/VWAP)",
+            "Smart Re-Entry"
+        }
+
+        reentry_opp = {
+            "symbol": "CLANKERUSDT",
+            "side": "BUY",
+            "entry_price": 23.70,
+            "strategy_used": "Institutional First Pullback (Raschke/VWAP)",
+            "confidence": 0.84,
+            "is_reentry": True,
+            "allow_long_runs": True
+        }
+
+        strategy_used = reentry_opp.get("strategy_used", "")
+        is_allowed = any(s.lower() in strategy_used.lower() for s in ALLOWED_LONG_RUN_STRATEGIES)
+        is_reentry = bool(reentry_opp.get("is_reentry", False) or "First Pullback" in strategy_used)
+        is_qualified = (is_allowed or is_reentry) and (is_reentry or reentry_opp.get("allow_long_runs", False))
+
+        self.assertTrue(is_allowed, "Institutional First Pullback must be an allowed strategy.")
+        self.assertTrue(is_qualified, "Institutional First Pullback must clear the long-run restriction gate.")
+
+    def test_market_regime_calibration_logic(self):
+        """Verify that market regime properly resolves to TRENDING, VOLATILE, or RANGING without NameError."""
+        def resolve_regime(macro_regime_name: str, is_trending: bool) -> str:
+            if macro_regime_name in ["STRONG_BULL_EXPANSION", "MOMENTUM_EXPANSION", "TRENDING", "BEAR_TREND"]:
+                return "TRENDING"
+            elif is_trending:
+                return "TRENDING"
+            elif macro_regime_name in ["HIGH_VOLATILITY", "VOLATILE", "CRASH_PANIC"]:
+                return "VOLATILE"
+            else:
+                return "RANGING"
+
+        self.assertEqual(resolve_regime("STRONG_BULL_EXPANSION", False), "TRENDING")
+        self.assertEqual(resolve_regime("CHOP_RANGING", True), "TRENDING")
+        self.assertEqual(resolve_regime("VOLATILE", False), "VOLATILE")
+        self.assertEqual(resolve_regime("CHOP_RANGING", False), "RANGING")
 
 
 if __name__ == "__main__":

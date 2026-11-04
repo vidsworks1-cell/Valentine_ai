@@ -37,6 +37,12 @@ env/
 *.sqlite3
 backend/lumina_backend.db
 
+# Runtime generated data & dynamic audit logs
+backend/data/guard_performance_audit.json
+backend/data/strategy_portfolio_allocations.json
+backend/data/missed_opportunities.json
+backend/data/execution_outcomes.json
+
 # Large media files (prevent GitHub file size & push rejections)
 *.mp4
 *.mov
