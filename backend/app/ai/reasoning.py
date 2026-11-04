@@ -176,6 +176,13 @@ class AiReasoningEngine:
         
         while self.running:
             try:
+                # Single-Trade Policy Check: If 1 trade is already actively running, pause scanning to let it run!
+                from app.trading.position_manager import PositionManager
+                active_pos = PositionManager.get_instance().get_active_positions()
+                if len(active_pos) >= 1:
+                    await asyncio.sleep(4.0)
+                    continue
+
                 # Dynamically retrieve liquid contracts across the exchange universe (Top 50 with >= $30M 24h volume)
                 liquid_symbols = cache.get_liquid_symbols(min_quote_volume=30_000_000.0, top_n=50)
                 dynamic_symbols = liquid_symbols if len(liquid_symbols) >= 10 else default_baseline_symbols
@@ -275,6 +282,22 @@ class AiReasoningEngine:
                     vcp_info = squeeze_info.get("vcp_pattern", {})
                     is_vcp_apex = vcp_info.get("is_vcp_valid", False) and vcp_info.get("is_at_apex", False)
 
+                    # 1. High Tight Flag (HTF) Pattern Detection (Kristjan Qullamaggie method)
+                    from app.trading.high_tight_flag import HighTightFlagDetector
+                    htf_info = HighTightFlagDetector.get_instance().detect_high_tight_flag(symbol, price, side=proposed_side)
+                    is_htf_breakout = htf_info.get("is_htf_breakout", False)
+
+                    # 2. Triple EMA Ribbon (10/20/50 EMA) Trend Alignment
+                    from app.trading.triple_ema_ribbon import TripleEmaRibbonEngine
+                    ribbon_info = TripleEmaRibbonEngine.get_instance().evaluate_ribbon_alignment(symbol, price, proposed_side=proposed_side)
+                    is_ribbon_aligned = ribbon_info.get("is_ribbon_aligned", False)
+                    is_ribbon_expanding = ribbon_info.get("is_ribbon_expanding", False)
+
+                    # 3. Binance Futures Open Interest (OI) & Trapped Liquidity Squeeze Fuel
+                    from app.trading.open_interest_fuel import OpenInterestFuelDetector
+                    oi_fuel_info = OpenInterestFuelDetector.get_instance().evaluate_oi_squeeze_fuel(symbol, proposed_side, price)
+                    has_oi_fuel = oi_fuel_info.get("has_squeeze_fuel", False)
+
                     # SMB Capital "Stocks/Coins in Play" Rule: RVOL >= 2.50x
                     is_in_play = (rvol >= 2.50)
 
@@ -283,65 +306,51 @@ class AiReasoningEngine:
                     is_24h_breakout_long = (proposed_side == "BUY" and high_24h > 0 and price >= high_24h * 0.997)
                     is_24h_breakout_short = (proposed_side == "SELL" and low_24h > 0 and price <= low_24h * 1.003)
                     is_big_move_candidate = (
-                        (is_24h_breakout_long or is_24h_breakout_short) and
+                        (is_24h_breakout_long or is_24h_breakout_short or is_htf_breakout or (is_ribbon_aligned and is_ribbon_expanding)) and
                         squeeze_state in ["SQUEEZE_FIRING", "SQUEEZE_ACTIVE"] and
                         rvol >= 1.20
                     )
 
-                    # 1. Regime Classification & Real-Trader Strategy Mapping
-                    market_regime = "TRENDING"
-                    if is_vcp_apex:
+                    # 1. Big Run Strategy Mapping: Exclusively permit high-conviction momentum expansions
+                    # Filter out low-momentum chop, ranging, or weak trend continuation
+                    if is_htf_breakout and rvol >= 1.60:
+                        strategy = "Qullamaggie High Tight Flag Breakout"
+                    elif is_vcp_apex and rvol >= 1.35:
                         strategy = "Minervini VCP Breakout"
                     elif is_in_play and is_big_move_candidate:
                         strategy = "High-RVOL Breakout (In Play)"
-                    elif is_big_move_candidate:
+                    elif is_big_move_candidate and rvol >= 1.30:
                         strategy = "Volatility Expansion Breakout"
-                    elif squeeze_state == "SQUEEZE_FIRING" and (rvol >= 1.80 or is_vcp_apex):
+                    elif squeeze_state == "SQUEEZE_FIRING" and rvol >= 1.70:
                         strategy = "Breakout Momentum"
                     else:
-                        strategy = "Trend Continuation"
+                        # Exclusively trade setups that catch big runs; ignore minor fluctuations
+                        continue
 
-                    # 2. Dynamic Stop Loss & Multi-Stage Take Profit Placement (Optimized for Real Trader Expectancy)
-                    if strategy == "Minervini VCP Breakout":
-                        # Ultra-tight stop at apex of coil (1.20x ATR), massive 4.20x runner target (3.5 RRR)
-                        sl_multiplier = 1.20
-                        tp_stage1_mult = 1.60
-                        tp_stage2_mult = 4.20
+                    # 2. Strict Stop Loss & Asymmetric Big-Run Runner Targets (70/30 Core Moonbag Architecture)
+                    if strategy == "Qullamaggie High Tight Flag Breakout":
+                        sl_multiplier = 0.75
+                        tp_stage1_mult = 2.00  # 30% scale-out at +2.0R to bank profit & lock free-roll
+                        tp_stage2_mult = 6.00  # 70% Core Moonbag runner target for 5R-10R+ run
+                    elif strategy == "Minervini VCP Breakout":
+                        sl_multiplier = 0.75
+                        tp_stage1_mult = 2.00
+                        tp_stage2_mult = 5.50
                     elif strategy in ["Volatility Expansion Breakout", "High-RVOL Breakout (In Play)"]:
-                        # Institutional VEB: 1.45x ATR SL, 1.50x Stage 1 TP (+BE lock), 3.80x Runner TP
-                        sl_multiplier = 1.45
-                        tp_stage1_mult = 1.50
-                        tp_stage2_mult = 3.80
-                    elif market_regime == "TRENDING":
-                        sl_multiplier = 1.5
-                        tp_stage1_mult = 1.2  # Stage 1: Partial scale-out + immediate breakeven lock
-                        tp_stage2_mult = 3.2  # Stage 2: Uncapped runner target
-                    elif market_regime == "RANGING":
-                        sl_multiplier = 1.2
-                        tp_stage1_mult = 0.9
-                        tp_stage2_mult = 2.2
-                    else:  # VOLATILE / SQUEEZE_FIRING
-                        sl_multiplier = 1.8
-                        tp_stage1_mult = 1.4
-                        tp_stage2_mult = 3.6
-
-                    # Dynamically calibrate SL and TP with active trading persona if defined (e.g. 0.85x ATR SL for 12x-15x scalping)
-                    try:
-                        from app.trading.trading_persona import TradingPersonaPresetEngine
-                        act_persona = TradingPersonaPresetEngine.get_instance().get_active_persona()
-                        if act_persona.get("sl_atr_multiplier"):
-                            sl_multiplier = float(act_persona["sl_atr_multiplier"])
-                        if act_persona.get("tp_atr_multiplier"):
-                            tp_stage2_mult = float(act_persona["tp_atr_multiplier"])
-                        if act_persona.get("tp_stage1_multiplier"):
-                            tp_stage1_mult = float(act_persona["tp_stage1_multiplier"])
-                    except Exception:
-                        pass
+                        sl_multiplier = 0.85
+                        tp_stage1_mult = 2.00
+                        tp_stage2_mult = 5.00
+                    else:  # Breakout Momentum
+                        sl_multiplier = 0.80
+                        tp_stage1_mult = 1.80
+                        tp_stage2_mult = 4.50
 
                     dec_prec = 8 if price < 0.001 else (6 if price < 1.0 else (4 if price < 50.0 else 2))
-                    min_dist = max(sl_multiplier * atr, price * 0.0045)
-                    min_tp1_dist = max(tp_stage1_mult * atr, min_dist * 1.6, price * 0.010)
-                    min_tp2_dist = max(tp_stage2_mult * atr, min_dist * 2.5, price * 0.018)
+                    # Very Strict Stop Loss: strictly bounded between 0.35% and 0.50% of entry price
+                    raw_min_dist = max(sl_multiplier * atr, price * 0.0035)
+                    min_dist = min(raw_min_dist, price * 0.0050)
+                    min_tp1_dist = max(tp_stage1_mult * atr, min_dist * 2.0, price * 0.012)
+                    min_tp2_dist = max(tp_stage2_mult * atr, min_dist * 4.5, price * 0.030)
                     stop_loss = round(price - min_dist if proposed_side == "BUY" else price + min_dist, dec_prec)
                     take_profit = round(price + min_tp2_dist if proposed_side == "BUY" else price - min_tp2_dist, dec_prec)
                     tp_stage1_price = round(price + min_tp1_dist if proposed_side == "BUY" else price - min_tp1_dist, dec_prec)
@@ -349,16 +358,16 @@ class AiReasoningEngine:
                     tp_stages = [
                         {
                             "stage": 1,
-                            "label": "STAGE_1_SCALE_OUT_BREAKEVEN",
+                            "label": "STAGE_1_SCALE_OUT_BREAKEVEN_30PCT",
                             "level": tp_stage1_price,
-                            "percentage": 0.40,
+                            "percentage": 0.30,  # 30% scale-out at +2.0R to lock guaranteed profit and free-roll
                             "hit": False
                         },
                         {
                             "stage": 2,
-                            "label": "STAGE_2_RUNNER_EXIT",
+                            "label": "STAGE_2_CORE_MOONBAG_RUNNER_70PCT",
                             "level": take_profit,
-                            "percentage": 0.60,
+                            "percentage": 0.70,  # 70% Core Moonbag riding the 20 EMA baseline for the full macro run
                             "hit": False
                         }
                     ]
@@ -452,8 +461,8 @@ class AiReasoningEngine:
                         continue
                     ctx.add_trace("VolumeLiquidityGuard", "PASS")
 
-                    # 4. 1-Minute Candle Breakout & RVOL Confirmation Guard (Anti-Fakeout)
-                    # Requires the 1-minute candle to close in the breakout direction with positive volume momentum
+                    # 4. Anti-Bluff & Candle Confirmation Guard
+                    # Weeds out false wick spikes, bull/bear traps, and low-volume bluff moves
                     m1_data = cache.get_1m_candle_metrics(symbol)
                     rvol_surge = cache.get_volume_surge_ratio(symbol)
                     ctx.eval_cache["1m_candle"] = m1_data
@@ -463,24 +472,39 @@ class AiReasoningEngine:
                         candle_dir = m1_data.get("candle_direction", "NEUTRAL")
                         close_loc = m1_data.get("close_location", 0.5)
 
-                        is_opposed = (
-                            (proposed_side == "BUY" and candle_dir == "BEARISH" and close_loc < 0.40) or
-                            (proposed_side == "SELL" and candle_dir == "BULLISH" and close_loc > 0.60)
-                        )
-                        # Weeds out false wick spikes lacking volume expansion (RVOL < 1.15 on opposed 1m tick)
-                        if is_opposed and rvol_surge < 1.15:
+                        # Rejection Wick Bluff / Bull Trap Guard
+                        if proposed_side == "BUY" and close_loc < 0.55:
                             wick_reason = (
-                                f"1M Candle Wick Rejection: Opposing 1m candle ({candle_dir}, close at {close_loc*100:.0f}% of range) "
-                                f"with weak volume delta (RVOL {rvol_surge:.2f}x < 1.15x threshold). False breakout weeded out."
+                                f"Anti-Bluff [Bull Trap]: 1m candle closed in bottom {close_loc*100:.0f}% of range "
+                                f"with heavy upper rejection wick. Breakout bluff weeded out."
+                            )
+                            ctx.record_rejection("Candle1MConfirmationGuard", wick_reason, category="FALSE_WICK_BREAKOUT")
+                            continue
+                        elif proposed_side == "SELL" and close_loc > 0.45:
+                            wick_reason = (
+                                f"Anti-Bluff [Bear Trap]: 1m candle closed in top {close_loc*100:.0f}% of range "
+                                f"with heavy lower rejection wick. Breakdown bluff weeded out."
                             )
                             ctx.record_rejection("Candle1MConfirmationGuard", wick_reason, category="FALSE_WICK_BREAKOUT")
                             continue
 
-                        # 1M Volume Exhaustion Climax Guard:
-                        # Prevent buying the exact top of an extended wick when 1M RSI is severely overbought (>74) or selling deep oversold (<26)
-                        if (proposed_side == "BUY" and rsi_val >= 74.0 and close_loc < 0.65) or \
-                           (proposed_side == "SELL" and rsi_val <= 26.0 and close_loc > 0.35):
-                            climax_reason = f"1M Volume Exhaustion Climax: Extreme RSI ({rsi_val:.1f}) with stalled candle close ({close_loc*100:.0f}%). Rejection likely."
+                        # Opposing candle lacking institutional volume expansion
+                        is_opposed = (
+                            (proposed_side == "BUY" and candle_dir == "BEARISH") or
+                            (proposed_side == "SELL" and candle_dir == "BULLISH")
+                        )
+                        if is_opposed and rvol_surge < 1.50:
+                            wick_reason = (
+                                f"Anti-Bluff [Opposing Trend]: Opposing 1m candle ({candle_dir}) "
+                                f"lacking breakout surge (RVOL {rvol_surge:.2f}x < 1.50x threshold). Bluff move weeded out."
+                            )
+                            ctx.record_rejection("Candle1MConfirmationGuard", wick_reason, category="FALSE_WICK_BREAKOUT")
+                            continue
+
+                        # Volume Exhaustion Climax Guard
+                        if (proposed_side == "BUY" and rsi_val >= 75.0 and close_loc < 0.70) or \
+                           (proposed_side == "SELL" and rsi_val <= 25.0 and close_loc > 0.30):
+                            climax_reason = f"Anti-Bluff [Exhaustion Climax]: Extreme RSI ({rsi_val:.1f}) with stalled candle close ({close_loc*100:.0f}%). Rejection likely."
                             ctx.record_rejection("Candle1MConfirmationGuard", climax_reason, category="EXHAUSTION_CLIMAX")
                             continue
 
@@ -575,11 +599,15 @@ class AiReasoningEngine:
                         except Exception:
                             pass
 
+                    htf_bonus = 0.05 if is_htf_breakout else 0.0
+                    ribbon_bonus = 0.04 if (is_ribbon_aligned and is_ribbon_expanding) else (0.02 if is_ribbon_aligned else 0.0)
+                    oi_fuel_bonus = oi_fuel_info.get("fuel_confidence_bonus", 0.0)
+
                     pruned_signal_adjustment = (
                         (squeeze_bonus * squeeze_weight * 2.5) +
                         (regime_confluence_bonus * regime_weight * 2.0) +
                         (volatility_quality_bonus * rvol_weight * 2.0) +
-                        big_move_bonus + l2_obi_bonus +
+                        big_move_bonus + l2_obi_bonus + htf_bonus + ribbon_bonus + oi_fuel_bonus +
                         sentiment_bonus + liq_bonus + sweep_bonus + netflow_bonus +
                         order_flow_bonus + funding_bonus + anomaly_penalty
                     )
@@ -781,6 +809,14 @@ class AiReasoningEngine:
                         "low_24h": low_24h,
                         "rvol": rvol,
                         "is_big_move": is_big_move_candidate,
+                        "htf_info": htf_info,
+                        "ribbon_info": ribbon_info,
+                        "oi_fuel_info": oi_fuel_info,
+                        "ema10": float(ribbon_info.get("ema10", 0.0)),
+                        "ema20": float(ribbon_info.get("ema20", 0.0)),
+                        "ema50": float(ribbon_info.get("ema50", 0.0)),
+                        "runner_mode_enabled": True,
+                        "allow_long_runs": True,
                         "is_probationary_trade": is_probationary,
                         "entry_reason": f"AI Engine evaluated ticker telemetry. Symbol {symbol} trading at ${price} with live update count {tally}. High conviction {ctx.active_strategy} trigger generated based on dynamic ATR of ${atr}. Applied dynamic confidence threshold: {dynamic_threshold}. RVOL: {rvol:.2f}x. 24h Range: [{low_24h} - {high_24h}]. Self-Adaptation: {adaptation_log_str}",
                         "adaptation_insights": adaptation_reasons,

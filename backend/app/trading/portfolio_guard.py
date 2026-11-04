@@ -64,9 +64,9 @@ class PortfolioGuard:
     """
     _instance: Optional['PortfolioGuard'] = None
     
-    MAX_OPEN_POSITIONS = 3      # Max 3 open positions simultaneously (disciplined high-leverage risk cap)
-    MAX_PORTFOLIO_RISK = 0.06   # 6% Portfolio Heat Limit
-    MAX_SYMBOL_EXPOSURE = 0.02  # 2% Max Per-Symbol Exposure
+    MAX_OPEN_POSITIONS = 1      # Strict Single-Trade Discipline: 1 open position at a time with full balance concentration
+    MAX_PORTFOLIO_RISK = 0.08   # 8% Portfolio Heat Limit
+    MAX_SYMBOL_EXPOSURE = 0.08  # Max Per-Symbol Exposure
     MAX_DAILY_LOSS = 0.05       # 5% Daily Loss Circuit Breaker
     MAX_CLUSTER_POSITIONS = 1   # Max 1 simultaneous position per correlation cluster (prevents altcoin dump contagion)
     MAX_SECTOR_RISK_CAP_PCT = 2.5 # Max 2.5% portfolio risk per sector cluster
@@ -521,20 +521,23 @@ class PortfolioGuard:
             except Exception:
                 pass
 
-            # Micro-Account Capital Concentration (< $15.0 USDT balance):
-            # Enforce 1 active trade at a time to prevent margin fragmentation and fees from compounding across simultaneous positions.
-            if balance < 15.0:
-                effective_max_open = 1
-                logger.info(f"🛡️ [MICRO-ACCOUNT DISCIPLINE] Balance (${balance:.2f} USDT < $15). Capping concurrent positions to 1 for maximum capital focus.")
-            else:
-                # Free-Roll Slot Recycling: If active positions are already locked at Breakeven (zero downside risk),
-                # expand capacity to 4 slots for high-conviction setups without increasing portfolio heat.
-                risk_neutral_count = sum(1 for p in active_positions if p.get("breakeven_activated") or float(p.get("profit_loss", 0.0)) > 0.05)
-                if risk_neutral_count >= 1 and incoming_conf >= 0.76:
-                    effective_max_open = max(effective_max_open, 4)
-                    logger.info(f"💎 [FREE-ROLL SLOT RECYCLING] {risk_neutral_count} active position(s) risk-neutral. Capacity expanded to {effective_max_open} slots for high-conviction setup {symbol}.")
+            # Strict Single-Trade Capital Concentration Mode (1 trade at a time):
+            effective_max_open = 1
 
             if open_count >= effective_max_open:
+                active_sym = active_positions[0].get("symbol", "ACTIVE_POSITION") if active_positions else "OPEN_TRADE"
+                msg = (
+                    f"🛡️ [SINGLE-TRADE DISCIPLINE] Maximum 1 active position allowed (currently holding {active_sym}). "
+                    f"New setup for {symbol} held in queue so active runner can play out with full balance."
+                )
+                logger.info(msg)
+                self._record_rejected_opportunity(opportunity, msg, incoming_conf)
+                try:
+                    from app.trading.opportunity_queue import OpportunityQueueEngine
+                    asyncio.create_task(OpportunityQueueEngine.get_instance().enqueue_opportunity(opportunity, reason=msg))
+                except Exception as qe:
+                    logger.error(f"Error enqueuing opportunity into OpportunityQueue: {qe}")
+                return PortfolioDecision(approved=False, action_type="REJECT", reason=msg)
                 now_ts = time.time()
                 # 1. Anti-Churn Cooldown: Max 1 Alpha Swap per 2 hours across entire portfolio
                 time_since_last_swap = now_ts - getattr(self, "_last_swap_timestamp", 0.0)

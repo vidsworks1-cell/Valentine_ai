@@ -36,6 +36,7 @@ class TradeCreate(TradeBase):
 
 class TradeUpdate(BaseModel):
     exit_price: Optional[float] = None
+    stop_loss: Optional[float] = None
     profit_loss: Optional[float] = None
     exit_time: Optional[datetime] = None
     outcome: Optional[str] = None

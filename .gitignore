@@ -1,22 +1,45 @@
+# Android build outputs & IDE
 *.iml
 .gradle
 .kotlin
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+local.properties
+.idea/
 .DS_Store
-/build
-/captures
+build/
+**/build/
+.build-outputs/
+captures/
 .externalNativeBuild
 .cxx
-local.properties
+*.apk
+*.aab
+*.dex
+*.class
+
+# Python environments & caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+myenv/
+test_venv/
+env/
+.pytest_cache/
+
+# Databases & Secrets
 .env
-debug.keystore
 *.db
 *.sqlite
 *.sqlite3
 backend/lumina_backend.db
+
+# Large media files (prevent GitHub file size & push rejections)
+*.mp4
+*.mov
+*.avi
+*.mkv
+public/assets/aistudio/*.mp4

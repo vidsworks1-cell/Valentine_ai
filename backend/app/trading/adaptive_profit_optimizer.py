@@ -24,6 +24,22 @@ from typing import Dict, Any, Tuple, Optional
 logger = logging.getLogger("lumina.trading.adaptive_profit_optimizer")
 
 
+def _round_price(price: float) -> float:
+    """Rounds price to appropriate significant precision to avoid truncation."""
+    if price <= 0.0:
+        return 0.0
+    if price < 0.00001:
+        return round(price, 10)
+    elif price < 0.001:
+        return round(price, 8)
+    elif price < 1.0:
+        return round(price, 6)
+    elif price < 10.0:
+        return round(price, 4)
+    else:
+        return round(price, 2)
+
+
 class AdaptiveProfitDecision:
     def __init__(
         self,
@@ -67,6 +83,7 @@ class AdaptiveProfitOptimizer:
     ) -> AdaptiveProfitDecision:
         """
         Continuously evaluates active position trajectory to dynamically adapt TP/SL.
+        Enables long, highly profitable runner expansions without premature take-profit capping.
         """
         symbol = position.get("symbol", "UNKNOWN")
         side = position.get("side", "BUY").upper()
@@ -82,32 +99,32 @@ class AdaptiveProfitOptimizer:
         unrealized_pnl_pct = ((current_price - entry) / entry * 100.0) if side == "BUY" else ((entry - current_price) / entry * 100.0)
         target_distance_pct = abs((tp - entry) / entry * 100.0)
 
-        # Strategy specific calibration
-        strat = position.get("strategy", position.get("entry_strategy", ""))
-        is_veb = ("volatility expansion" in strat.lower()) or ("breakout" in strat.lower())
-        req_progress = 0.65 if is_veb else 0.75
-        req_rvol = 1.20 if is_veb else 1.50
-        max_extensions = 5 if is_veb else 2
+        # Strategy specific calibration for big-run setups
+        strat = str(position.get("strategy", position.get("entry_strategy", position.get("strategy_used", "")))).lower()
+        is_big_run_strat = any(k in strat for k in ["volatility", "breakout", "vcp", "squeeze", "runner", "momentum"])
+        req_progress = 0.55 if is_big_run_strat else 0.65
+        req_rvol = 1.15 if is_big_run_strat else 1.30
+        max_extensions = 15  # Expand up to 15 times to ride massive parabolic trends
 
         # 1. TP Extension: Price reached >= req_progress of initial TP with accelerating momentum and high volume
         progress_to_tp = (unrealized_pnl_pct / target_distance_pct) if target_distance_pct > 0 else 0.0
 
         if progress_to_tp >= req_progress and momentum_accelerating and rvol >= req_rvol:
-            # Trend is exceptionally strong: extend TP by 1.6x ATR for big moves to let winners run
-            extension_amount = atr * (1.60 if is_veb else 1.2)
+            # Trend is exceptionally strong: dynamically extend TP by 2.0x ATR to let winners run
+            extension_amount = atr * (2.0 if is_big_run_strat else 1.5)
             if side == "BUY":
-                extended_tp = round(tp + extension_amount, 6)
-                # Dynamic Chandelier trailing stop trailing 1.2x ATR behind live price
-                raised_trail = round(max(current_trail, current_price - (atr * 1.2), entry + (atr * 0.8)), 6)
+                extended_tp = _round_price(tp + extension_amount)
+                # Dynamic Chandelier trailing stop trailing 0.85x ATR behind live price
+                raised_trail = _round_price(max(current_trail, current_price - (atr * 0.85), entry + (atr * 0.5)))
             else:
-                extended_tp = round(tp - extension_amount, 6)
-                raised_trail = round(min(current_trail, current_price + (atr * 1.2), entry - (atr * 0.8)), 6)
+                extended_tp = _round_price(tp - extension_amount)
+                raised_trail = _round_price(min(current_trail, current_price + (atr * 0.85), entry - (atr * 0.5)))
 
             # Prevent infinite extension if already reached extension limit
             ext_count = int(position.get("tp_extensions_count", 0))
             if ext_count < max_extensions:
                 msg = (
-                    f"🚀 [RUNNER TP EXTENSION - {strat or 'VEB'}] {symbol} {side} momentum accelerating (+{unrealized_pnl_pct:.2f}%, RVOL {rvol:.2f}x). "
+                    f"🚀 [LONG RUN TP EXTENSION - {strat.upper()}] {symbol} {side} momentum accelerating (+{unrealized_pnl_pct:.2f}%, RVOL {rvol:.2f}x). "
                     f"Extended TP from ${tp:.4f} to ${extended_tp:.4f} (extension #{ext_count+1}/{max_extensions}). Locked Chandelier trail at ${raised_trail:.4f}."
                 )
                 logger.info(msg)
@@ -118,16 +135,16 @@ class AdaptiveProfitOptimizer:
                     rationale=msg
                 )
 
-        # 2. Tighten Trailing Stop: In profit (> 0.9R for VEB, > 1.2R standard), but momentum begins decelerating or RSI extreme
-        profit_r_trigger = 0.9 if is_veb else 1.2
+        # 2. Tighten Trailing Stop: In profit (> 0.7R for big runs), but momentum begins decelerating or RSI extreme
+        profit_r_trigger = 0.7 if is_big_run_strat else 1.0
         if unrealized_pnl_pct >= (atr / entry * 100.0 * profit_r_trigger) and (not momentum_accelerating or rsi > 78.0 or rsi < 22.0):
-            # Tighten trail to lock in 75% (VEB) or 72% of peak gains
-            trail_pct = 0.75 if is_veb else 0.72
+            # Tighten trail to lock in 80% (big run) or 75% of peak gains
+            trail_pct = 0.80 if is_big_run_strat else 0.75
             if side == "BUY":
                 peak_p = float(position.get("highest_price", current_price))
-                tight_trail = round(entry + ((peak_p - entry) * trail_pct), 4)
+                tight_trail = _round_price(entry + ((peak_p - entry) * trail_pct))
                 if tight_trail > current_trail:
-                    msg = f"🛡️ [TIGHTEN TRAIL - {strat or 'VEB'}] Momentum decelerating on {symbol} near peak ${peak_p:.2f}. Raised trail to ${tight_trail:.2f}."
+                    msg = f"🛡️ [TIGHTEN TRAIL - {strat.upper()}] Momentum decelerating on {symbol} near peak ${peak_p:.4f}. Locked {trail_pct*100:.0f}% of peak gains at ${tight_trail:.4f}."
                     logger.info(msg)
                     return AdaptiveProfitDecision(
                         action="TIGHTEN_TRAIL",
@@ -136,9 +153,9 @@ class AdaptiveProfitOptimizer:
                     )
             else:
                 lowest_p = float(position.get("lowest_price", current_price))
-                tight_trail = round(entry - ((entry - lowest_p) * 0.72), 4)
+                tight_trail = _round_price(entry - ((entry - lowest_p) * trail_pct))
                 if tight_trail < current_trail or current_trail == 0:
-                    msg = f"🛡️ [TIGHTEN TRAIL] Momentum decelerating on {symbol} near trough ${lowest_p:.2f}. Lowered trail to ${tight_trail:.2f}."
+                    msg = f"🛡️ [TIGHTEN TRAIL - {strat.upper()}] Momentum decelerating on {symbol} near trough ${lowest_p:.4f}. Locked {trail_pct*100:.0f}% of peak gains at ${tight_trail:.4f}."
                     logger.info(msg)
                     return AdaptiveProfitDecision(
                         action="TIGHTEN_TRAIL",

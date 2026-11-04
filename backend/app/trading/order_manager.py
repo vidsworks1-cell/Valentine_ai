@@ -328,6 +328,95 @@ class OrderManager:
                 )
                 return
 
+            # 0f. Anti-Bluff & Trap Detection Gate (Module 3)
+            # Deeply inspects candlestick geometry, rejection wicks, low-volume traps, and spoofed orderbooks
+            from app.trading.breakout_quality import BreakoutQualityAnalyzer
+            bq_res = BreakoutQualityAnalyzer.get_instance().analyze_breakout_quality(opportunity)
+            if not bq_res.get("is_genuine_breakout", True) or bq_res.get("is_bluff", False):
+                bluff_reasons = bq_res.get("bluff_reasons", ["High fakeout/trap risk"])
+                bluff_msg = (
+                    f"🚫 [ANTI-BLUFF GUARD] Blocked {symbol} {side} fakeout: {'; '.join(bluff_reasons)} "
+                    f"(Score: {bq_res.get('breakout_quality_score', 0):.1f}, Trap Prob: {bq_res.get('fake_breakout_probability_pct', 0):.1f}%)."
+                )
+                logger.warning(bluff_msg)
+                try:
+                    from app.ai.reasoning import AiReasoningEngine
+                    AiReasoningEngine.get_instance().set_cooldown(
+                        symbol, side, category="ANTI_BLUFF_FILTER", duration_seconds=180.0,
+                        reason=bluff_msg, price=float(opportunity.get("entry_price", 0.0))
+                    )
+                except Exception as cd_err:
+                    logger.debug(f"Failed to set anti-bluff cooldown: {cd_err}")
+                if opportunity.get("decision_context"):
+                    opportunity["decision_context"].record_rejection("AntiBluffGuard", bluff_msg, category="ANTI_BLUFF_FILTER")
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=symbol,
+                    state=ExecutionState.REJECTED,
+                    side=side,
+                    stage="ANTI_BLUFF_GUARD",
+                    reason=bluff_msg,
+                    price=float(opportunity.get("entry_price", 0.0))
+                )
+                return
+
+            # 0g. Mandatory Long-Run Exclusivity & Priority Restriction Gate
+            # Enforces strict restriction: Only verified Long-Run trades are permitted to execute.
+            ALLOWED_LONG_RUN_STRATEGIES = {
+                "Qullamaggie High Tight Flag Breakout",
+                "Minervini VCP Breakout",
+                "High-RVOL Breakout (In Play)",
+                "Volatility Expansion Breakout",
+                "Breakout Momentum"
+            }
+
+            strategy_used = opportunity.get("strategy_used", opportunity.get("strategy", ""))
+            is_allowed_strategy = any(s.lower() in strategy_used.lower() for s in ALLOWED_LONG_RUN_STRATEGIES)
+
+            is_htf = bool(opportunity.get("htf_info", {}).get("is_htf_breakout", False))
+            is_big_move = bool(opportunity.get("is_big_move", False))
+            is_ribbon_aligned = bool(opportunity.get("ribbon_info", {}).get("is_ribbon_aligned", False))
+            has_oi_fuel = bool(opportunity.get("oi_fuel_info", {}).get("has_squeeze_fuel", False))
+            squeeze_state = str(opportunity.get("squeeze_info", {}).get("squeeze_state", "")).upper()
+
+            # Qualification check: Must match an allowed long-run strategy AND satisfy at least one runner pillar
+            is_qualified_long_run = is_allowed_strategy and (
+                is_htf or is_big_move or (is_ribbon_aligned and squeeze_state in ["SQUEEZE_FIRING", "SQUEEZE_ACTIVE"]) or has_oi_fuel
+            )
+
+            if not is_qualified_long_run:
+                reject_reason = (
+                    f"🛑 [LONG-RUN RESTRICTION GATE] Trade {symbol} ({strategy_used}) REJECTED: "
+                    f"Execution is strictly restricted to verified Long-Run runner setups. "
+                    f"Capital preserved exclusively for high-conviction macro expansions."
+                )
+                logger.warning(reject_reason)
+                if opportunity.get("decision_context"):
+                    opportunity["decision_context"].record_rejection("LongRunRestrictionGate", reject_reason, category="LONG_RUN_RESTRICTION")
+                ExecutionStateTracker.get_instance().transition(
+                    symbol=symbol,
+                    state=ExecutionState.REJECTED,
+                    side=side,
+                    stage="LONG_RUN_RESTRICTION_GATE",
+                    reason=reject_reason,
+                    price=float(opportunity.get("entry_price", 0.0))
+                )
+                return
+
+            # Priority tier assessment
+            priority_tier = 4
+            if is_htf and has_oi_fuel:
+                priority_tier = 1  # Highest: HTF with Trapped Liquidity Squeeze Fuel
+            elif is_htf or (is_big_move and has_oi_fuel):
+                priority_tier = 2  # HTF or 24h Breakout with Trapped Liquidity Fuel
+            elif is_big_move and is_ribbon_aligned:
+                priority_tier = 3  # 24h Breakout + Triple EMA Ribbon Expansion
+
+            logger.info(
+                f"💎 [LONG-RUN RESTRICTION CLEARED - PRIORITY TIER {priority_tier}] "
+                f"Trade {symbol} ({side} via {strategy_used}) approved for execution. "
+                f"(HTF={is_htf}, Ribbon={is_ribbon_aligned}, OI_Fuel={has_oi_fuel}, Squeeze={squeeze_state})."
+            )
+
         from app.services.trading_service import TradingService
         from app.services.paper_trading_service import PaperTradingService
         from app.services.audit_service import AuditService
@@ -361,6 +450,18 @@ class OrderManager:
                         available_margin = float(equity_status.get("available_usdt", 0.0))
                         total_wallet = float(equity_status.get("wallet_balance_usdt", 0.0))
                         unrealized_pnl = float(equity_status.get("unrealized_pnl", 0.0))
+
+                        # Strict Single-Trade Enforcement:
+                        # If a live futures position is already running on Binance, do not open another trade
+                        open_f_positions = [
+                            p for p in equity_status.get("active_futures_positions", [])
+                            if abs(float(p.get("positionAmt", 0.0))) > 0
+                        ]
+                        if len(open_f_positions) >= 1:
+                            active_f = open_f_positions[0]
+                            busy_msg = f"Single-trade discipline active: active position on Binance ({active_f.get('symbol')} {active_f.get('positionAmt')} contracts). Waiting for current trade to close."
+                            logger.info(f"⏸️ [SINGLE-TRADE DISCIPLINE] {busy_msg}")
+                            return
 
                         # In Binance Futures at 15x-20x leverage, an order requires only $0.25 to $0.35 margin to meet the $5 MIN_NOTIONAL.
                         # Lower the hard cutoff to $0.40 so available margin ($1.99) is not falsely rejected.
@@ -521,12 +622,12 @@ class OrderManager:
                     atr=atr_val,
                     strategy=opportunity.get("strategy_used", "VEB")
                 )
-                min_stop_distance = max(vol_bracket["stop_distance"], price * 0.005)
+                min_stop_distance = min(max(vol_bracket["stop_distance"], price * 0.0035), price * 0.0055)
 
                 raw_sl = float(opportunity.get("stop_loss", 0.0))
-                if raw_sl <= 0.0 or abs(price - raw_sl) < (price * 0.0035):
+                if raw_sl <= 0.0 or abs(price - raw_sl) < (price * 0.0035) or abs(price - raw_sl) > (price * 0.0055):
                     repaired_sl = round(price - min_stop_distance if opp_side == "BUY" else price + min_stop_distance, dec)
-                    logger.warning(f"🛡️ [SL CALIBRATION - {vol_bracket['volatility_regime']}] Quantile {vol_bracket['volatility_quantile']:.2f} ({vol_bracket['multiplier']}x ATR) for {symbol}. Calibrated SL to: {repaired_sl}")
+                    logger.warning(f"🛡️ [STRICT SL CALIBRATION - {vol_bracket['volatility_regime']}] Calibrated tight SL for {symbol} to: {repaired_sl} ({abs(price - repaired_sl)/price*100:.2f}%)")
                     stop_loss = repaired_sl
                     opportunity["stop_loss"] = stop_loss
                 else:
@@ -713,19 +814,26 @@ class OrderManager:
                     position_size = max(position_size, 0.0001)
                     logger.info(f"⚖️ [CONFIDENCE ADAPTIVE SIZING] Position size for {symbol} scaled from {old_size} to {position_size} ({conf_scaler:.2f}x allocation based on confidence score {conf_score:.2f})")
 
-                # High-Volatility Loss Capper:
-                # On volatile altcoins, if raw ATR stop distance exceeds 1.0% of entry price,
-                # clamp the stop-loss strictly to 0.95% to guarantee maximum loss never exceeds ~$0.05 on minimum notional.
+                # Strict Stop-Loss Loss Capper:
+                # With 1-trade-at-a-time full balance sizing, stops must be very strict.
+                # Clamp initial stop-loss strictly between 0.35% and 0.50% of entry price.
                 stop_dist = abs(price - stop_loss)
-                stop_pct = (stop_dist / price) if price > 0 else 0.01
-                if stop_pct > 0.010:
-                    clamped_dist = price * 0.0095
+                stop_pct = (stop_dist / price) if price > 0 else 0.005
+                if stop_pct > 0.0050:
+                    clamped_dist = price * 0.0050
                     if opportunity["side"].upper() == "BUY":
                         stop_loss = round(price - clamped_dist, 6)
                     else:
                         stop_loss = round(price + clamped_dist, 6)
                     opportunity["stop_loss"] = stop_loss
-                    logger.info(f"🛡️ [VOLATILITY LOSS CAPPER] {opportunity['symbol']}: Wide stop ({stop_pct*100:.2f}%) clamped to 0.95% (${stop_loss}) to prevent outsized loss.")
+                    logger.info(f"🛡️ [STRICT LOSS CAPPER] {opportunity['symbol']}: Wide stop ({stop_pct*100:.2f}%) clamped strictly to 0.50% (${stop_loss}) to prevent capital drawdown.")
+                elif stop_pct < 0.0035:
+                    clamped_dist = price * 0.0035
+                    if opportunity["side"].upper() == "BUY":
+                        stop_loss = round(price - clamped_dist, 6)
+                    else:
+                        stop_loss = round(price + clamped_dist, 6)
+                    opportunity["stop_loss"] = stop_loss
 
                 allowed_risk_amt = balance * risk_pct
 
@@ -801,60 +909,47 @@ class OrderManager:
 
                         notional_val = position_size * price
 
-                        # Intelligent Account Sizing & Growth Scaling:
-                        # Scales positions to capture meaningful profits ($10 - $20 notional) on high conviction,
-                        # while strictly capping micro/meme tokens to prevent outsized slippage.
-                        is_micro_token = symbol.upper().startswith(("BIRB", "JCT", "PUMP", "PEPE", "1000PEPE", "BEAMX", "BLESS", "COW", "IDOL", "MAGMA", "AIOT", "STX"))
+                        # Full-Balance Allocation Mode for Single Runner Trade:
+                        # With strict 1-trade discipline, we put essentially the entire balance to work (~88% available margin),
+                        # while retaining a safe 12% reserve for Binance maintenance margin, fee buffers, and spread.
+                        target_margin_alloc = max(0.35, balance * 0.88)
+                        target_notional = target_margin_alloc * float(target_leverage)
+                        target_min_notional = max(5.05, min_notional_req + 0.05, target_notional)
+                        logger.info(f"⚡ [FULL-BALANCE SIZING] {opportunity['symbol']}: Allocating 88% margin (${target_margin_alloc:.2f} USDT) at {target_leverage}x -> target ${target_min_notional:.2f} notional (Single runner focus).")
 
-                        if balance >= 2.50:
-                            if conf_score >= 0.78 or meta_conviction >= 78.0:
-                                # High Conviction: Allocate up to 28% of wallet margin (up to $18 - $22 notional)
-                                target_margin_alloc = balance * 0.28
-                                accelerated_notional = target_margin_alloc * float(target_leverage)
-                                max_cap = 8.50 if is_micro_token else min(accelerated_notional, balance * float(target_leverage) * 0.35)
-                                target_min_notional = max(5.05, min(accelerated_notional, max_cap))
-                                logger.info(f"⚡ [GROWTH SCALING] {opportunity['symbol']}: Notional scaled to ${target_min_notional:.2f} at {target_leverage}x (Conviction: {meta_conviction:.1f}).")
-                            else:
-                                target_margin_alloc = balance * 0.18
-                                accelerated_notional = target_margin_alloc * float(target_leverage)
-                                max_std_cap = 6.50 if is_micro_token else accelerated_notional
-                                target_min_notional = max(5.05, min(accelerated_notional, max_std_cap))
+                        # Determine quantity based on exchange LOT_SIZE step size
+                        min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
+                        req_margin = (min_target_qty * price) / float(target_leverage)
+
+                        # If rounding bumped margin over 92% of balance, scale down by 1 precision unit
+                        if req_margin > (balance * 0.92):
+                            min_target_qty = math.floor(((balance * 0.88 * float(target_leverage)) / price) * factor) / float(factor)
+                            req_margin = (min_target_qty * price) / float(target_leverage)
+
+                        if balance >= req_margin and (min_target_qty * price) >= 5.0:
+                            position_size = min_target_qty
+                            logger.info(f"⚡ [FULL-BALANCE SIZED] Set {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at {target_leverage}x). Entire balance working on single runner.")
                         else:
-                            target_min_notional = max(5.05, min_notional_req + 0.05)
-
-                        from app.trading.model_governance import ModelGovernanceEngine
-                        safety_scaler = ModelGovernanceEngine.get_instance().get_safety_scaler()
-                        if safety_scaler < 1.0:
-                            target_min_notional = max(5.05, min_notional_req + 0.05, target_min_notional * safety_scaler)
-                            logger.info(f"🚨 [SAFETY CIRCUIT THROTTLE] Target notional throttled to ${target_min_notional:.2f} (safety scaler: {safety_scaler:.2f}x).")
-
-                        if notional_val < target_min_notional:
-                            min_target_qty = math.ceil((target_min_notional / price) * factor) / float(factor)
+                            # Fallback to minimum legal notional if balance is tight
+                            base_target_notional = max(5.05, min_notional_req + 0.05)
+                            min_target_qty = math.ceil((base_target_notional / price) * factor) / float(factor)
                             req_margin = (min_target_qty * price) / float(target_leverage)
                             if balance >= req_margin:
                                 position_size = min_target_qty
-                                logger.info(f"⚡ [ACCELERATED GROWTH SIZING] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at {target_leverage}x). High-conviction margin scaling active.")
+                                logger.info(f"⚡ [MIN NOTIONAL FALLBACK] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at {target_leverage}x).")
                             else:
-                                # Fall back to minimum legal notional if balance cannot cover accelerated target
-                                base_target_notional = max(5.05, min_notional_req + 0.05)
-                                min_target_qty = math.ceil((base_target_notional / price) * factor) / float(factor)
-                                req_margin = (min_target_qty * price) / float(target_leverage)
-                                if balance >= req_margin:
-                                    position_size = min_target_qty
-                                    logger.info(f"⚡ [MIN NOTIONAL FALLBACK] Adjusted {opportunity['symbol']} position size to {position_size} (${position_size * price:.2f} notional, ${req_margin:.2f} margin at {target_leverage}x).")
-                                else:
-                                    logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available Futures margin (${balance:.2f} USDT) is insufficient for trade margin of ${req_margin:.2f} USDT at {target_leverage}x.")
-                                    ExecutionStateTracker.get_instance().transition(
-                                        symbol=opportunity["symbol"],
-                                        state=ExecutionState.REJECTED,
-                                        side=opportunity["side"],
-                                        stage="RISK_SIZING",
-                                        reason=f"Available Futures margin (${balance:.2f} USDT) insufficient for trade (${req_margin:.2f} margin required)",
-                                        price=price,
-                                        quantity=position_size,
-                                        trading_mode=trading_mode
-                                    )
-                                    return
+                                logger.info(f"ℹ️ [CAPITAL PRESERVATION] Available Futures margin (${balance:.2f} USDT) is insufficient for trade margin of ${req_margin:.2f} USDT at {target_leverage}x.")
+                                ExecutionStateTracker.get_instance().transition(
+                                    symbol=opportunity["symbol"],
+                                    state=ExecutionState.REJECTED,
+                                    side=opportunity["side"],
+                                    stage="RISK_SIZING",
+                                    reason=f"Available Futures margin (${balance:.2f} USDT) insufficient for trade (${req_margin:.2f} margin required)",
+                                    price=price,
+                                    quantity=position_size,
+                                    trading_mode=trading_mode
+                                )
+                                return
                 else:
                     filters = await connector.get_symbol_lot_size_filters(opportunity["symbol"], trading_mode)
                     prec = filters.get("precision", 4)
@@ -957,6 +1052,34 @@ class OrderManager:
                     trading_mode=trading_mode
                 )
 
+                # Fee-to-Alpha Profit Clearance Guard (Micro-Account Protection):
+                # When trading with small balances (under $10 USDT), exchange taker fees (~$0.007 round-trip on $7 notional)
+                # can consume 50%-100% of the gain on tight targets.
+                # Ensure the expected reward at TP1 clears estimated round-trip fees by at least 2.5x (minimum $0.020 USDT expected profit).
+                tp_price = float(opportunity.get("take_profit", 0.0))
+                if balance < 10.0 and tp_price > 0.0 and position_size > 0.0:
+                    expected_tp_reward = abs(tp_price - price) * position_size
+                    est_trade_notional = position_size * price
+                    est_round_trip_fee = est_trade_notional * 0.0010  # 0.10% conservative round trip (0.05% in + 0.05% out)
+                    min_viable_reward = max(0.020, est_round_trip_fee * 2.5)
+                    if expected_tp_reward < min_viable_reward:
+                        logger.info(
+                            f"ℹ️ [FEE-TO-ALPHA GUARD] Trade {opportunity['symbol']} expected profit (${expected_tp_reward:.4f} USDT) "
+                            f"is below the minimum threshold (${min_viable_reward:.4f} USDT) to comfortably out-earn exchange fees "
+                            f"(${est_round_trip_fee:.4f} USDT) on account balance ${balance:.2f}. Setup safely skipped."
+                        )
+                        ExecutionStateTracker.get_instance().transition(
+                            symbol=opportunity["symbol"],
+                            state=ExecutionState.REJECTED,
+                            side=opportunity["side"],
+                            stage="FEE_TO_ALPHA_GUARD",
+                            reason=f"Expected reward ${expected_tp_reward:.4f} < min required ${min_viable_reward:.4f} (fee preservation)",
+                            price=price,
+                            quantity=position_size,
+                            trading_mode=trading_mode
+                        )
+                        return
+
                 # If we are in TESTNET or LIVE mode, we place the real order on Binance first!
                 binance_order_id = None
                 sl_algo_id = None
@@ -979,12 +1102,15 @@ class OrderManager:
                             quantity=position_size,
                             trading_mode=trading_mode
                         )
+                        futures_order_type = "LIMIT" if order_routing == "LIMIT" else "MARKET"
+                        futures_time_in_force = "GTX" if order_routing == "LIMIT" else "GTC"
                         req_payload = {
                             "symbol": opportunity["symbol"],
                             "side": opportunity["side"],
-                            "type": "MARKET",
+                            "type": futures_order_type,
                             "quantity": position_size,
                             "price": price if order_routing == "LIMIT" else None,
+                            "timeInForce": futures_time_in_force if order_routing == "LIMIT" else None,
                             "mode": trading_mode,
                             "venue": "FUTURES"
                         }
@@ -992,11 +1118,41 @@ class OrderManager:
                             mode=trading_mode,
                             symbol=opportunity["symbol"],
                             side=opportunity["side"],
-                            order_type="MARKET",
+                            order_type=futures_order_type,
                             quantity=position_size,
                             price=price if order_routing == "LIMIT" else None,
+                            time_in_force=futures_time_in_force,
                             reduce_only=False
                         )
+                        # If Post-Only (GTX) would immediately cross the book (-5022 or "maker"), adjust 1 tick into book to post as Maker
+                        if isinstance(binance_res, dict) and (binance_res.get("code") in [-5022, -2010] or "maker" in str(binance_res.get("msg", "")).lower() or "match and take" in str(binance_res.get("msg", "")).lower()):
+                            adj_factor = 0.9998 if opportunity["side"] == "BUY" else 1.0002
+                            from app.trading.position_manager import _round_price
+                            maker_adj_price = _round_price(price * adj_factor)
+                            logger.info(f"🔄 [FUTURES MAKER POST-ONLY RETRY] Limit price crossed spread. Adjusting price from {price} to {maker_adj_price} to post as Maker.")
+                            binance_res = await connector.create_futures_order(
+                                mode=trading_mode,
+                                symbol=opportunity["symbol"],
+                                side=opportunity["side"],
+                                order_type="LIMIT",
+                                quantity=position_size,
+                                price=maker_adj_price,
+                                time_in_force="GTX",
+                                reduce_only=False
+                            )
+                            # If still crossed, fall back to standard LIMIT with GTC to capture entry
+                            if isinstance(binance_res, dict) and (binance_res.get("code") in [-5022, -2010] or "maker" in str(binance_res.get("msg", "")).lower()):
+                                logger.info(f"🔄 [FUTURES SPREAD DRIFT FALLBACK] Placing standard LIMIT (GTC) order to capture entry at {price}.")
+                                binance_res = await connector.create_futures_order(
+                                    mode=trading_mode,
+                                    symbol=opportunity["symbol"],
+                                    side=opportunity["side"],
+                                    order_type="LIMIT",
+                                    quantity=position_size,
+                                    price=price,
+                                    time_in_force="GTC",
+                                    reduce_only=False
+                                )
                     else:
                         filters = await connector.get_symbol_lot_size_filters(opportunity["symbol"], trading_mode)
                         prec = filters.get("precision", 4)
@@ -1232,6 +1388,8 @@ class OrderManager:
                     # Immediately place native conditional bracket orders directly on Binance Futures matching engine.
                     # Using close_position=True guarantees 100% position closure at exchange level without LOT_SIZE filter issues.
                     take_profit_price = float(opportunity.get("take_profit", 0.0))
+                    sl_algo_id = None
+                    tp_algo_id = None
 
                     if trading_venue == "FUTURES":
                         bracket_side = "SELL" if opportunity["side"].upper() == "BUY" else "BUY"
@@ -1466,6 +1624,8 @@ class OrderManager:
                     "stop_loss": trade.stop_loss,
                     "take_profit": trade.take_profit,
                     "trailing_stop": trade.stop_loss,
+                    "last_synced_exchange_sl": float(trade.stop_loss or 0.0),
+                    "exchange_stop_algo_id": sl_algo_id,
                     "highest_price": trade.entry_price,
                     "lowest_price": trade.entry_price,
                     "market_regime": trade.market_regime,
@@ -1474,6 +1634,12 @@ class OrderManager:
                     "confidence": opportunity.get("confidence_score", 0.83),
                     "strategy": opportunity.get("strategy_used", "Volatility Expansion Breakout"),
                     "tp_stages": opportunity.get("tp_stages", []),
+                    "ema10": float(opportunity.get("ema10", 0.0)),
+                    "ema20": float(opportunity.get("ema20", 0.0)),
+                    "ema50": float(opportunity.get("ema50", 0.0)),
+                    "htf_info": opportunity.get("htf_info", {}),
+                    "ribbon_info": opportunity.get("ribbon_info", {}),
+                    "oi_fuel_info": opportunity.get("oi_fuel_info", {}),
                     "risk_pct": risk_pct,
                     "trading_mode": trading_mode,
                     "scale_ins": 0,

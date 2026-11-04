@@ -1010,6 +1010,75 @@ class BinanceConnector:
         params = {"symbol": symbol.upper(), "algoId": str(algo_id)}
         return await self._request("DELETE", "/fapi/v1/algoOrder", mode, params=params, venue="FUTURES", signed=True)
 
+    async def get_futures_open_algo_orders(self, mode: str, symbol: str) -> List[Dict[str, Any]]:
+        """Queries active conditional/algo orders for a symbol on Binance Futures."""
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "PAPER":
+            return []
+        params = {"symbol": symbol.upper()}
+        res = await self._request("GET", "/fapi/v1/openAlgoOrders", mode_upper, params=params, venue="FUTURES", signed=True)
+        return res if isinstance(res, list) else []
+
+    async def update_futures_stop_loss_order(
+        self,
+        mode: str,
+        symbol: str,
+        side: str,
+        new_stop_price: float,
+        close_position: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Dynamically updates/replaces the active STOP_MARKET conditional order on Binance Futures.
+        1. Identifies and cancels existing STOP_MARKET conditional orders for this symbol.
+        2. Places a fresh STOP_MARKET conditional order at the ratcheted new_stop_price.
+        Leaves TAKE_PROFIT_MARKET orders completely intact.
+        """
+        mode_upper = (mode or "PAPER").upper()
+        if mode_upper == "PAPER":
+            return {"status": "FILLED", "orderId": int(time.time() * 1000), "stopPrice": new_stop_price}
+
+        params = {"symbol": symbol.upper()}
+
+        # 1. Cancel existing algo STOP_MARKET orders
+        try:
+            algo_res = await self._request("GET", "/fapi/v1/openAlgoOrders", mode_upper, params=params, venue="FUTURES", signed=True)
+            if isinstance(algo_res, list):
+                for ao in algo_res:
+                    ao_type = str(ao.get("orderType") or ao.get("type", "")).upper()
+                    if "STOP" in ao_type and "TAKE_PROFIT" not in ao_type:
+                        algo_id = ao.get("algoId")
+                        if algo_id:
+                            await self._request("DELETE", "/fapi/v1/algoOrder", mode_upper, params={"symbol": symbol.upper(), "algoId": str(algo_id)}, venue="FUTURES", signed=True)
+                            logger.info(f"🗑️ [BINANCE FUTURES RATCHET] Cancelled previous exchange STOP_MARKET algo order {algo_id} for {symbol}.")
+        except Exception as e:
+            logger.debug(f"Notice querying/cancelling open algo orders for {symbol}: {e}")
+
+        # 2. Also cancel any standard open STOP_MARKET orders if present
+        try:
+            open_orders = await self._request("GET", "/fapi/v1/openOrders", mode_upper, params=params, venue="FUTURES", signed=True)
+            if isinstance(open_orders, list):
+                for ord_item in open_orders:
+                    ord_type = str(ord_item.get("type", "")).upper()
+                    if "STOP" in ord_type and "TAKE_PROFIT" not in ord_type:
+                        ord_id = ord_item.get("orderId")
+                        if ord_id:
+                            await self._request("DELETE", "/fapi/v1/order", mode_upper, params={"symbol": symbol.upper(), "orderId": str(ord_id)}, venue="FUTURES", signed=True)
+                            logger.info(f"🗑️ [BINANCE FUTURES RATCHET] Cancelled previous exchange STOP_MARKET order {ord_id} for {symbol}.")
+        except Exception as e:
+            logger.debug(f"Notice querying/cancelling standard open orders for {symbol}: {e}")
+
+        # 3. Submit fresh STOP_MARKET conditional order at new ratcheted stop price
+        new_res = await self.create_futures_order(
+            mode=mode_upper,
+            symbol=symbol.upper(),
+            side=side.upper(),
+            order_type="STOP_MARKET",
+            stop_price=new_stop_price,
+            close_position=close_position
+        )
+        logger.info(f"🛡️ [EXCHANGE STOP-LOSS RATCHETED] Submitting Binance STOP_MARKET for {symbol} ({side} at {new_stop_price}): {new_res}")
+        return new_res
+
     async def cancel_futures_order(self, mode: str, symbol: str, order_id: Any) -> Dict[str, Any]:
         """Cancels an existing order on Binance USD(S)-M Futures."""
         params = {"symbol": symbol.upper(), "orderId": str(order_id)}

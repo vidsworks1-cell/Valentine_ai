@@ -163,21 +163,21 @@ class OrderBookL2Engine:
             elif obi >= 0.10:
                 confidence_delta += 0.02
                 reasons.append(f"Moderate bid skew (+{obi:.2f}).")
-            elif obi <= -0.30:
-                # Heavy ask wall directly overhead
-                confidence_delta -= 0.06
-                reasons.append(f"Unfavorable book skew ({obi:.2f}): Heavy seller wall overhead.")
+            elif obi <= -0.18:
+                # Heavy ask wall directly overhead - Bluff risk!
+                confidence_delta -= 0.08
+                is_safe = False
+                reasons.append(f"Hostile book skew (OBI {obi:.2f} <= -0.18): Heavy seller wall overhead (Bluff/Spoof risk).")
 
             if micro_bias > 1.0:
                 confidence_delta += 0.02
                 reasons.append(f"Micro-price leading spot (+{micro_bias:.1f} bps).")
 
             # Check for immediate ask wall blocking breakout
-            if ask_wall and ask_wall["distance_pct"] < 0.25 and ask_wall["wall_multiplier"] >= 3.0:
-                reasons.append(f"⚠️ Massive ask wall at ${ask_wall['price']} ({ask_wall['distance_pct']}% away, {ask_wall['wall_multiplier']}x depth). Risk of rejection.")
-                confidence_delta -= 0.04
-                if ask_wall["distance_pct"] < 0.10:
-                    is_safe = False
+            if ask_wall and ask_wall["distance_pct"] < 0.20 and ask_wall["wall_multiplier"] >= 2.5:
+                reasons.append(f"⚠️ Massive ask wall at ${ask_wall['price']} ({ask_wall['distance_pct']}% away, {ask_wall['wall_multiplier']}x depth). Risk of bluff rejection.")
+                confidence_delta -= 0.06
+                is_safe = False
 
             # Bid wall supporting entry
             if bid_wall and bid_wall["distance_pct"] < 0.35:
@@ -191,19 +191,20 @@ class OrderBookL2Engine:
             elif obi <= -0.10:
                 confidence_delta += 0.02
                 reasons.append(f"Moderate ask skew ({obi:.2f}).")
-            elif obi >= 0.30:
-                confidence_delta -= 0.06
-                reasons.append(f"Unfavorable book skew (+{obi:.2f}): Buyers heavily stacking bids below.")
+            elif obi >= 0.18:
+                # Heavy bid wall directly below - Bluff risk!
+                confidence_delta -= 0.08
+                is_safe = False
+                reasons.append(f"Hostile book skew (OBI {obi:.2f} >= +0.18): Buyers heavily stacking bids below (Bluff/Spoof risk).")
 
             if micro_bias < -1.0:
                 confidence_delta += 0.02
                 reasons.append(f"Micro-price lagging spot ({micro_bias:.1f} bps).")
 
-            if bid_wall and bid_wall["distance_pct"] < 0.25 and bid_wall["wall_multiplier"] >= 3.0:
-                reasons.append(f"⚠️ Massive bid wall at ${bid_wall['price']} ({bid_wall['distance_pct']}% below, {bid_wall['wall_multiplier']}x depth). Risk of bounce.")
-                confidence_delta -= 0.04
-                if bid_wall["distance_pct"] < 0.10:
-                    is_safe = False
+            if bid_wall and bid_wall["distance_pct"] < 0.20 and bid_wall["wall_multiplier"] >= 2.5:
+                reasons.append(f"⚠️ Massive bid wall at ${bid_wall['price']} ({bid_wall['distance_pct']}% below, {bid_wall['wall_multiplier']}x depth). Risk of bluff bounce.")
+                confidence_delta -= 0.06
+                is_safe = False
 
         # Spread-to-ATR Friction Guard:
         # Blocks illiquid, wide-spread coins (like COW with 17.0 bps spread consuming 34% of ATR).

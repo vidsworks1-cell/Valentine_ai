@@ -121,18 +121,20 @@ class AdaptiveTrailingEngine:
 
         is_veb = ("volatility" in strategy.lower()) or ("breakout" in strategy.lower())
         
-        # In compression, breakout stops must be placed outside the coiling boundary (1.65 - 1.85x ATR)
-        # In hyper-expansion, stop must not be excessively wide to cap dollar loss (1.35x ATR)
+        # Very Strict Stop Loss: Clamp ATR multiplier tightly to 0.75x - 0.95x ATR
+        # and hard-cap maximum initial stop loss to 0.55% of entry price.
         if regime == "COMPRESSION":
-            mult = 1.75 if is_veb else 1.60
+            mult = 0.95 if is_veb else 0.85
         elif regime == "NORMAL":
-            mult = 1.50
+            mult = 0.85
         elif regime == "EXPANSION":
-            mult = 1.45 if is_veb else 1.50
+            mult = 0.80 if is_veb else 0.85
         else: # HYPER_EXPANSION
-            mult = 1.35
+            mult = 0.75
 
-        stop_dist = max(atr * mult, entry_price * 0.006)
+        # Strictly clamp stop distance between minimum 0.35% (exchange bid-ask spread safety) and max 0.55%
+        raw_stop_dist = max(atr * mult, entry_price * 0.0035)
+        stop_dist = min(raw_stop_dist, entry_price * 0.0055)
         side_upper = side.upper()
 
         if side_upper == "BUY":
@@ -201,23 +203,21 @@ class AdaptiveTrailingEngine:
         # 3. Volatility Quantile & Regime Calibration
         quantile, regime = self.calculate_volatility_quantile(symbol, atr, current_price)
 
-        # 4. Multi-Regime Base Multiplier
-        # In expansion, give trend room initially (1.2x), but tighten down to 0.85x once > 2R
+        # 4. Multi-Regime Base Multiplier (Strict Stop & Profit Protection)
         if regime == "EXPANSION":
-            base_mult = 1.15 if peak_r < 1.8 else (0.95 if peak_r < 3.0 else 0.75)
+            base_mult = 0.85 if peak_r < 1.8 else (0.70 if peak_r < 3.0 else 0.55)
         elif regime == "HYPER_EXPANSION":
             # Parabolic move: aggressively lock gains to prevent giving back vertical spike
-            base_mult = 0.80 if peak_r < 2.0 else 0.60
+            base_mult = 0.65 if peak_r < 2.0 else 0.45
         elif regime == "COMPRESSION":
-            base_mult = 1.25
+            base_mult = 0.90
         else: # NORMAL
-            base_mult = 1.10 if peak_r < 1.8 else 0.90
+            base_mult = 0.80 if peak_r < 1.8 else 0.65
 
-        # 5. Anti-Shakeout Elastic Factor (First 180 seconds or before 0.75R)
-        # Prevents initial retest noise and wide spread wicks from prematurely triggering exit
+        # 5. Anti-Shakeout Elastic Factor (Strict: reduced to 60 seconds, max 1.05x)
         elastic_factor = 1.0
-        if hold_seconds < 180 and peak_r < 0.80:
-            elastic_factor = 1.15
+        if hold_seconds < 60 and peak_r < 0.50:
+            elastic_factor = 1.05
 
         # 6. Momentum & Order Flow Decay Factor
         # Accelerates stop closer when volume dries up or order book exhibits heavy resistance
@@ -255,33 +255,38 @@ class AdaptiveTrailingEngine:
         else:
             raw_target_sl = _round_price(lowest_p + effective_dist)
 
-        # 9. Guaranteed Profit-Floor Ratchet (Locks minimum R-multiples)
+        # 9. Guaranteed Profit-Floor Ratchet (Locks minimum R-multiples for long profitable runs)
         floor_sl = current_sl
         tier_label = "None"
         
-        if peak_r >= 4.0:
-            # Lock at least 75% of peak gains or +3.0R
-            tier_label = "Tier 4 (>= +4.0R Runner Lock)"
-            min_lock_gain = peak_gain * 0.78
+        if peak_r >= 6.0:
+            # Super-Runner Lock: Lock at least 82% of peak gains to bank monster asymmetric profits
+            tier_label = "Tier 5 (>= +6.0R Super-Runner Lock)"
+            min_lock_gain = peak_gain * 0.82
             floor_sl = _round_price(entry + min_lock_gain if side == "BUY" else entry - min_lock_gain)
-        elif peak_r >= 2.5:
-            # Lock at least 65% of peak gains or +1.7R
-            tier_label = "Tier 3 (>= +2.5R Trajectory Lock)"
+        elif peak_r >= 3.5:
+            # Lock at least 75% of peak gains
+            tier_label = "Tier 4 (>= +3.5R Runner Lock)"
+            min_lock_gain = peak_gain * 0.75
+            floor_sl = _round_price(entry + min_lock_gain if side == "BUY" else entry - min_lock_gain)
+        elif peak_r >= 2.0:
+            # Lock at least 65% of peak gains
+            tier_label = "Tier 3 (>= +2.0R Trajectory Lock)"
             min_lock_gain = peak_gain * 0.65
             floor_sl = _round_price(entry + min_lock_gain if side == "BUY" else entry - min_lock_gain)
-        elif peak_r >= 1.5:
-            # Lock at least +0.75R
-            tier_label = "Tier 2 (>= +1.5R Half-Runner Lock)"
-            locked_amount = risk_dist * 0.75
+        elif peak_r >= 1.0:
+            # Lock at least +0.70R
+            tier_label = "Tier 2 (>= +1.0R Half-Runner Lock)"
+            locked_amount = risk_dist * 0.70
             floor_sl = _round_price(entry + locked_amount if side == "BUY" else entry - locked_amount)
-        elif peak_r >= 0.50:
-            # Lock Breakeven + fee buffer (+0.25% net profit) as soon as trade reaches +0.50R (+4% to +6% ROI)
-            tier_label = "Tier 1 (Breakeven + Fees)"
-            fee_buffer = entry * 0.0025
+        elif peak_r >= 0.25 or (peak_gain / entry * 100.0 if entry > 0 else 0.0) >= 0.35:
+            # Strict Rapid Breakeven: Lock Breakeven + fee buffer (+0.20% net profit) as soon as trade reaches +0.25R or +0.35% move
+            tier_label = "Tier 1 (Strict Breakeven + Fees Locked)"
+            fee_buffer = entry * 0.0020
             floor_sl = _round_price(entry + fee_buffer if side == "BUY" else entry - fee_buffer)
 
         # 10. Kristjan Qullamaggie 10/20 EMA Dynamic Baseline Trailing Layer
-        # Once a runner clears >= +1.8R, trail the dynamic 10 EMA (or 20 EMA) baseline with a 0.20x ATR buffer
+        # Once a runner clears >= +1.5R, trail the dynamic 10 EMA (or 20 EMA) baseline with a 0.15x ATR buffer
         q_ema_active = False
         ema_fast = float(position.get("ema10", position.get("ema9", 0.0)))
         ema_slow = float(position.get("ema20", position.get("ema21", 0.0)))
@@ -296,20 +301,27 @@ class AdaptiveTrailingEngine:
             except Exception:
                 pass
 
-        if peak_r >= 1.80 and ema_fast > 0.0:
+        if peak_r >= 1.50 and ema_fast > 0.0:
+            # 70/30 Core Moonbag Mode: If peak_r >= 2.5R, trail the wider 20 EMA baseline with 0.20x ATR buffer
+            # to give the remaining 70% breathing room through shallow 10 EMA retests to capture 5R-20R runs.
+            is_moonbag = (peak_r >= 2.50 and ema_slow > 0.0)
+            baseline_ema = ema_slow if is_moonbag else ema_fast
+            atr_buf = 0.20 if is_moonbag else 0.15
+            ema_label = "20 EMA Core Moonbag" if is_moonbag else "10 EMA"
+
             if side == "BUY":
-                # For BUY, trail 0.20x ATR beneath the 10 EMA baseline (or 20 EMA if wide swing)
-                q_target = _round_price(ema_fast - (atr * 0.20))
+                # For BUY, trail beneath the dynamic EMA baseline
+                q_target = _round_price(baseline_ema - (atr * atr_buf))
                 if q_target > floor_sl and q_target < current_price:
                     floor_sl = q_target
-                    tier_label = f"Qullamaggie 10 EMA Trail (${ema_fast:.4f})"
+                    tier_label = f"Qullamaggie {ema_label} Trail (${baseline_ema:.4f})"
                     q_ema_active = True
             else:
-                # For SELL, trail 0.20x ATR above the 10 EMA baseline
-                q_target = _round_price(ema_fast + (atr * 0.20))
+                # For SELL, trail above the dynamic EMA baseline
+                q_target = _round_price(baseline_ema + (atr * atr_buf))
                 if (floor_sl == 0.0 or q_target < floor_sl) and q_target > current_price:
                     floor_sl = q_target
-                    tier_label = f"Qullamaggie 10 EMA Trail (${ema_fast:.4f})"
+                    tier_label = f"Qullamaggie {ema_label} Trail (${baseline_ema:.4f})"
                     q_ema_active = True
 
         # Merge Chandelier stop with profit-floor

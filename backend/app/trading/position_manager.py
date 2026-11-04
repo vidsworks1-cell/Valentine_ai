@@ -64,6 +64,7 @@ class PositionManager:
                             "stop_loss": trade.stop_loss,
                             "take_profit": trade.take_profit,
                             "trailing_stop": trade.stop_loss,
+                            "last_synced_exchange_sl": float(trade.stop_loss or 0.0),
                             "highest_price": trade.entry_price,
                             "lowest_price": trade.entry_price,
                             "market_regime": trade.market_regime,
@@ -110,6 +111,8 @@ class PositionManager:
             position_details["trailing_stop"] = float(position_details.get("stop_loss", 0.0))
         if "stop_loss" not in position_details or position_details["stop_loss"] is None:
             position_details["stop_loss"] = float(position_details.get("trailing_stop", 0.0))
+        if "last_synced_exchange_sl" not in position_details or position_details["last_synced_exchange_sl"] is None:
+            position_details["last_synced_exchange_sl"] = float(position_details.get("stop_loss", 0.0))
 
         # Spacing based on final take profit, enforcing a minimum distance (1.8%) to ensure profits exceed fees
         min_tp_dist = entry * 0.018 if entry > 0 else 0.05
@@ -260,20 +263,20 @@ class PositionManager:
                         move_in_atr = favorable_move / atr if atr > 0 else 0.0
                         peak_in_atr = peak_move / atr if atr > 0 else 0.0
 
-                        # Assign regime-specific triggers & trailing multipliers
+                        # Assign regime-specific triggers & trailing multipliers (Strict Stop Protection)
                         if regime == "RANGING":
-                            be_trigger_atr = 0.5
-                            trail_activation_atr = 0.7
-                            trail_mult = 0.8
+                            be_trigger_atr = 0.35
+                            trail_activation_atr = 0.50
+                            trail_mult = 0.65
                         elif regime == "VOLATILE":
-                            be_trigger_atr = 0.8
-                            trail_activation_atr = 1.0
+                            be_trigger_atr = 0.40
+                            trail_activation_atr = 0.60
                             # Tighten trailing distance if parabolic expansion beyond 2.0x ATR
-                            trail_mult = 1.0 if peak_in_atr >= 2.0 else 1.2
+                            trail_mult = 0.70 if peak_in_atr >= 2.0 else 0.85
                         else:  # TRENDING or default
-                            be_trigger_atr = 0.8
-                            trail_activation_atr = 1.0
-                            trail_mult = 1.0
+                            be_trigger_atr = 0.40
+                            trail_activation_atr = 0.60
+                            trail_mult = 0.75
 
                         pos["regime_trailing_details"] = {
                             "regime": regime,
@@ -289,14 +292,14 @@ class PositionManager:
                         favorable_move_pct = (favorable_move / entry * 100.0) if entry > 0 else 0.0
                         peak_move_pct = (peak_move / entry * 100.0) if entry > 0 else 0.0
 
-                        # Upgrade 1: Auto-Breakeven Ratchet (+0.35% / +0.45% Profit Lock)
-                        # Triggers when favorable move reaches >= +1.00% OR ATR regime trigger is hit
-                        is_ratchet_hit = (favorable_move_pct >= 1.00 or peak_move_pct >= 1.00)
+                        # Very Strict Auto-Breakeven Ratchet:
+                        # Triggers when favorable move reaches >= +0.35% OR ATR regime trigger is hit
+                        is_ratchet_hit = (favorable_move_pct >= 0.35 or peak_move_pct >= 0.35)
                         is_atr_be_hit = (move_in_atr >= be_trigger_atr or peak_in_atr >= be_trigger_atr)
 
                         if is_ratchet_hit or is_atr_be_hit:
-                            # If ATR hit, lock +0.45%; if ratchet hit, lock at least +0.35% net profit
-                            pct_buffer = 0.0045 if is_atr_be_hit else 0.0035
+                            # Lock at least +0.20% net profit (guarantees covering all exchange maker/taker fees + slippage)
+                            pct_buffer = 0.0025 if is_atr_be_hit else 0.0020
                             be_level = _round_price(entry * (1.0 + pct_buffer) if side == "BUY" else entry * (1.0 - pct_buffer))
                             current_sl = float(pos.get("trailing_stop", 0.0))
                             
@@ -306,8 +309,8 @@ class PositionManager:
                                     pos["breakeven_activated"] = True
                                     pos["breakeven_price"] = be_level
                                     logger.info(
-                                        f"🛡️ [AUTO-BREAKEVEN RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +1.00% threshold)! "
+                                        f"🛡️ [STRICT AUTO-BREAKEVEN RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +0.35% threshold)! "
                                         f"Stop-Loss ratcheted to {be_level} (+{pct_buffer*100:.2f}% locked, exchange fees 100% covered). Free-roll active!"
                                     )
                                     try:
@@ -321,14 +324,15 @@ class PositionManager:
                                         )
                                     except Exception:
                                         pass
+                                await self._sync_exchange_stop_loss(trade_id, pos, be_level)
                             elif side == "SELL" and (current_sl > be_level or current_sl == 0.0):
                                 pos["trailing_stop"] = be_level
                                 if not pos.get("breakeven_activated", False):
                                     pos["breakeven_activated"] = True
                                     pos["breakeven_price"] = be_level
                                     logger.info(
-                                        f"🛡️ [AUTO-BREAKEVEN RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +0.80% threshold)! "
+                                        f"🛡️ [STRICT AUTO-BREAKEVEN RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +0.35% threshold)! "
                                         f"Stop-Loss ratcheted to {be_level} (+{pct_buffer*100:.2f}% locked, exchange fees 100% covered). Free-roll active!"
                                     )
                                     try:
@@ -342,6 +346,7 @@ class PositionManager:
                                         )
                                     except Exception:
                                         pass
+                                await self._sync_exchange_stop_loss(trade_id, pos, be_level)
 
                         # B. Macro Inversion Defense:
                         # If the 1-hour macro market regime turns abruptly against an active position:
@@ -364,6 +369,7 @@ class PositionManager:
                                                 f"🛡️ [MACRO INVERSION DEFENSE] Trade {trade_id} {symbol} BUY: 1H Macro flipped to BEAR_DISTRIBUTION! "
                                                 f"Instantly locked Stop at Breakeven {be_level} (+0.20%) to defend profits."
                                             )
+                                            await self._sync_exchange_stop_loss(trade_id, pos, be_level)
                                     else:
                                         tight_sl = _round_price(current_price - (atr * 0.65))
                                         if tight_sl > float(pos.get("stop_loss", 0.0)) and tight_sl > float(pos.get("trailing_stop", 0.0)):
@@ -372,6 +378,7 @@ class PositionManager:
                                                 f"🛡️ [MACRO INVERSION DEFENSE] Trade {trade_id} {symbol} BUY: 1H Macro flipped to BEAR_DISTRIBUTION! "
                                                 f"Tightened Stop to {tight_sl} (-0.65x ATR) to cap macro waterfall risk."
                                             )
+                                            await self._sync_exchange_stop_loss(trade_id, pos, tight_sl)
                             elif side == "SELL" and macro_reg == "BULL_EXPANSION":
                                 if not pos.get("macro_inversion_defended", False):
                                     pos["macro_inversion_defended"] = True
@@ -384,6 +391,7 @@ class PositionManager:
                                                 f"🛡️ [MACRO INVERSION DEFENSE] Trade {trade_id} {symbol} SELL: 1H Macro flipped to BULL_EXPANSION! "
                                                 f"Instantly locked Stop at Breakeven {be_level} (+0.20%) to defend profits."
                                             )
+                                            await self._sync_exchange_stop_loss(trade_id, pos, be_level)
                                     else:
                                         tight_sl = _round_price(current_price + (atr * 0.65))
                                         if tight_sl < float(pos.get("stop_loss", 0.0)) and (float(pos.get("trailing_stop", 0.0)) == 0.0 or tight_sl < float(pos.get("trailing_stop", 0.0))):
@@ -392,6 +400,7 @@ class PositionManager:
                                                 f"🛡️ [MACRO INVERSION DEFENSE] Trade {trade_id} {symbol} SELL: 1H Macro flipped to BULL_EXPANSION! "
                                                 f"Tightened Stop to {tight_sl} (+0.65x ATR) to cap macro short squeeze risk."
                                             )
+                                            await self._sync_exchange_stop_loss(trade_id, pos, tight_sl)
                         except Exception as macro_err:
                             logger.debug(f"Macro Inversion Defense check failed: {macro_err}")
 
@@ -431,6 +440,7 @@ class PositionManager:
                                     f"⚡ [CHANDELIER RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {vol_reg}): "
                                     f"SL updated from {old_sl} to {new_sl} (+{locked_r:.2f}R locked, Peak: +{peak_r:.2f}R). {reason_txt}"
                                 )
+                                await self._sync_exchange_stop_loss(trade_id, pos, new_sl)
                                 
                                 # Send Telegram telemetry if meaningful lock or ratchet step
                                 if locked_r >= 0.5:
@@ -478,6 +488,7 @@ class PositionManager:
                                 if apo_decision.new_trailing_stop:
                                     pos["trailing_stop"] = apo_decision.new_trailing_stop
                                     pos["trailing_active"] = True
+                                    await self._sync_exchange_stop_loss(trade_id, pos, apo_decision.new_trailing_stop)
                                 try:
                                     from app.trading.telegram_notifier import TelegramNotifier
                                     gain_pct = (current_price - entry) / entry * 100.0 if side == "BUY" else (entry - current_price) / entry * 100.0
@@ -493,6 +504,7 @@ class PositionManager:
                             elif apo_decision.action == "TIGHTEN_TRAIL" and apo_decision.new_trailing_stop:
                                 pos["trailing_stop"] = apo_decision.new_trailing_stop
                                 pos["trailing_active"] = True
+                                await self._sync_exchange_stop_loss(trade_id, pos, apo_decision.new_trailing_stop)
                             elif apo_decision.action == "EARLY_EXIT_HARVEST":
                                 await self._close_position(trade_id, current_price, "EARLY_EXIT_HARVEST")
                                 continue
@@ -517,37 +529,96 @@ class PositionManager:
                                     close_pct = stage["percentage"]
                                     
                                     # For small accounts (position notional < $17.50), orders cannot be split below Binance's $5.00 MIN_NOTIONAL.
-                                    # On TP1, lock in Breakeven (+0.45% net profit); on TP2/Final, close 100% full position in one legal order!
+                                    # On TP1, lock in Breakeven (+0.25% net profit); on subsequent stages, unleash runner or close cleanly.
                                     pos_notional = float(pos.get("position_size", 0.0)) * current_price
                                     if pos_notional < 17.50:
                                         if stage == stages[0]:
-                                            be_level = _round_price(entry * 1.0045 if side == "BUY" else entry * 0.9955)
+                                            be_level = _round_price(entry * 1.0025 if side == "BUY" else entry * 0.9975)
                                             if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < be_level:
                                                 pos["trailing_stop"] = be_level
                                                 pos["breakeven_activated"] = True
-                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $17.50). Locked Breakeven at {be_level} (+0.45% net) without splitting below Binance $5 limit.")
+                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $17.50). Locked Breakeven at {be_level} (+0.25% net) without splitting below Binance $5 limit.")
+                                                await self._sync_exchange_stop_loss(trade_id, pos, be_level)
+                                            elif side == "SELL" and (float(pos.get("trailing_stop", 0.0)) > be_level or float(pos.get("trailing_stop", 0.0)) == 0.0):
+                                                pos["trailing_stop"] = be_level
+                                                pos["breakeven_activated"] = True
+                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $17.50). Locked Breakeven at {be_level} (+0.25% net) without splitting below Binance $5 limit.")
+                                                await self._sync_exchange_stop_loss(trade_id, pos, be_level)
                                         elif len(stages) > 2 and stage == stages[1]:
-                                            # TP2 reached: Ratchet trailing stop to bank guaranteed +1.0R profit (+0.90% to +1.5% net)
-                                            # and allow runner to reach Final TP (+2.5R to +3.5R asymmetric payoff)!
-                                            bank_profit_dist = total_dist * 0.55
+                                            # TP2 reached: Ratchet trailing stop to bank guaranteed profit (65% of move)
+                                            # and allow runner to reach Final TP / extended run!
+                                            gain_dist = abs(current_price - entry)
+                                            bank_profit_dist = gain_dist * 0.65
                                             bank_level = _round_price(entry + bank_profit_dist if side == "BUY" else entry - bank_profit_dist)
                                             if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < bank_level:
                                                 pos["trailing_stop"] = bank_level
-                                                logger.info(f"💎 [MICRO-ACCOUNT TP2 PROFIT LOCK] Position notional (${pos_notional:.2f}). Ratcheted Stop to {bank_level} (+{bank_profit_dist/entry*100:.2f}% banked). Runner unleashed for Final TP target!")
+                                                logger.info(f"💎 [MICRO-ACCOUNT TP2 PROFIT LOCK] Position notional (${pos_notional:.2f}). Ratcheted Stop to {bank_level} (+{bank_profit_dist/entry*100:.2f}% banked). Runner unleashed!")
+                                                await self._sync_exchange_stop_loss(trade_id, pos, bank_level)
                                             elif side == "SELL" and (float(pos.get("trailing_stop", 0.0)) > bank_level or float(pos.get("trailing_stop", 0.0)) == 0.0):
                                                 pos["trailing_stop"] = bank_level
-                                                logger.info(f"💎 [MICRO-ACCOUNT TP2 PROFIT LOCK] Position notional (${pos_notional:.2f}). Ratcheted Stop to {bank_level} (+{bank_profit_dist/entry*100:.2f}% banked). Runner unleashed for Final TP target!")
+                                                logger.info(f"💎 [MICRO-ACCOUNT TP2 PROFIT LOCK] Position notional (${pos_notional:.2f}). Ratcheted Stop to {bank_level} (+{bank_profit_dist/entry*100:.2f}% banked). Runner unleashed!")
+                                                await self._sync_exchange_stop_loss(trade_id, pos, bank_level)
                                         else:
-                                            # Final TP stage reached: Close 100% full position to bank full asymmetric win!
-                                            await self._close_position(trade_id, current_price, stage["label"])
-                                            stage_triggered = True
-                                            break
+                                            # Final TP stage reached: Check if trend is accelerating to catch massive long runs!
+                                            ta_live = cache.get_technical_analysis(symbol)
+                                            rvol_live = cache.get_volume_surge_ratio(symbol)
+                                            ema9 = float(ta_live.get("ema9", current_price))
+                                            ema21 = float(ta_live.get("ema21", current_price))
+                                            momentum_running = (current_price >= ema9 and ema9 >= ema21 and rvol_live >= 1.15) if side == "BUY" else (current_price <= ema9 and ema9 <= ema21 and rvol_live >= 1.15)
+                                            ext_count = int(pos.get("tp_extensions_count", 0))
+
+                                            if momentum_running and ext_count < 15:
+                                                # Runner Expansion for Big Runs: Lock 80% of peak gains into native STOP_MARKET and roll TP forward!
+                                                gain_dist = abs(current_price - entry)
+                                                lock_dist = gain_dist * 0.80
+                                                locked_sl = _round_price(entry + lock_dist if side == "BUY" else entry - lock_dist)
+                                                extended_tp = _round_price(current_price + (atr * 2.0) if side == "BUY" else current_price - (atr * 2.0))
+                                                pos["trailing_stop"] = locked_sl
+                                                pos["take_profit"] = extended_tp
+                                                pos["tp_extensions_count"] = ext_count + 1
+                                                stage["level"] = extended_tp
+                                                stage["hit"] = False  # Keep stage active for next expansion
+                                                logger.info(
+                                                    f"🚀 [LONG RUN RUNNER UNLEASHED] Trade {trade_id} {symbol} ({side}): "
+                                                    f"Target hit at {current_price} with strong momentum (RVOL {rvol_live:.2f}x). "
+                                                    f"Locked 80% profit at {locked_sl} on Binance STOP_MARKET. Extended TP to {extended_tp} (extension #{pos['tp_extensions_count']}) to ride the long run!"
+                                                )
+                                                await self._sync_exchange_stop_loss(trade_id, pos, locked_sl)
+                                            else:
+                                                # Momentum exhausted or maximum extensions reached: Close full position cleanly
+                                                await self._close_position(trade_id, current_price, stage["label"])
+                                                stage_triggered = True
+                                                break
                                     else:
-                                        # If it's the final stage (or last stage of defined levels), trigger a full exit
+                                        # Standard account: If it's the final stage, check if trend is accelerating for a long run
                                         if stage == stages[-1]:
-                                            await self._close_position(trade_id, current_price, "FINAL_TAKE_PROFIT_STAGE")
-                                            stage_triggered = True
-                                            break
+                                            ta_live = cache.get_technical_analysis(symbol)
+                                            rvol_live = cache.get_volume_surge_ratio(symbol)
+                                            ema9 = float(ta_live.get("ema9", current_price))
+                                            ema21 = float(ta_live.get("ema21", current_price))
+                                            momentum_running = (current_price >= ema9 and ema9 >= ema21 and rvol_live >= 1.15) if side == "BUY" else (current_price <= ema9 and ema9 <= ema21 and rvol_live >= 1.15)
+                                            ext_count = int(pos.get("tp_extensions_count", 0))
+
+                                            if momentum_running and ext_count < 15:
+                                                gain_dist = abs(current_price - entry)
+                                                lock_dist = gain_dist * 0.80
+                                                locked_sl = _round_price(entry + lock_dist if side == "BUY" else entry - lock_dist)
+                                                extended_tp = _round_price(current_price + (atr * 2.0) if side == "BUY" else current_price - (atr * 2.0))
+                                                pos["trailing_stop"] = locked_sl
+                                                pos["take_profit"] = extended_tp
+                                                pos["tp_extensions_count"] = ext_count + 1
+                                                stage["level"] = extended_tp
+                                                stage["hit"] = False
+                                                logger.info(
+                                                    f"🚀 [LONG RUN RUNNER UNLEASHED] Trade {trade_id} {symbol} ({side}): "
+                                                    f"Target hit at {current_price} with strong momentum (RVOL {rvol_live:.2f}x). "
+                                                    f"Locked 80% profit at {locked_sl}. Extended TP to {extended_tp} (extension #{pos['tp_extensions_count']}) to catch long run!"
+                                                )
+                                                await self._sync_exchange_stop_loss(trade_id, pos, locked_sl)
+                                            else:
+                                                await self._close_position(trade_id, current_price, "FINAL_TAKE_PROFIT_STAGE")
+                                                stage_triggered = True
+                                                break
                                         else:
                                             close_size = round(size * close_pct, 4)
                                             remaining_size = round(float(pos.get("position_size", 0.0)) - close_size, 4)
@@ -571,6 +642,7 @@ class PositionManager:
                                                     pos["trailing_stop"] = max(float(pos.get("trailing_stop", 0.0)), entry)
                                                 else:
                                                     pos["trailing_stop"] = min(float(pos.get("trailing_stop", 0.0)), entry)
+                                                await self._sync_exchange_stop_loss(trade_id, pos, pos["trailing_stop"])
                         
                         if stage_triggered:
                             continue
@@ -599,7 +671,7 @@ class PositionManager:
                         # If position opened under 5s ago, ignore micro-ticks within 0.30% to prevent instant spread stop-outs
                         if holding_sec < 5.0:
                             micro_loss = ((entry - current_price) / entry * 100.0) if side == "BUY" else ((current_price - entry) / entry * 100.0)
-                            if micro_loss >= 0.80:
+                            if micro_loss >= 0.55:
                                 is_sl_hit = True
                         else:
                             if side == "BUY" and effective_sl > 0 and current_price <= effective_sl:
@@ -607,9 +679,9 @@ class PositionManager:
                             elif side == "SELL" and effective_sl > 0 and current_price >= effective_sl:
                                 is_sl_hit = True
 
-                        # Emergency Drawdown Guard: If position moves >= 1.2% against entry (>= 18% loss at 15x), force emergency close!
+                        # Emergency Drawdown Guard (Strict Policy): If position moves >= 0.60% against entry, force emergency cut!
                         loss_against_entry_pct = ((entry - current_price) / entry * 100.0) if side == "BUY" else ((current_price - entry) / entry * 100.0)
-                        if loss_against_entry_pct >= 1.2:
+                        if loss_against_entry_pct >= 0.60:
                             is_sl_hit = True
                             sl_exit_label = "EMERGENCY_DRAWDOWN_CUT"
                         else:
@@ -664,11 +736,12 @@ class PositionManager:
                         persistence_time_sec = time.time() - first_detected if first_detected > 0.0 else 0.0
                         consecutive_cycles = pos.get("invalidation_consecutive_cycles", 0)
 
-                        # Reversal must be confirmed by sustained structural pressure (>= 60s and >= 60 cycles)
-                        persist_confirmed = (consecutive_cycles >= 60 and persistence_time_sec >= 60.0)
+                        # Reversal confirmed: under strict stop policy, cut after 20s / 20 cycles
+                        persist_confirmed = (consecutive_cycles >= 20 and persistence_time_sec >= 20.0)
 
                         if strength_succeeded and persist_confirmed:
-                            if holding_time_sec < grace_period_sec:
+                            # If loss is already accumulating (>= 0.40%), bypass grace period immediately to protect balance
+                            if holding_time_sec < grace_period_sec and loss_against_entry_pct < 0.40:
                                 logger.info(
                                     f"🛡️ [GRACE PERIOD PROTECTED] Trade {trade_id} {symbol} ({side}): "
                                     f"Thesis invalidation signal suppressed during Grace Period ({holding_time_sec:.1f}s / {grace_period_sec:.0f}s)."
@@ -678,6 +751,7 @@ class PositionManager:
                                     f"🚪 [INTELLIGENT EARLY EXIT - THESIS INVALIDATED]\n"
                                     f"  - Trade ID: {trade_id} ({symbol} {side})\n"
                                     f"  - Invalidation Strength: {invalidity_strength:.2f} >= Required: {required_invalidity_strength:.2f} (Holding: {holding_time_min:.1f}m)\n"
+                                    f"  - Loss Against Entry: {loss_against_entry_pct:.2f}%\n"
                                     f"  - Final Decision: CLOSED via THESIS_INVALIDATION"
                                 )
                                 await self._close_position(trade_id, current_price, "THESIS_INVALIDATION")
@@ -738,6 +812,94 @@ class PositionManager:
             except Exception as e:
                 logger.error(f"Position monitoring error: {e}")
                 await asyncio.sleep(5)
+
+    async def _sync_exchange_stop_loss(self, trade_id: int, pos: Dict[str, Any], new_stop_price: float):
+        """
+        Synchronizes the exchange-native STOP_MARKET conditional order on Binance Futures matching engine.
+        Cancels the previous conditional STOP_MARKET order and places a new one at the ratcheted new_stop_price.
+        Ensures the stop price visibly tracks upward to breakeven or trailing level in the user's Binance account.
+        """
+        try:
+            symbol = pos.get("symbol")
+            side = pos.get("side", "BUY")
+            trading_mode = pos.get("trading_mode")
+            if not trading_mode:
+                from app.scheduler.manager import LayeredSchedulerManager
+                scheduler = await LayeredSchedulerManager.get_instance()
+                trading_mode = scheduler.global_trading_mode
+
+            if (trading_mode or "").upper() not in ["TESTNET", "LIVE"]:
+                return
+
+            from app.scheduler.manager import LayeredSchedulerManager
+            scheduler = await LayeredSchedulerManager.get_instance()
+            trading_venue = getattr(scheduler, "trading_venue", "SPOT").upper()
+            if trading_venue != "FUTURES":
+                return
+
+            # Avoid repeated exchange submissions if the price has barely shifted (< 0.05% difference)
+            last_exchange_sl = float(pos.get("last_synced_exchange_sl", 0.0))
+            if last_exchange_sl > 0:
+                pct_diff = abs(new_stop_price - last_exchange_sl) / last_exchange_sl * 100.0
+                if pct_diff < 0.05:
+                    return
+
+            # Validation: Verify against current mark price to avoid immediate trigger rejection from exchange
+            from app.workers.price_cache import PriceCache
+            current_mark = PriceCache.get_instance().get_price(symbol)
+            if current_mark > 0:
+                if side == "BUY" and new_stop_price >= current_mark:
+                    logger.warning(
+                        f"⚠️ [EXCHANGE STOP SYNC] New SL {new_stop_price} is >= Mark Price {current_mark} for BUY trade {trade_id} {symbol}. "
+                        f"Skipping exchange placement to avoid instant rejection."
+                    )
+                    return
+                elif side == "SELL" and new_stop_price <= current_mark:
+                    logger.warning(
+                        f"⚠️ [EXCHANGE STOP SYNC] New SL {new_stop_price} is <= Mark Price {current_mark} for SELL trade {trade_id} {symbol}. "
+                        f"Skipping exchange placement to avoid instant rejection."
+                    )
+                    return
+
+            opposite_side = "SELL" if side == "BUY" else "BUY"
+            from app.services.binance_connector import BinanceConnector
+            connector = BinanceConnector.get_instance()
+
+            logger.info(
+                f"🛡️ [EXCHANGE STOP SYNC] Ratcheting native Binance STOP_MARKET for Trade {trade_id} {symbol} "
+                f"from {last_exchange_sl or 'INITIAL'} to {new_stop_price} ({opposite_side})..."
+            )
+            res = await connector.update_futures_stop_loss_order(
+                mode=trading_mode,
+                symbol=symbol,
+                side=opposite_side,
+                new_stop_price=new_stop_price,
+                close_position=True
+            )
+
+            if isinstance(res, dict) and ("algoId" in res or "orderId" in res or res.get("status") in ["NEW", "FILLED"] or res.get("algoStatus") in ["NEW", "TRIGGERED"]):
+                new_order_id = res.get("algoId") or res.get("orderId")
+                pos["last_synced_exchange_sl"] = new_stop_price
+                pos["exchange_stop_algo_id"] = new_order_id
+                logger.info(
+                    f"✅ [EXCHANGE STOP SYNC CONFIRMED] Binance Futures STOP_MARKET for Trade {trade_id} {symbol} "
+                    f"successfully ratcheted to {new_stop_price} (Order ID: {new_order_id})."
+                )
+            else:
+                logger.warning(f"⚠️ [EXCHANGE STOP SYNC NOTICE] Response from Binance when ratcheting STOP_MARKET: {res}")
+
+            # Also asynchronously persist the ratcheted stop loss to the database
+            try:
+                from app.services.trading_service import TradingService
+                from app.api.schemas import TradeUpdate
+                from app.database.session import AsyncSessionLocal
+                async with AsyncSessionLocal() as db:
+                    await TradingService.update_trade(db, trade_id, TradeUpdate(stop_loss=new_stop_price))
+            except Exception as dbe:
+                logger.debug(f"Notice updating trade stop_loss in db: {dbe}")
+
+        except Exception as sync_err:
+            logger.error(f"❌ [EXCHANGE STOP SYNC ERROR] Failed to update exchange stop for Trade {trade_id} {pos.get('symbol')}: {sync_err}")
 
     async def _partial_close_position(self, trade_id: int, exit_price: float, close_size: float, stage_label: str):
         """Partially closes a position, updates P&L, logs audit, and updates DB."""

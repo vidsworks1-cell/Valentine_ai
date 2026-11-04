@@ -43,7 +43,9 @@ class VolatilitySqueezeDetector:
         dec_prec = 8 if price < 0.001 else (6 if price < 1.0 else 4)
 
         # Baseline metrics calculation using real ATR
-        atr = ta.get("atr", max(round(price * 0.008, dec_prec), 10 ** (-dec_prec)))
+        raw_atr = float(ta.get("atr") or 0.0) if ta else 0.0
+        # If ATR is 0 or dummy placeholder (e.g. 1e-08), calibrate fallback ATR from price
+        atr = raw_atr if (raw_atr > (price * 0.0001)) else max(round(price * 0.008, dec_prec), 10 ** (-dec_prec))
         baseline_atr = max(round(price * 0.012, dec_prec), 10 ** (-dec_prec))
         atr_compression_ratio = round(atr / baseline_atr, 2) if baseline_atr > 0 else 1.0
 
@@ -105,8 +107,8 @@ class VolatilitySqueezeDetector:
         else:
             directional_bias = "BUY" if price >= sma20 else "SELL"
 
-        # Minervini Volatility Contraction Pattern (VCP) Engine
-        vcp_analysis = self.detect_vcp_pattern(sym, price, history)
+        # Minervini Volatility Contraction Pattern (VCP) Engine with Volume Expansion Gate
+        vcp_analysis = self.detect_vcp_pattern(sym, price, history, rvol=rvol, sma20=sma20)
 
         return {
             "symbol": sym,
@@ -145,15 +147,17 @@ class VolatilitySqueezeDetector:
             "vcp_pattern": vcp_analysis
         }
 
-    def detect_vcp_pattern(self, symbol: str, current_price: float, history: list) -> Dict[str, Any]:
+    def detect_vcp_pattern(self, symbol: str, current_price: float, history: list, rvol: float = 1.0, sma20: float = 0.0) -> Dict[str, Any]:
         """
         Minervini Volatility Contraction Pattern (VCP) & Contraction Ratio Detector.
         
         Mathematically verifies the series of declining contractions (T1 > T2 > T3):
         - Scans rolling price history to segment successive wave peaks and troughs.
         - Calculates depth percentage: Depth_k = (High_k - Low_k) / High_k * 100%.
-        - Enforces contraction damping: Depth_k / Depth_{k-1} <= 0.68.
-        - Verifies the 'Apex of the Coil': Price is coiled within 1.5% of upper resistance.
+        - Enforces contraction damping: Depth_k / Depth_{k-1} <= 0.85.
+        - Verifies the 'Apex of the Coil': Price is coiled within 1.25% of upper resistance.
+        - CRITICAL GUARD: Enforces Volume Expansion (RVOL >= 1.35x) and Trend Alignment (Price >= SMA20)
+          to eliminate false breakout traps in low-volume sideways chop.
         """
         if len(history) < 20:
             # Synthetic evaluation if history is still warming up
@@ -189,7 +193,7 @@ class VolatilitySqueezeDetector:
         # Verify progressive contraction criteria:
         # Minervini VCP requires each wave to be tighter than the previous:
         # 1. Depth 1 > Depth 2 > Depth 3
-        # 2. Contraction Ratio (Depth_k / Depth_{k-1}) <= 0.70
+        # 2. Contraction Ratio (Depth_k / Depth_{k-1}) <= 0.85
         is_t1_t2_contracting = (depth1 > 0 and depth2 <= depth1 * 0.85)
         is_t2_t3_contracting = (depth2 > 0 and depth3 <= depth2 * 0.80)
         
@@ -199,23 +203,36 @@ class VolatilitySqueezeDetector:
         contractions_count = 3 if is_classic_3_tier_vcp else (2 if is_2_tier_vcp else 1)
         contraction_ratio = round(depth3 / depth2, 3) if depth2 > 0 else 1.0
 
-        # Apex check: Price is coiled tightly within 1.5% of recent swing high (h3 or h2)
+        # Apex check: Price is coiled tightly within 1.25% of recent swing high (h3 or h2)
         swing_resistance = max(h2, h3)
         distance_to_resistance_pct = ((swing_resistance - current_price) / swing_resistance * 100.0) if swing_resistance > 0 else 5.0
-        is_at_apex = (0.0 <= distance_to_resistance_pct <= 1.50)
+        is_at_apex = (0.0 <= distance_to_resistance_pct <= 1.25)
+
+        # Volume expansion & trend alignment gate
+        has_volume_expansion = (rvol >= 1.35)
+        is_trend_aligned = (sma20 <= 0 or current_price >= sma20 * 0.998)
 
         # Calculate institutional VCP score
         vcp_score = 40.0
         if is_classic_3_tier_vcp:
-            vcp_score = 90.0 if is_at_apex else 78.0
+            vcp_score = 92.0 if (is_at_apex and has_volume_expansion and is_trend_aligned) else 70.0
         elif is_2_tier_vcp:
-            vcp_score = 75.0 if is_at_apex else 62.0
+            vcp_score = 80.0 if (is_at_apex and has_volume_expansion and is_trend_aligned) else 58.0
 
-        is_vcp_valid = (is_classic_3_tier_vcp or is_2_tier_vcp) and (depth3 <= 4.0)
+        # Enforce all criteria: progressive contraction + tight final depth + apex + volume expansion + trend
+        is_vcp_valid = (
+            (is_classic_3_tier_vcp or is_2_tier_vcp) and
+            (depth3 <= 3.5) and
+            is_at_apex and
+            has_volume_expansion and
+            is_trend_aligned
+        )
 
         rationale = (
             f"Minervini VCP {contractions_count}T Contractions [{depth1:.1f}% -> {depth2:.1f}% -> {depth3:.1f}%] "
-            f"(Ratio: {contraction_ratio:.2f}). Apex: {'YES (Coiled at resistance)' if is_at_apex else 'NO'}."
+            f"(Ratio: {contraction_ratio:.2f}). Apex: {'YES' if is_at_apex else 'NO'} | "
+            f"Volume Surge: {'YES (' + str(round(rvol, 2)) + 'x)' if has_volume_expansion else 'FAIL (' + str(round(rvol, 2)) + 'x < 1.35x)'} | "
+            f"Trend Aligned: {'YES' if is_trend_aligned else 'NO'}."
         )
 
         return {
@@ -224,6 +241,8 @@ class VolatilitySqueezeDetector:
             "contractions_depths": depths,
             "contraction_ratio": contraction_ratio,
             "is_at_apex": is_at_apex,
+            "has_volume_expansion": has_volume_expansion,
+            "is_trend_aligned": is_trend_aligned,
             "vcp_score": round(vcp_score, 1),
             "resistance_level": swing_resistance,
             "distance_to_resistance_pct": round(distance_to_resistance_pct, 2),

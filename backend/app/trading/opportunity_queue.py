@@ -152,7 +152,16 @@ class OpportunityQueueEngine:
                 strategy_bonus = -35.0  # Never prioritize trades from suspended strategies with negative expectancy
         except Exception:
             strategy_edge_score = 0.50
-            strategy_bonus = 0.0
+        # 8. Long-Run Runner Priority Boost (HTF, Ribbon, OI Fuel)
+        long_run_bonus = 0.0
+        if bool(opportunity.get("htf_info", {}).get("is_htf_breakout", False)):
+            long_run_bonus += 18.0
+        if bool(opportunity.get("oi_fuel_info", {}).get("has_squeeze_fuel", False)):
+            long_run_bonus += 15.0
+        if bool(opportunity.get("ribbon_info", {}).get("is_ribbon_expanding", False)):
+            long_run_bonus += 12.0
+        elif bool(opportunity.get("is_big_move", False)):
+            long_run_bonus += 8.0
 
         ev_composite = (
             (context_exp_score * 25.0) +
@@ -162,7 +171,8 @@ class OpportunityQueueEngine:
             (mq_score_norm * 12.0) +
             (bq_score_norm * 10.0) +
             (spread_score * 8.0) +
-            strategy_bonus
+            strategy_bonus +
+            long_run_bonus
         )
         return round(max(0.0, ev_composite), 2)
 
