@@ -426,6 +426,24 @@ class OrderManager:
             elif is_big_move and is_ribbon_aligned:
                 priority_tier = 3  # 24h Breakout + Triple EMA Ribbon Expansion
 
+            # Upgrade 4: Tier 4 Calibration
+            # Tier 4 setups (local 15m squeezes without HTF or 24h breakout) are tactical momentum trades, NOT +90% runners.
+            # Calibrate TP to a realistic +2.0R to +2.5R target to lock in gains smoothly rather than stalling at resistance.
+            if priority_tier == 4:
+                entry_px = float(opportunity.get("entry_price", 0.0))
+                atr_val = float(opportunity.get("atr", entry_px * 0.015))
+                if entry_px > 0 and atr_val > 0:
+                    current_tp = float(opportunity.get("take_profit", 0.0))
+                    tactical_tp = round(entry_px + (atr_val * 2.25), 6) if side.upper() == "BUY" else round(entry_px - (atr_val * 2.25), 6)
+                    if current_tp > 0:
+                        # Cap unreasonable +90% targets for Tier 4 local setups to clean tactical targets
+                        opportunity["take_profit"] = tactical_tp
+                        opportunity["is_tactical_scalp"] = True
+                        logger.info(
+                            f"🎯 [TIER 4 TACTICAL TARGET CALIBRATION] {symbol} {side}: Calibrated Take-Profit from {current_tp} "
+                            f"to realistic tactical target {tactical_tp} (+2.25x ATR) to prevent stalling at trapped resistance."
+                        )
+
             logger.info(
                 f"💎 [LONG-RUN RESTRICTION CLEARED - PRIORITY TIER {priority_tier}] "
                 f"Trade {symbol} ({side} via {strategy_used}) approved for execution. "

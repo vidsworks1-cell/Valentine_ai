@@ -121,6 +121,108 @@ class BreakoutQualityAnalyzer:
             is_bluff = True
             bluff_reasons.append(f"Exhaustion Climax: RSI oversold ({rsi_val:.1f}) with stalled candle close ({close_loc*100:.0f}%).")
 
+        # --- SOLUTION 1: "Stage-of-Cycle" Detection (Wyckoff / Stan Weinstein Lifecycle) ---
+        # Rejects trades if the asset is in Late Distribution (Stage 3) or Choppy Base (Stage 1) under resistance.
+        # Long runners are strictly restricted to Stage 2 Markup.
+        history = cache.get_price_history(symbol)
+        if history and len(history) >= 12:
+            prices_hist = [float(p) for p in history if float(p) > 0]
+            if len(prices_hist) >= 10:
+                short_avg = sum(prices_hist[-4:]) / 4.0
+                med_avg = sum(prices_hist[-10:]) / 10.0
+                
+                # If short term average is slipping below medium term while near 24h highs, asset has entered Stage 3 Distribution
+                if side == "BUY" and high_24h > 0:
+                    near_high_pct = (high_24h - price) / high_24h * 100.0
+                    if near_high_pct <= 10.0 and short_avg < (med_avg * 0.998) and candle_dir == "BEARISH":
+                        is_bluff = True
+                        bluff_reasons.append(f"Wyckoff Stage 3 Distribution: Price rolling over under peak (short MA {short_avg:.4f} < med MA {med_avg:.4f}). Not a Stage 2 Markup.")
+
+        # --- SOLUTION 2: Overhead "Airspace Clearance" (Resistance Density Score) ---
+        # Before taking a Long Runner, verify that distance to nearest overhead ceiling (MA99, EMA200, 24h high)
+        # provides at least 1.5x the required breathing room AND that the Take-Profit is not obstructed behind an overhead ceiling.
+        if side == "BUY":
+            tp_price = float(candidate_setup.get("take_profit", candidate_setup.get("target_price", price * 1.045)))
+            ma99 = float(ta.get("ma99", ta.get("ema99", 0.0)))
+            ema200 = float(ta.get("ema200", 0.0))
+            
+            overhead_ceilings = [m for m in [ma99, ema200] if m > price]
+            if overhead_ceilings:
+                nearest_ceiling = min(overhead_ceilings)
+                dist_to_ceiling_pct = ((nearest_ceiling - price) / price) * 100.0
+                airspace_ratio = dist_to_ceiling_pct / max(0.5, (atr / price * 100.0))
+                
+                # If nearest major overhead resistance is within 2.5% OR if the Take-Profit target lies behind the ceiling
+                if dist_to_ceiling_pct <= 2.5 or (tp_price > 0 and nearest_ceiling <= tp_price) or airspace_ratio < 1.5:
+                    is_bluff = True
+                    bluff_reasons.append(
+                        f"Obstructed Airspace Clearance: Planned TP (${tp_price:.2f}) is blocked by descending overhead MA ceiling at ${nearest_ceiling:.2f} "
+                        f"(+{dist_to_ceiling_pct:.2f}% above entry). Runner path is directly blocked."
+                    )
+
+        # --- SOLUTION 3: Consolidation Tightness Ratio (Anti-Exhaustion Gate) ---
+        # Real sustainable breakouts coil tightly before exploding (CER <= 0.85).
+        # If volatility has already blown out (CER > 1.80) after a massive vertical candle, it is exhausted chasing.
+        if history and len(history) >= 15:
+            recent_ranges = [abs(float(prices_hist[i]) - float(prices_hist[i-1])) for i in range(1, len(prices_hist))]
+            if len(recent_ranges) >= 10:
+                short_tr = sum(recent_ranges[-3:]) / 3.0
+                base_tr = sum(recent_ranges[-10:]) / 10.0
+                cer = (short_tr / base_tr) if base_tr > 0 else 1.0
+                
+                # If CER is blown out (> 2.1x baseline) and close location has stalled (< 0.70), reject as exhaustion climax
+                if cer > 2.10 and close_loc < 0.70 and rvol < 2.5:
+                    is_bluff = True
+                    bluff_reasons.append(
+                        f"Consolidation-to-Expansion Blown Out (CER {cer:.2f}x > 2.1x): Volatility already climaxed without follow-through. Late-cycle exhaustion."
+                    )
+
+        # --- SOLUTION 4: "First Pullback" Confirmation (No Buying Market Tops) ---
+        # For meme coins or high-beta alts, prevent buying the top tick of an extended candle.
+        # Verify that price is within 1.25x ATR of the 9/20 EMA support, not overextended into thin air.
+        ema9 = float(ta.get("ema9", ta.get("ema10", 0.0)))
+        if ema9 > 0 and atr > 0:
+            if side == "BUY":
+                stretch_above_ema9 = (price - ema9) / atr
+                if stretch_above_ema9 > 2.85 and close_loc < 0.65:
+                    is_bluff = True
+                    bluff_reasons.append(
+                        f"Overextended from Support ({stretch_above_ema9:.1f}x ATR above EMA9): Buying top tick without pullback base."
+                    )
+            elif side == "SELL":
+                stretch_below_ema9 = (ema9 - price) / atr
+                if stretch_below_ema9 > 2.85 and close_loc > 0.35:
+                    is_bluff = True
+                    bluff_reasons.append(
+                        f"Overextended from Resistance ({stretch_below_ema9:.1f}x ATR below EMA9): Selling bottom tick without pullback base."
+                    )
+
+        # --- UPGRADE 1: Damage Recovery / Anti-Dead-Cat Filter (e.g. TRUMP) ---
+        # If an asset has sustained heavy structural damage (> 8.0% drop from 24h high),
+        # an early bounce into trapped overhead resistance is a dead-cat bounce, NOT an A+ Long Runner.
+        if side == "BUY" and high_24h > 0:
+            drop_from_24h_high = ((high_24h - price) / high_24h) * 100.0
+            # If down > 8.0% and volume is not extraordinary (rvol < 3.0), forbid labeling it a runner breakout
+            if drop_from_24h_high >= 8.0 and rvol < 2.80:
+                is_bluff = True
+                bluff_reasons.append(
+                    f"Dead-Cat Bounce Trap: Down -{drop_from_24h_high:.1f}% from 24h peak (${high_24h:.4f}). "
+                    f"Structural damage too severe for clean Long Runner without extended basing."
+                )
+
+        # --- UPGRADE 2: Relative Strength vs BTC (RS Alpha Leader) ---
+        # True institutional runners show distinct leadership over Bitcoin, not weak drifting.
+        btc_price = cache.get_price("BTCUSDT") or 92000.0
+        btc_ta = cache.get_technical_analysis("BTCUSDT")
+        btc_rsi = float(btc_ta.get("rsi", 50.0))
+        # If asset RSI is laggy compared to BTC or shows declining relative volume on breakout
+        if side == "BUY" and symbol != "BTCUSDT":
+            if rsi_val < (btc_rsi - 8.0) and rvol < 2.0:
+                is_bluff = True
+                bluff_reasons.append(
+                    f"Weak Relative Strength vs BTC (RSI {rsi_val:.1f} < BTC {btc_rsi:.1f}): Beta laggard, lacks alpha leadership."
+                )
+
         # --- SCORING & COMPOSITE CONFIRMATION ---
         # Volume expansion score
         vol_score = min(100.0, max(20.0, rvol * 45.0))

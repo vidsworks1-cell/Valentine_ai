@@ -849,7 +849,8 @@ class PositionManager:
 
             # Validation: Verify against current mark price to avoid immediate trigger rejection from exchange
             from app.workers.price_cache import PriceCache
-            current_mark = PriceCache.get_instance().get_price(symbol)
+            cache = await PriceCache.get_instance()
+            current_mark = cache.get_price(symbol)
             if current_mark > 0:
                 if side == "BUY" and new_stop_price >= current_mark:
                     logger.warning(
