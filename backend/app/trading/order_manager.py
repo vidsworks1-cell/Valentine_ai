@@ -377,6 +377,8 @@ class OrderManager:
                 "High-RVOL Breakout (In Play)",
                 "Volatility Expansion Breakout",
                 "Breakout Momentum",
+                "Trend Continuation",
+                "Multi-Timeframe Trend Continuation",
                 "Institutional First Pullback (Raschke/VWAP)",
                 "Smart Re-Entry"
             }
@@ -635,12 +637,12 @@ class OrderManager:
                     atr=atr_val,
                     strategy=opportunity.get("strategy_used", "VEB")
                 )
-                min_stop_distance = min(max(vol_bracket["stop_distance"], price * 0.0035), price * 0.0055)
+                min_stop_distance = min(max(vol_bracket["stop_distance"], price * 0.0085), price * 0.0185)
 
                 raw_sl = float(opportunity.get("stop_loss", 0.0))
-                if raw_sl <= 0.0 or abs(price - raw_sl) < (price * 0.0035) or abs(price - raw_sl) > (price * 0.0055):
+                if raw_sl <= 0.0 or abs(price - raw_sl) < (price * 0.0085) or abs(price - raw_sl) > (price * 0.020):
                     repaired_sl = round(price - min_stop_distance if opp_side == "BUY" else price + min_stop_distance, dec)
-                    logger.warning(f"🛡️ [STRICT SL CALIBRATION - {vol_bracket['volatility_regime']}] Calibrated tight SL for {symbol} to: {repaired_sl} ({abs(price - repaired_sl)/price*100:.2f}%)")
+                    logger.warning(f"🛡️ [STRUCTURAL SL CALIBRATION - {vol_bracket['volatility_regime']}] Calibrated SL for {symbol} to: {repaired_sl} ({abs(price - repaired_sl)/price*100:.2f}%)")
                     stop_loss = repaired_sl
                     opportunity["stop_loss"] = stop_loss
                 else:
@@ -832,16 +834,16 @@ class OrderManager:
                 # Clamp initial stop-loss strictly between 0.35% and 0.50% of entry price.
                 stop_dist = abs(price - stop_loss)
                 stop_pct = (stop_dist / price) if price > 0 else 0.005
-                if stop_pct > 0.0050:
-                    clamped_dist = price * 0.0050
+                if stop_pct > 0.020:
+                    clamped_dist = price * 0.020
                     if opportunity["side"].upper() == "BUY":
                         stop_loss = round(price - clamped_dist, 6)
                     else:
                         stop_loss = round(price + clamped_dist, 6)
                     opportunity["stop_loss"] = stop_loss
-                    logger.info(f"🛡️ [STRICT LOSS CAPPER] {opportunity['symbol']}: Wide stop ({stop_pct*100:.2f}%) clamped strictly to 0.50% (${stop_loss}) to prevent capital drawdown.")
-                elif stop_pct < 0.0035:
-                    clamped_dist = price * 0.0035
+                    logger.info(f"🛡️ [STRUCTURAL LOSS CAPPER] {opportunity['symbol']}: Wide stop ({stop_pct*100:.2f}%) clamped to 2.00% (${stop_loss}) to protect maximum portfolio risk.")
+                elif stop_pct < 0.0085:
+                    clamped_dist = price * 0.0085
                     if opportunity["side"].upper() == "BUY":
                         stop_loss = round(price - clamped_dist, 6)
                     else:

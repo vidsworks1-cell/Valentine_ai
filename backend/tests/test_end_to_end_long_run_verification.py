@@ -100,7 +100,7 @@ class TestEndToEndLongRunVerification(unittest.TestCase):
             self.assertTrue(bluff_check["is_genuine_breakout"], "Must qualify as genuine breakout")
 
         # ---------------------------------------------------------------------
-        # STEP 3: Strict Initial Stop-Loss Calibration (Clamped to 0.35% - 0.50%)
+        # STEP 3: Structural Initial Stop-Loss Calibration (0.85% - 1.85% Breathing Room)
         # ---------------------------------------------------------------------
         trailing_engine = AdaptiveTrailingEngine.get_instance()
         bracket = trailing_engine.calculate_initial_stop_bracket(
@@ -111,9 +111,9 @@ class TestEndToEndLongRunVerification(unittest.TestCase):
         stop_dist = entry_price - initial_sl
         stop_pct = (stop_dist / entry_price) * 100.0
 
-        # Stop must be strictly clamped between 0.35% and 0.55%
-        self.assertGreaterEqual(stop_pct, 0.35)
-        self.assertLessEqual(stop_pct, 0.551)
+        # Stop must be structural between 0.85% and 1.85%
+        self.assertGreaterEqual(stop_pct, 0.85)
+        self.assertLessEqual(stop_pct, 1.85)
         # Verify asymmetric targets
         tp1 = bracket["take_profit_1"]
         tp2 = bracket["take_profit_2"]
@@ -137,60 +137,60 @@ class TestEndToEndLongRunVerification(unittest.TestCase):
             "ema20": 99.80
         }
 
-        # Sub-step 4a: Price ticks to $100.40 (+0.40% / +0.80R move) -> Strict Auto-Breakeven Ratchet
+        # Sub-step 4a: Price advances to $101.45 (+1.45% move / >= +1.2R) -> Proved Breakout Breakeven Ratchet
         be_update = trailing_engine.evaluate_trailing_update(
             position=position,
-            current_price=100.40,
+            current_price=101.45,
             live_rvol=2.0,
             live_rsi=62.0,
             orderbook_obi=0.20
         )
         self.assertTrue(be_update["should_update"])
-        self.assertGreaterEqual(be_update["new_stop"], 100.20, "Must ratchet stop above entry to lock +0.20% net profit")
+        self.assertGreaterEqual(be_update["new_stop"], 100.20, "Must ratchet stop above entry to lock +0.25% net profit")
         position["trailing_stop"] = be_update["new_stop"]
 
-        # Sub-step 4b: Price advances to $101.10 (+2.2R move) -> Stage 1 Scale-out territory & Tier 3 lock
+        # Sub-step 4b: Price advances to $102.60 (+2.16R move) -> Stage 1 Scale-out territory & Tier 3 lock
         t3_update = trailing_engine.evaluate_trailing_update(
             position=position,
-            current_price=101.10,
+            current_price=102.60,
             live_rvol=1.8,
             live_rsi=66.0,
             orderbook_obi=0.15
         )
         self.assertTrue(t3_update["should_update"])
         # Tier 3 locks at least 65% of peak gains
-        self.assertGreaterEqual(t3_update["new_stop"], 100.60)
+        self.assertGreaterEqual(t3_update["new_stop"], 101.50)
         self.assertGreaterEqual(t3_update["locked_r"], 1.3)
         position["trailing_stop"] = t3_update["new_stop"]
 
-        # Sub-step 4c: Price advances to $101.80 (+3.6R move) -> 20 EMA Core Moonbag Trailing active!
-        position["ema10"] = 101.40
-        position["ema20"] = 101.20
+        # Sub-step 4c: Price advances to $104.50 (+3.75R move) -> 20 EMA Core Moonbag Trailing active!
+        position["ema10"] = 103.80
+        position["ema20"] = 103.20
         moonbag_update = trailing_engine.evaluate_trailing_update(
             position=position,
-            current_price=101.75,
+            current_price=104.40,
             live_rvol=1.5,
             live_rsi=68.0,
             orderbook_obi=0.10
         )
         self.assertTrue(moonbag_update["should_update"])
-        # Stop trailed near 20 EMA baseline (101.20 - 0.20 = 101.00) or higher profit floor (Tier 4 locks 75% = 101.35)
-        self.assertGreaterEqual(moonbag_update["new_stop"], 101.00)
+        # Stop trailed near 20 EMA baseline or higher profit floor (Tier 4 locks 75% = 103.37)
+        self.assertGreaterEqual(moonbag_update["new_stop"], 103.00)
         position["trailing_stop"] = moonbag_update["new_stop"]
 
-        # Sub-step 4d: Massive Parabolic Climax to $103.50 (+7.0R Super-Runner) -> Tier 5 Profit Floor Lock
-        position["highest_price"] = 103.50
+        # Sub-step 4d: Massive Parabolic Climax to $107.50 (+6.25R Super-Runner) -> Tier 5 Profit Floor Lock
+        position["highest_price"] = 107.50
         super_runner_update = trailing_engine.evaluate_trailing_update(
             position=position,
-            current_price=103.20,
+            current_price=107.10,
             live_rvol=1.1,  # Exhausting volume
             live_rsi=76.0,  # Overbought
             orderbook_obi=-0.35 # Mild ask wall
         )
         self.assertTrue(super_runner_update["should_update"])
-        # Tier 5 (>= +6.0R Super-Runner) locks at least 82% of peak gains (100.0 + (3.50 * 0.82) = 102.87)
-        self.assertGreaterEqual(super_runner_update["new_stop"], 102.80)
-        self.assertGreaterEqual(super_runner_update["locked_r"], 5.0, "Must lock at least +5.0R profit on a +6.4R run!")
+        # Tier 5 (>= +6.0R Super-Runner) locks at least 82% of peak gains (100.0 + (7.50 * 0.82) = 106.15)
+        self.assertGreaterEqual(super_runner_update["new_stop"], 106.00)
+        self.assertGreaterEqual(super_runner_update["locked_r"], 5.0, "Must lock at least +5.0R profit on a +6.25R run!")
         self.assertIn("Tier 5", super_runner_update["tier_label"])
 
         print("\n✅ [VERIFICATION PASSED]: Entire Long Run Lifecycle successfully found, screened, managed, and banked!")

@@ -328,30 +328,31 @@ class AiReasoningEngine:
                         # Exclusively trade setups that catch big runs; ignore minor fluctuations
                         continue
 
-                    # 2. Strict Stop Loss & Asymmetric Big-Run Runner Targets (70/30 Core Moonbag Architecture)
+                    # 2. Structural Stop Loss & Asymmetric Big-Run Runner Targets (70/30 Core Moonbag Architecture)
+                    # Gives trades natural breathing room (0.85% to 1.85%) based on market ATR so runners are not stopped out on noise
                     if strategy == "Qullamaggie High Tight Flag Breakout":
-                        sl_multiplier = 0.75
-                        tp_stage1_mult = 2.00  # 30% scale-out at +2.0R to bank profit & lock free-roll
+                        sl_multiplier = 1.05
+                        tp_stage1_mult = 2.00  # 30% scale-out at +2.0R to bank guaranteed profit & lock free-roll
                         tp_stage2_mult = 6.00  # 70% Core Moonbag runner target for 5R-10R+ run
                     elif strategy == "Minervini VCP Breakout":
-                        sl_multiplier = 0.75
+                        sl_multiplier = 1.00
                         tp_stage1_mult = 2.00
                         tp_stage2_mult = 5.50
                     elif strategy in ["Volatility Expansion Breakout", "High-RVOL Breakout (In Play)"]:
-                        sl_multiplier = 0.85
+                        sl_multiplier = 1.10
                         tp_stage1_mult = 2.00
                         tp_stage2_mult = 5.00
-                    else:  # Breakout Momentum
-                        sl_multiplier = 0.80
+                    else:  # Breakout Momentum / Trend Continuation
+                        sl_multiplier = 1.05
                         tp_stage1_mult = 1.80
                         tp_stage2_mult = 4.50
 
                     dec_prec = 8 if price < 0.001 else (6 if price < 1.0 else (4 if price < 50.0 else 2))
-                    # Very Strict Stop Loss: strictly bounded between 0.35% and 0.50% of entry price
-                    raw_min_dist = max(sl_multiplier * atr, price * 0.0035)
-                    min_dist = min(raw_min_dist, price * 0.0050)
-                    min_tp1_dist = max(tp_stage1_mult * atr, min_dist * 2.0, price * 0.012)
-                    min_tp2_dist = max(tp_stage2_mult * atr, min_dist * 4.5, price * 0.030)
+                    # Natural Structural Stop Loss: bounded between 0.85% and 1.85% of entry price
+                    raw_min_dist = max(sl_multiplier * atr, price * 0.0085)
+                    min_dist = min(raw_min_dist, price * 0.0185)
+                    min_tp1_dist = max(tp_stage1_mult * atr, min_dist * 1.8, price * 0.018)
+                    min_tp2_dist = max(tp_stage2_mult * atr, min_dist * 4.0, price * 0.045)
                     stop_loss = round(price - min_dist if proposed_side == "BUY" else price + min_dist, dec_prec)
                     take_profit = round(price + min_tp2_dist if proposed_side == "BUY" else price - min_tp2_dist, dec_prec)
                     tp_stage1_price = round(price + min_tp1_dist if proposed_side == "BUY" else price - min_tp1_dist, dec_prec)
@@ -467,7 +468,11 @@ class AiReasoningEngine:
                         symbol, proposed_side, price, ctx=ctx
                     )
                     if not passed_vol:
-                        vol_msg = f"Volume/Liquidity confluence insufficient ({vol_confluence_score:.1f}% < 70.0%)"
+                        rej_reasons = vol_details.get("rejection_reasons", [])
+                        if rej_reasons:
+                            vol_msg = f"Volume/Liquidity Guard: {', '.join(rej_reasons)} (Score: {vol_confluence_score:.1f}%)"
+                        else:
+                            vol_msg = f"Volume/Liquidity confluence insufficient ({vol_confluence_score:.1f}% < 70.0%)"
                         ctx.record_rejection("VolumeLiquidityGuard", vol_msg, category="VOLUME_LIQUIDITY_INSUFFICIENT")
                         continue
                     ctx.add_trace("VolumeLiquidityGuard", "PASS")

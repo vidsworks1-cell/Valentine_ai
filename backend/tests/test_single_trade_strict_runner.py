@@ -127,35 +127,35 @@ class TestSingleTradeStrictRunner(unittest.TestCase):
         stop_dist = entry_price - stop_loss
         stop_pct = (stop_dist / entry_price) * 100.0
 
-        # Must be strictly clamped between 0.35% and 0.55%
-        self.assertGreaterEqual(stop_pct, 0.35)
-        self.assertLessEqual(stop_pct, 0.551)
-        self.assertAlmostEqual(bracket["take_profit_1"], entry_price + (stop_dist * 1.5), delta=0.02)
-        self.assertAlmostEqual(bracket["take_profit_2"], entry_price + (stop_dist * 2.5), delta=0.02)
+        # Must be structurally calibrated between 0.85% and 1.85%
+        self.assertGreaterEqual(stop_pct, 0.85)
+        self.assertLessEqual(stop_pct, 1.851)
+        self.assertAlmostEqual(bracket["take_profit_1"], entry_price + (stop_dist * 2.0), delta=0.02)
+        self.assertAlmostEqual(bracket["take_profit_2"], entry_price + (stop_dist * 4.5), delta=0.02)
 
     def test_strict_rapid_breakeven_lock(self):
-        """Verify that as soon as trade reaches +0.35% or +0.25R, stop is ratcheted to entry + 0.20% fee buffer."""
+        """Verify that once trade proves breakout (>= +1.35% or >= +1.2R), stop is ratcheted to entry + 0.25% fee buffer."""
         position = {
             "symbol": "BTCUSDT",
             "side": "BUY",
             "entry_price": 60000.0,
-            "stop_loss": 59700.0,   # -0.5% initial SL ($300 risk)
-            "trailing_stop": 59700.0,
-            "atr": 300.0,
-            "highest_price": 60250.0  # +$250 gain = +0.83R / +0.41% move
+            "stop_loss": 59200.0,   # -1.33% initial SL ($800 risk)
+            "trailing_stop": 59200.0,
+            "atr": 600.0,
+            "highest_price": 60900.0  # +$900 gain = +1.50% move / >= +1.2R
         }
 
         update = self.trailing.evaluate_trailing_update(
             position=position,
-            current_price=60240.0,
+            current_price=60850.0,
             live_rvol=1.5,
             live_rsi=58.0,
             orderbook_obi=0.10
         )
 
         self.assertTrue(update["should_update"])
-        # Must have ratcheted above entry price (+0.20% fee buffer)
-        expected_min_sl = 60000.0 * 1.0020
+        # Must have ratcheted above entry price (+0.25% fee buffer)
+        expected_min_sl = 60000.0 * 1.0025
         self.assertGreaterEqual(update["new_stop"], expected_min_sl)
         self.assertGreater(update["locked_r"], 0.0)
 
@@ -232,11 +232,11 @@ class TestSingleTradeStrictRunner(unittest.TestCase):
         self.assertIsNotNone(strategy)
         self.assertEqual(strategy, "Volatility Expansion Breakout")
 
-        # Verify asymmetric reward targeting: TP is at least 4.5x ATR, SL clamped to 0.50%
+        # Verify asymmetric reward targeting: TP is at least 4.5x ATR, SL clamped to structural 0.85% - 1.85%
         entry_price = 1.00
         atr = 0.015  # 1.5% ATR
-        min_dist = min(max(0.85 * atr, entry_price * 0.0035), entry_price * 0.0050)
-        tp_dist = max(4.50 * atr, min_dist * 4.0, entry_price * 0.025)
+        min_dist = min(max(0.85 * atr, entry_price * 0.0085), entry_price * 0.0185)
+        tp_dist = max(4.50 * atr, min_dist * 4.0, entry_price * 0.045)
 
         risk_reward_ratio = tp_dist / min_dist
         self.assertGreaterEqual(risk_reward_ratio, 3.5, "Big run target must offer at least 3.5x to 5.0x asymmetric R:R.")

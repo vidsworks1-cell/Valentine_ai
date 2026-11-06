@@ -292,14 +292,15 @@ class PositionManager:
                         favorable_move_pct = (favorable_move / entry * 100.0) if entry > 0 else 0.0
                         peak_move_pct = (peak_move / entry * 100.0) if entry > 0 else 0.0
 
-                        # Very Strict Auto-Breakeven Ratchet:
-                        # Triggers when favorable move reaches >= +0.35% OR ATR regime trigger is hit
-                        is_ratchet_hit = (favorable_move_pct >= 0.35 or peak_move_pct >= 0.35)
-                        is_atr_be_hit = (move_in_atr >= be_trigger_atr or peak_in_atr >= be_trigger_atr)
+                        # Structural Auto-Breakeven Ratchet:
+                        # Triggers when favorable move reaches >= +1.35% OR ATR move reaches >= 1.25x ATR
+                        # Ensures the breakout has established real momentum, leaving a ~1.10% cushion so pullbacks do not choke the trade
+                        is_ratchet_hit = (favorable_move_pct >= 1.35 or peak_move_pct >= 1.35)
+                        is_atr_be_hit = (move_in_atr >= 1.25 or peak_in_atr >= 1.25)
 
                         if is_ratchet_hit or is_atr_be_hit:
-                            # Lock at least +0.20% net profit (guarantees covering all exchange maker/taker fees + slippage)
-                            pct_buffer = 0.0025 if is_atr_be_hit else 0.0020
+                            # Lock at least +0.25% net profit (guarantees covering all exchange maker/taker fees + slippage)
+                            pct_buffer = 0.0025
                             be_level = _round_price(entry * (1.0 + pct_buffer) if side == "BUY" else entry * (1.0 - pct_buffer))
                             current_sl = float(pos.get("trailing_stop", 0.0))
                             
@@ -309,8 +310,8 @@ class PositionManager:
                                     pos["breakeven_activated"] = True
                                     pos["breakeven_price"] = be_level
                                     logger.info(
-                                        f"🛡️ [STRICT AUTO-BREAKEVEN RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
-                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +0.35% threshold)! "
+                                        f"🛡️ [STRUCTURAL BREAKEVEN RATCHET] Trade {trade_id} {symbol} ({side}, Regime: {regime}): "
+                                        f"Gain reached +{max(favorable_move_pct, peak_move_pct):.2f}% (>= +1.35% threshold)! "
                                         f"Stop-Loss ratcheted to {be_level} (+{pct_buffer*100:.2f}% locked, exchange fees 100% covered). Free-roll active!"
                                     )
                                     try:
@@ -652,15 +653,15 @@ class PositionManager:
                         fixed_sl_val = float(pos.get("stop_loss", 0.0))
                         effective_sl = trailing_sl_val if trailing_sl_val > 0 else fixed_sl_val
                         
-                        # Spread Buffer Guard: For initial stop loss, ensure SL is not placed inside the bid-ask spread (min 0.35% below entry).
+                        # Spread Buffer Guard: For initial stop loss, ensure SL is not placed inside the bid-ask spread (min 0.85% below entry).
                         # CRITICAL: If trailing stop or breakeven is already active above entry, NEVER drag it backwards below entry!
                         if entry > 0 and effective_sl > 0:
                             if trailing_sl_val <= 0:
-                                # Initial SL only: enforce minimum 0.35% distance from entry
-                                if side == "BUY" and (entry - effective_sl) / entry < 0.0035:
-                                    effective_sl = round(entry * 0.9965, 6)
-                                elif side == "SELL" and (effective_sl - entry) / entry < 0.0035:
-                                    effective_sl = round(entry * 1.0035, 6)
+                                # Initial SL only: enforce minimum 0.85% distance from entry
+                                if side == "BUY" and (entry - effective_sl) / entry < 0.0085:
+                                    effective_sl = round(entry * 0.9915, 6)
+                                elif side == "SELL" and (effective_sl - entry) / entry < 0.0085:
+                                    effective_sl = round(entry * 1.0085, 6)
                             else:
                                 # Trailing stop is active: preserve ratchet level without overriding to a losing level
                                 effective_sl = trailing_sl_val
@@ -668,10 +669,10 @@ class PositionManager:
                         holding_sec = time.time() - float(pos.get("opened_at", time.time()))
                         is_sl_hit = False
 
-                        # If position opened under 5s ago, ignore micro-ticks within 0.30% to prevent instant spread stop-outs
+                        # If position opened under 5s ago, ignore micro-ticks within 0.50% to prevent instant spread stop-outs
                         if holding_sec < 5.0:
                             micro_loss = ((entry - current_price) / entry * 100.0) if side == "BUY" else ((current_price - entry) / entry * 100.0)
-                            if micro_loss >= 0.55:
+                            if micro_loss >= 1.25:
                                 is_sl_hit = True
                         else:
                             if side == "BUY" and effective_sl > 0 and current_price <= effective_sl:
@@ -679,9 +680,11 @@ class PositionManager:
                             elif side == "SELL" and effective_sl > 0 and current_price >= effective_sl:
                                 is_sl_hit = True
 
-                        # Emergency Drawdown Guard (Strict Policy): If position moves >= 0.60% against entry, force emergency cut!
+                        # Emergency Drawdown Guard: Hard circuit breaker if position unexpectedly gaps beyond planned SL + buffer (2.25%)
                         loss_against_entry_pct = ((entry - current_price) / entry * 100.0) if side == "BUY" else ((current_price - entry) / entry * 100.0)
-                        if loss_against_entry_pct >= 0.60:
+                        planned_sl_dist_pct = (abs(entry - fixed_sl_val) / entry * 100.0) if (entry > 0 and fixed_sl_val > 0) else 1.50
+                        hard_cut_threshold = max(2.25, planned_sl_dist_pct * 1.15)
+                        if loss_against_entry_pct >= hard_cut_threshold:
                             is_sl_hit = True
                             sl_exit_label = "EMERGENCY_DRAWDOWN_CUT"
                         else:

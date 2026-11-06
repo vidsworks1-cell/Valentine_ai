@@ -121,30 +121,30 @@ class AdaptiveTrailingEngine:
 
         is_veb = ("volatility" in strategy.lower()) or ("breakout" in strategy.lower())
         
-        # Very Strict Stop Loss: Clamp ATR multiplier tightly to 0.75x - 0.95x ATR
-        # and hard-cap maximum initial stop loss to 0.55% of entry price.
+        # Structural Stop Loss: Quantile-calibrated ATR multiplier (1.00x - 1.30x ATR)
+        # Bounded between 0.85% and 1.85% of entry price to ensure noise breathing room with strict max-loss cap
         if regime == "COMPRESSION":
-            mult = 0.95 if is_veb else 0.85
+            mult = 1.15 if is_veb else 1.05
         elif regime == "NORMAL":
-            mult = 0.85
+            mult = 1.10
         elif regime == "EXPANSION":
-            mult = 0.80 if is_veb else 0.85
+            mult = 1.20 if is_veb else 1.15
         else: # HYPER_EXPANSION
-            mult = 0.75
+            mult = 1.05
 
-        # Strictly clamp stop distance between minimum 0.35% (exchange bid-ask spread safety) and max 0.55%
-        raw_stop_dist = max(atr * mult, entry_price * 0.0035)
-        stop_dist = min(raw_stop_dist, entry_price * 0.0055)
+        # Bounded stop distance: minimum 0.85% (shakeout buffer) and max 1.85% (hard capital risk ceiling)
+        raw_stop_dist = max(atr * mult, entry_price * 0.0085)
+        stop_dist = min(raw_stop_dist, entry_price * 0.0185)
         side_upper = side.upper()
 
         if side_upper == "BUY":
             stop_loss = _round_price(entry_price - stop_dist)
-            tp1 = _round_price(entry_price + (stop_dist * 1.5))
-            tp2 = _round_price(entry_price + (stop_dist * 2.5))
+            tp1 = _round_price(entry_price + (stop_dist * 2.0))
+            tp2 = _round_price(entry_price + (stop_dist * 4.5))
         else:
             stop_loss = _round_price(entry_price + stop_dist)
-            tp1 = _round_price(entry_price - (stop_dist * 1.5))
-            tp2 = _round_price(entry_price - (stop_dist * 2.5))
+            tp1 = _round_price(entry_price - (stop_dist * 2.0))
+            tp2 = _round_price(entry_price - (stop_dist * 4.5))
 
         return {
             "stop_loss": stop_loss,
@@ -247,7 +247,7 @@ class AdaptiveTrailingEngine:
 
         # 7. Final Effective Chandelier Trailing Distance
         effective_mult = base_mult * elastic_factor * decay_factor
-        effective_dist = max(atr * effective_mult, entry * 0.0035)
+        effective_dist = max(atr * effective_mult, entry * 0.0075)
 
         # 8. Chandelier Level Computation
         if side == "BUY":
@@ -274,15 +274,16 @@ class AdaptiveTrailingEngine:
             tier_label = "Tier 3 (>= +2.0R Trajectory Lock)"
             min_lock_gain = peak_gain * 0.65
             floor_sl = _round_price(entry + min_lock_gain if side == "BUY" else entry - min_lock_gain)
-        elif peak_r >= 1.0:
-            # Lock at least +0.70R
-            tier_label = "Tier 2 (>= +1.0R Half-Runner Lock)"
-            locked_amount = risk_dist * 0.70
+        elif peak_r >= 1.5:
+            # Lock at least +0.80R
+            tier_label = "Tier 2 (>= +1.5R Half-Runner Lock)"
+            locked_amount = risk_dist * 0.80
             floor_sl = _round_price(entry + locked_amount if side == "BUY" else entry - locked_amount)
-        elif peak_r >= 0.25 or (peak_gain / entry * 100.0 if entry > 0 else 0.0) >= 0.35:
-            # Strict Rapid Breakeven: Lock Breakeven + fee buffer (+0.20% net profit) as soon as trade reaches +0.25R or +0.35% move
-            tier_label = "Tier 1 (Strict Breakeven + Fees Locked)"
-            fee_buffer = entry * 0.0020
+        elif peak_r >= 1.2 or (peak_gain / entry * 100.0 if entry > 0 else 0.0) >= 1.35:
+            # Structural Breakeven Ratchet: Lock Breakeven + fee buffer (+0.25% net profit) once trade proves itself >= +1.2R or +1.35%
+            # Leaves ~1.10% breathing room above entry so breakouts are not prematurely choked on initial pullbacks
+            tier_label = "Tier 1 (Proved Breakout: Breakeven + Fees Locked)"
+            fee_buffer = entry * 0.0025
             floor_sl = _round_price(entry + fee_buffer if side == "BUY" else entry - fee_buffer)
 
         # 10. Kristjan Qullamaggie 10/20 EMA Dynamic Baseline Trailing Layer

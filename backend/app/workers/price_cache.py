@@ -127,8 +127,17 @@ class PriceCache:
         high_low_range = max(recent_chunk) - min(recent_chunk)
         atr = max(round(high_low_range * 0.5, dec_prec), round(current_px * 0.005, dec_prec), 10 ** (-dec_prec))
 
-        is_bullish = (current_px > ema9 > ema21)
-        is_bearish = (current_px < ema9 < ema21)
+        # Check 24h macro range positioning to prevent counter-trend suicidal shorting near highs
+        high_24h = inst._high_24h.get(sym, 0.0)
+        low_24h = inst._low_24h.get(sym, 0.0)
+        daily_range = high_24h - low_24h
+        relative_pos_24h = (current_px - low_24h) / daily_range if daily_range > 0 else 0.50
+
+        # High-conviction trend identification:
+        # Bullish: EMA alignment OR breaking out in upper daily range
+        # Bearish: EMA alignment AND strictly in lower 40% of daily range (never short near 24h highs!)
+        is_bullish = (current_px > ema9 > ema21) or (relative_pos_24h >= 0.75 and current_px >= ema21)
+        is_bearish = (current_px < ema9 < ema21) and (relative_pos_24h <= 0.40)
 
         if is_bullish:
             bias = "BULLISH"
