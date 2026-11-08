@@ -17,6 +17,8 @@ class PriceCache:
         self._volume_24h: Dict[str, float] = {}
         self._high_24h: Dict[str, float] = {}
         self._low_24h: Dict[str, float] = {}
+        self._open_24h: Dict[str, float] = {}
+        self._price_change_24h_pct: Dict[str, float] = {}
         self._volume_history: Dict[str, list] = {}
         self._bid_depth_05pct: Dict[str, float] = {}
         self._ask_depth_05pct: Dict[str, float] = {}
@@ -160,8 +162,8 @@ class PriceCache:
         }
 
     @classmethod
-    def update_price_and_volume(cls, symbol: str, price: float, quote_volume_24h: float = 0.0, high_24h: float = 0.0, low_24h: float = 0.0):
-        """Updates cached price, 24h volume, 24h high, and 24h low for any exchange symbol."""
+    def update_price_and_volume(cls, symbol: str, price: float, quote_volume_24h: float = 0.0, high_24h: float = 0.0, low_24h: float = 0.0, price_change_pct_24h: float = 0.0, open_24h: float = 0.0):
+        """Updates cached price, 24h volume, 24h high, 24h low, and 24h % change for any exchange symbol."""
         cls.update_price(symbol, price)
         inst = cls.get_instance_sync()
         sym = symbol.upper()
@@ -169,6 +171,12 @@ class PriceCache:
             inst._high_24h[sym] = high_24h
         if low_24h > 0:
             inst._low_24h[sym] = low_24h
+        if open_24h > 0:
+            inst._open_24h[sym] = open_24h
+        if price_change_pct_24h != 0.0:
+            inst._price_change_24h_pct[sym] = price_change_pct_24h
+        elif open_24h > 0 and price > 0:
+            inst._price_change_24h_pct[sym] = round(((price - open_24h) / open_24h) * 100.0, 3)
         if quote_volume_24h > 0:
             inst._volume_24h[sym] = quote_volume_24h
             if sym not in inst._volume_history:
@@ -177,6 +185,61 @@ class PriceCache:
             inst._volume_history[sym].append((now, quote_volume_24h))
             if len(inst._volume_history[sym]) > 40:
                 inst._volume_history[sym].pop(0)
+
+    @classmethod
+    def get_price_change_24h_pct(cls, symbol: str) -> float:
+        """Returns 24h price change percentage, or falls back to open/price calculation or rolling 1h price change."""
+        inst = cls.get_instance_sync()
+        sym = symbol.upper()
+        val = inst._price_change_24h_pct.get(sym)
+        if val is not None and val != 0.0:
+            return round(val, 3)
+        open_px = inst._open_24h.get(sym, 0.0)
+        cur_px = inst.get_price(sym)
+        if open_px > 0 and cur_px > 0:
+            return round(((cur_px - open_px) / open_px) * 100.0, 3)
+        return inst.get_price_change_1h(sym)
+
+    @classmethod
+    def get_top_leaders_and_laggards(cls, top_n: int = 5, min_quote_volume: float = 30_000_000.0) -> Tuple[List[str], List[str]]:
+        """
+        Scans liquid USDT contracts across the exchange universe and partitions them into:
+        1. Top N Gainers of the day (highest positive % change leaders)
+        2. Top N Losers of the day (lowest/most negative % change laggards)
+        Excludes stablecoins and non-crypto equity contracts.
+        """
+        inst = cls.get_instance_sync()
+        STABLECOIN_PREFIXES = ("USDC", "FDUSD", "TUSD", "BUSD", "EUR", "DAI", "USDP", "AEUR", "USD1", "UUSDT")
+        EXCLUDED_CONTRACTS = ("XAU", "XAG", "XAUT", "KORU", "SOXL", "NVDA", "TSLA", "AAPL", "AMZN", "MSFT", "GOOG", "JCT", "GUSDT", "QUSDT", "IDOL", "BLESS", "COW")
+
+        candidates = []
+        for sym, px in inst._prices.items():
+            if not sym.endswith("USDT") or px <= 0 or sym == "BTCUSDT":
+                continue
+            if sym.startswith(STABLECOIN_PREFIXES) or sym in ["USDCUSDT", "FDUSDUSDT", "TUSDUSDT", "EURUSDT", "USD1USDT"]:
+                continue
+            if sym.startswith(EXCLUDED_CONTRACTS):
+                continue
+
+            vol = inst._volume_24h.get(sym, 0.0)
+            # Volume floor check (or curated majors)
+            if vol < min_quote_volume and sym not in ["ETHUSDT", "SOLUSDT", "BNBUSDT", "AVAXUSDT", "SUIUSDT", "AAVEUSDT", "NEARUSDT", "XRPUSDT", "DOGEUSDT", "LINKUSDT", "ADAUSDT", "DOTUSDT"]:
+                continue
+
+            pct_change = cls.get_price_change_24h_pct(sym)
+            candidates.append((sym, pct_change, vol))
+
+        if not candidates:
+            # Fallback curated lists if universe is bootstrapping
+            fallback_gainers = ["SUIUSDT", "SOLUSDT", "NEARUSDT", "AVAXUSDT", "ETHUSDT"]
+            fallback_losers = ["XRPUSDT", "DOGEUSDT", "ADAUSDT", "DOTUSDT", "LINKUSDT"]
+            return fallback_gainers[:top_n], fallback_losers[:top_n]
+
+        # Sort by percentage change descending
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        top_gainers = [c[0] for c in candidates[:top_n]]
+        top_losers = [c[0] for c in reversed(candidates[-top_n:])]
+        return top_gainers, top_losers
 
     @classmethod
     def get_24h_high_low(cls, symbol: str) -> Tuple[float, float]:

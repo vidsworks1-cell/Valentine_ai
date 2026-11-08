@@ -55,7 +55,11 @@ class ContextualTradeSnapshot:
         exit_reason: str = "TAKE_PROFIT",
         realized_r_multiple: float = 1.8,
         realized_expectancy_contribution: float = 0.027,
-        timestamp: Optional[float] = None
+        wyckoff_stage: str = "STAGE_2_MARKUP",
+        airspace_ratio: float = 2.0,
+        cer: float = 0.85,
+        timestamp: Optional[float] = None,
+        **kwargs
     ):
         self.trade_id = str(trade_id)
         self.symbol = symbol.upper()
@@ -84,10 +88,23 @@ class ContextualTradeSnapshot:
         self.exit_reason = exit_reason
         self.realized_r_multiple = float(realized_r_multiple)
         self.realized_expectancy_contribution = float(realized_expectancy_contribution)
+        self.wyckoff_stage = str(wyckoff_stage).upper()
+        self.airspace_ratio = float(airspace_ratio)
+        self.cer = float(cer)
         self.timestamp = float(timestamp) if timestamp is not None else time.time()
 
     def to_feature_vector(self) -> List[float]:
-        """Normalized 10-dimensional continuous vector for multi-metric distance computation."""
+        """Normalized 13-dimensional continuous vector for multi-metric distance computation."""
+        stage_num = 0.5
+        if "STAGE_2" in self.wyckoff_stage or "MARKUP" in self.wyckoff_stage:
+            stage_num = 1.0
+        elif "STAGE_1" in self.wyckoff_stage or "ACCUMULATION" in self.wyckoff_stage:
+            stage_num = 0.4
+        elif "STAGE_3" in self.wyckoff_stage or "DISTRIBUTION" in self.wyckoff_stage:
+            stage_num = 0.1
+        elif "STAGE_4" in self.wyckoff_stage or "MARKDOWN" in self.wyckoff_stage:
+            stage_num = 0.0
+
         return [
             min(1.0, max(0.0, self.atr_pct / 0.06)),
             min(1.0, max(0.0, self.volatility_percentile / 100.0)),
@@ -98,7 +115,10 @@ class ContextualTradeSnapshot:
             min(1.0, max(0.0, self.htf_confirmation_score / 100.0)),
             min(1.0, max(0.0, self.momentum_score / 100.0)),
             min(1.0, max(0.0, self.rsi / 100.0)),
-            min(1.0, max(0.0, (100.0 - self.macro_score) / 100.0))
+            min(1.0, max(0.0, (100.0 - self.macro_score) / 100.0)),
+            min(1.0, max(0.0, stage_num)),
+            min(1.0, max(0.0, self.airspace_ratio / 3.0)),
+            min(1.0, max(0.0, 1.0 - (self.cer / 3.0)))
         ]
 
     def to_dict(self) -> Dict[str, Any]:

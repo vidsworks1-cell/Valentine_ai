@@ -206,6 +206,35 @@ class OrderBookL2Engine:
                 confidence_delta -= 0.06
                 is_safe = False
 
+        # --- UPGRADE 3: Orderbook Delta Velocity & Spoof / Absorption Recognition ---
+        # Inspect rolling history snapshots for spoof walls or institutional absorption
+        history_snaps = self._history_snapshots.get(symbol, [])
+        if len(history_snaps) >= 4:
+            prev_metrics = history_snaps[-3]
+            curr_obi = obi
+            prev_obi = prev_metrics.get("obi_top5", 0.0)
+            obi_delta = curr_obi - prev_obi
+
+            # Spoof Detection: If a large wall existed 3 ticks ago but vanished as price approached
+            if side == "BUY":
+                prev_bid_wall = prev_metrics.get("bid_wall")
+                if prev_bid_wall and not bid_wall and obi_delta < -0.25:
+                    is_safe = False
+                    confidence_delta -= 0.09
+                    reasons.append("🚨 [L2 SPOOF DETECTED] Large supporting bid wall vanished before arrival. Spoofed orderbook bluff.")
+                elif curr_obi >= 0.30 and obi_delta >= 0.15:
+                    confidence_delta += 0.03
+                    reasons.append("🧊 [ICEBERG ABSORPTION] Institutional limit buyers actively reloading bids (+0.15 OBI surge).")
+            elif side == "SELL":
+                prev_ask_wall = prev_metrics.get("ask_wall")
+                if prev_ask_wall and not ask_wall and obi_delta > 0.25:
+                    is_safe = False
+                    confidence_delta -= 0.09
+                    reasons.append("🚨 [L2 SPOOF DETECTED] Large overhead ask wall vanished before arrival. Spoofed orderbook bluff.")
+                elif curr_obi <= -0.30 and obi_delta <= -0.15:
+                    confidence_delta += 0.03
+                    reasons.append("🧊 [ICEBERG ABSORPTION] Institutional limit sellers actively reloading offers (-0.15 OBI plunge).")
+
         # Spread-to-ATR Friction Guard:
         # Blocks illiquid, wide-spread coins (like COW with 17.0 bps spread consuming 34% of ATR).
         # For highly liquid contracts (like SUI/SOL with spread < 8 bps), do not block normal 4-5 bps spreads.

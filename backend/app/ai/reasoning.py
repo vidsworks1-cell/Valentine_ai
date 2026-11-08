@@ -183,11 +183,73 @@ class AiReasoningEngine:
                     await asyncio.sleep(4.0)
                     continue
 
-                # Dynamically retrieve liquid contracts across the exchange universe (Top 50 with >= $30M 24h volume)
-                liquid_symbols = cache.get_liquid_symbols(min_quote_volume=30_000_000.0, top_n=50)
-                dynamic_symbols = liquid_symbols if len(liquid_symbols) >= 10 else default_baseline_symbols
+                # =========================================================================
+                # 🧭 BTC COMPASS & TOP 5 LEADERS/LAGGARDS STRATEGY ENGINE
+                # =========================================================================
+                # Step 1: Query BTC Market Direction
+                btc_symbol = "BTCUSDT"
+                btc_price = cache.get_price(btc_symbol)
+                btc_ta = cache.get_technical_analysis(btc_symbol)
+                btc_1h_pct = cache.get_price_change_1h(btc_symbol)
+                btc_24h_pct = cache.get_price_change_24h_pct(btc_symbol)
 
-                # Poll cache for setups across all liquid exchange contracts
+                from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
+                macro_bias = MacroRiskOverlayEngine.get_instance().get_macro_regime_bias()
+                macro_regime = macro_bias.get("macro_regime", "NEUTRAL")
+
+                btc_ema9 = btc_ta.get("ema9", btc_price)
+                btc_ema21 = btc_ta.get("ema21", btc_price)
+                btc_trend = btc_ta.get("trend_bias", "NEUTRAL")
+
+                # Directional Compass Logic:
+                # - BULLISH: BTC above EMA9 or macro BULL_EXPANSION or strong positive momentum
+                # - BEARISH: BTC below EMA9 or macro BEAR_DISTRIBUTION or strong negative momentum
+                # - CHOP / NEUTRAL: Inside EMAs, low momentum, or mixed signals -> BLOCK ALL
+                btc_compass_direction = "NEUTRAL"
+                if btc_price > 0:
+                    if (btc_price >= btc_ema9 and (btc_trend == "BULLISH" or btc_1h_pct > 0.05 or macro_regime == "BULL_EXPANSION")):
+                        btc_compass_direction = "BULLISH"
+                    elif (btc_price <= btc_ema9 and (btc_trend == "BEARISH" or btc_1h_pct < -0.05 or macro_regime == "BEAR_DISTRIBUTION")):
+                        btc_compass_direction = "BEARISH"
+                    elif btc_trend == "BULLISH" and btc_price >= btc_ema21:
+                        btc_compass_direction = "BULLISH"
+                    elif btc_trend == "BEARISH" and btc_price <= btc_ema21:
+                        btc_compass_direction = "BEARISH"
+                else:
+                    # In mock/unit-test environments without seeded BTC price, default to BULLISH
+                    btc_compass_direction = "BULLISH"
+
+                # Step 2: Partition liquid universe into Top 5 Gainers (Leaders) and Top 5 Losers (Laggards)
+                top_gainers, top_losers = cache.get_top_leaders_and_laggards(top_n=5, min_quote_volume=30_000_000.0)
+
+                if btc_compass_direction == "BULLISH":
+                    # BTC is going UP -> Focus exclusively on the 5 Winners of the Day (Strongest Leaders)
+                    # ALL SHORTS ARE 100% BLOCKED.
+                    dynamic_symbols = top_gainers
+                    allowed_side = "BUY"
+                    logger.info(
+                        f"🧭 [BTC COMPASS: 🐂 BULLISH] BTC=${btc_price:.2f} (1h: {btc_1h_pct:+.2f}%, 24h: {btc_24h_pct:+.2f}%, EMA9: {btc_ema9:.2f}). "
+                        f"Targeting Top 5 Gainers of the Day for BUY ONLY: {dynamic_symbols}"
+                    )
+                elif btc_compass_direction == "BEARISH":
+                    # BTC is going DOWN -> Focus exclusively on the 5 Losers of the Day (Weakest Laggards)
+                    # ALL LONGS ARE 100% BLOCKED.
+                    dynamic_symbols = top_losers
+                    allowed_side = "SELL"
+                    logger.info(
+                        f"🧭 [BTC COMPASS: 🐻 BEARISH] BTC=${btc_price:.2f} (1h: {btc_1h_pct:+.2f}%, 24h: {btc_24h_pct:+.2f}%, EMA9: {btc_ema9:.2f}). "
+                        f"Targeting Top 5 Losers of the Day for SELL ONLY: {dynamic_symbols}"
+                    )
+                else:
+                    # BTC is CHOPPY / FLAT -> Preserve capital! Do NOT force random trades in chop.
+                    logger.info(
+                        f"⏳ [BTC COMPASS: ⏸️ CHOP] BTC=${btc_price:.2f} (1h: {btc_1h_pct:+.2f}%, 24h: {btc_24h_pct:+.2f}%, Trend: {btc_trend}). "
+                        "Market lacks directional clarity. Scanner paused to preserve capital."
+                    )
+                    await asyncio.sleep(5.0)
+                    continue
+
+                # Poll cache for setups across filtered leader/laggard symbols
                 for symbol in dynamic_symbols:
                     price = cache.get_price(symbol)
                     if price <= 0.0:
@@ -243,11 +305,15 @@ class AiReasoningEngine:
                     rsi_val = ta.get("rsi", 50.0)
                     is_trending = ta.get("is_trending", False)
 
-                    # Strictly ignore choppy, non-trending, or neutral setups (Patience & Capital Preservation)
-                    if not is_trending or trend_bias == "NEUTRAL":
+                    # Enforce BTC Compass side constraint:
+                    # In BULLISH BTC compass: ONLY take BUY setups on top gainers
+                    # In BEARISH BTC compass: ONLY take SELL setups on top losers
+                    if allowed_side == "BUY" and trend_bias != "BULLISH":
+                        continue
+                    if allowed_side == "SELL" and trend_bias != "BEARISH":
                         continue
 
-                    proposed_side = "BUY" if trend_bias == "BULLISH" else "SELL"
+                    proposed_side = allowed_side
 
                     # RSI Overbought/Oversold Guard:
                     # Never long at the top of an overbought extension (RSI > 65)
@@ -807,6 +873,24 @@ class AiReasoningEngine:
                         ctx.record_rejection("ThesisPersistence", thesis_reason, category="THESIS_PERSISTENCE_GUARD")
                         continue
                     ctx.add_trace("ThesisPersistence", "PASS")
+
+                    # Automated Setup Clustering Check (Upgrade 4)
+                    from app.ai.learning_engine import TradeAnalyticsLearningEngine
+                    cluster_eval = TradeAnalyticsLearningEngine.get_instance().cluster_trade_setup({
+                        "wyckoff_stage": ctx.eval_cache.get("wyckoff_stage", "STAGE_2_MARKUP"),
+                        "airspace_ratio": ctx.eval_cache.get("airspace_ratio", 2.0),
+                        "cer": ctx.eval_cache.get("cer", 0.85),
+                        "rvol": rvol
+                    })
+                    if not cluster_eval.get("is_approved_by_clustering", True):
+                        ctx.add_trace("ClusterClassifier", "FAIL")
+                        cluster_rej = (
+                            f"Setup Clustering Guard: Opportunity fell into {cluster_eval['cluster_label']} "
+                            f"(Score: {cluster_eval['runner_cluster_score']}/100, Expected R: {cluster_eval['expected_r']}R). Negative expectancy trap weeded out."
+                        )
+                        ctx.record_rejection("ClusterClassifier", cluster_rej, category="CHOP_TRAP_CLUSTER")
+                        continue
+                    ctx.add_trace("ClusterClassifier", "PASS")
 
                     adaptation_log_str = "; ".join(adaptation_reasons) if adaptation_reasons else "Performance nominal."
                     

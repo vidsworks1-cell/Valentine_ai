@@ -123,7 +123,9 @@ class BinanceWebSocketWorker:
                                             q_vol = float(item.get("q", 0.0))
                                             h_px = float(item.get("h", 0.0))
                                             l_px = float(item.get("l", 0.0))
-                                            cache.update_price_and_volume(sym, px, q_vol, high_24h=h_px, low_24h=l_px)
+                                            pct = float(item.get("P", item.get("priceChangePercent", 0.0)))
+                                            o_px = float(item.get("o", item.get("openPrice", 0.0)))
+                                            cache.update_price_and_volume(sym, px, q_vol, high_24h=h_px, low_24h=l_px, price_change_pct_24h=pct, open_24h=o_px)
                         except Exception as inner_e:
                             logger.error(f"Error parsing ticker message: {inner_e}")
                     
@@ -181,7 +183,9 @@ class BinanceWebSocketWorker:
                                 vol = float(item.get("quoteVolume", 0.0))
                                 h_px = float(item.get("highPrice", 0.0))
                                 l_px = float(item.get("lowPrice", 0.0))
-                                cache.update_price_and_volume(sym, px, vol, high_24h=h_px, low_24h=l_px)
+                                pct = float(item.get("priceChangePercent", 0.0))
+                                o_px = float(item.get("openPrice", 0.0))
+                                cache.update_price_and_volume(sym, px, vol, high_24h=h_px, low_24h=l_px, price_change_pct_24h=pct, open_24h=o_px)
                                 count += 1
                             except Exception:
                                 pass
