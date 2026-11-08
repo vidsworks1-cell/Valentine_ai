@@ -1825,11 +1825,14 @@ class SelfAdaptationEngine:
                     st_mod -= 0.02
 
             # C. MULTI-TIERED PROBATION SPECTRUM HANDLING & STRATEGY SUBSTITUTION HIERARCHY
-            is_breakout_in_chop = (regime.upper() in ["RANGING", "VOLATILE"] and ("BREAKOUT" in strategy.upper() or "EXPANSION" in strategy.upper()))
+            is_btc_compass_strat = "BTC COMPASS" in strategy.upper()
+            is_breakout_in_chop = (regime.upper() in ["RANGING", "VOLATILE"] and ("BREAKOUT" in strategy.upper() or "EXPANSION" in strategy.upper())) and not is_btc_compass_strat
             should_substitute = (
-                st_status in ["DISABLED", "PROBATION_RECOVERY", "RESTRICTED"]
-                or (total_strat_trades >= 4 and (shrunk_exp_r < -0.10 or win_rate <= 30.0))
-                or is_breakout_in_chop
+                not is_btc_compass_strat and (
+                    st_status in ["DISABLED", "PROBATION_RECOVERY", "RESTRICTED"]
+                    or (total_strat_trades >= 4 and (shrunk_exp_r < -0.10 or win_rate <= 30.0))
+                    or is_breakout_in_chop
+                )
             )
             if not regime_handled:
                 if should_substitute:
@@ -1940,7 +1943,7 @@ class SelfAdaptationEngine:
                     st_mod = -0.01
 
                 elif st_status == "RESTRICTED":
-                    if meta_conviction >= 75.0:
+                    if is_btc_compass_strat or meta_conviction >= 75.0:
                         setup["is_probationary_trade"] = True
                         setup["probation_risk_multiplier"] = 0.75
                         setup["probation_trigger"] = "RESTRICTED_SPECTRUM"

@@ -289,6 +289,12 @@ class DecisionContext:
                 f"with system bookkeeping label '{substitute_strategy}'. Genuine strategy retained."
             )
             return
+        if "btc compass" in (self.original_strategy or "").lower():
+            logger.info(
+                f"🛡️ [STRATEGY PRESERVATION] Retaining user-mandated strategy '{self.original_strategy}'. "
+                f"Substitution to '{substitute_strategy}' skipped."
+            )
+            return
         if substitute_strategy != self.active_strategy:
             logger.info(
                 f"🔄 [DECISION CONTEXT] Strategy substitution applied: '{self.original_strategy}' -> '{substitute_strategy}'. "
