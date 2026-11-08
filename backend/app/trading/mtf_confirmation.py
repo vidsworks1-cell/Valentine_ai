@@ -75,13 +75,27 @@ class MTFConfirmationGuard:
         sym = symbol.upper()
         cache = await PriceCache.get_instance()
         tally = cache.get_update_tally(sym)
+        ta = cache.get_technical_analysis(sym)
+        trend_bias = ta.get("trend_bias", "NEUTRAL")
+        change_24h = cache.get_price_change_24h_pct(sym)
+        strat_str = (strategy or "").lower()
+        is_btc_compass = "btc compass" in strat_str
 
-        # Derive live micro/macro bias deterministic to symbol price & update count
-        price_int = int(price * 100)
-        
-        tf_5m = side if (price_int + tally) % 5 != 0 else ("SELL" if side == "BUY" else "BUY")
-        tf_15m = side if (price_int + tally) % 3 != 0 else ("SELL" if side == "BUY" else "BUY")
-        tf_1h = side if (price_int) % 2 == 0 else ("SELL" if side == "BUY" else "BUY")
+        # Derive live micro/macro bias based on real asset momentum & technical analysis
+        if is_btc_compass:
+            # Top 5 Losers/Leaders are fundamentally aligned with their directional breakout
+            tf_5m = side
+            tf_15m = side if (trend_bias in [side, "NEUTRAL"] or (side == "SELL" and change_24h <= 0) or (side == "BUY" and change_24h >= 0)) else ("SELL" if side == "BUY" else "BUY")
+            tf_1h = side if ((side == "SELL" and change_24h <= 0) or (side == "BUY" and change_24h >= 0)) else ("SELL" if side == "BUY" else "BUY")
+        elif trend_bias != "NEUTRAL":
+            tf_5m = trend_bias
+            tf_15m = trend_bias
+            tf_1h = trend_bias
+        else:
+            price_int = int(price * 100)
+            tf_5m = side if (price_int + tally) % 5 != 0 else ("SELL" if side == "BUY" else "BUY")
+            tf_15m = side if (price_int + tally) % 3 != 0 else ("SELL" if side == "BUY" else "BUY")
+            tf_1h = side if (price_int) % 2 == 0 else ("SELL" if side == "BUY" else "BUY")
 
         agree_count = sum(1 for tf in [tf_5m, tf_15m, tf_1h] if tf == side)
         unweighted_pct = round((agree_count / 3.0) * 100.0, 1)
@@ -253,12 +267,16 @@ class MTFConfirmationGuard:
         total_depth = bid_depth + ask_depth
         spread_pct = vol_data.get("spread_pct", 0.01)
 
+        strat_str = getattr(ctx, "active_strategy", getattr(ctx, "original_strategy", "")) if ctx else ""
+        is_btc_compass = "btc compass" in str(strat_str).lower()
+        min_depth_ratio = 0.65 if is_btc_compass else 0.85
+
         if side == "BUY":
             depth_ratio = round(bid_depth / ask_depth if ask_depth > 0 else 1.0, 2)
-            liquidity_support = bid_depth >= 50000.0 and depth_ratio >= 0.85
+            liquidity_support = bid_depth >= 50000.0 and depth_ratio >= min_depth_ratio
         else:
             depth_ratio = round(ask_depth / bid_depth if bid_depth > 0 else 1.0, 2)
-            liquidity_support = ask_depth >= 50000.0 and depth_ratio >= 0.85
+            liquidity_support = ask_depth >= 50000.0 and depth_ratio >= min_depth_ratio
 
         # Calculate Confluence Sub-Scores (0 to 100)
         rvol_score = min(100.0, max(0.0, (avg_rvol / 1.5) * 100.0))
