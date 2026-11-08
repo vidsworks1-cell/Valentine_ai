@@ -98,9 +98,10 @@ class MissedOpportunityLearner:
         if len(self._records) > 200:
             self._records.pop(0)
 
+        p_dec = 6 if entry_price < 1.0 else (4 if entry_price < 10.0 else 2)
         logger.info(
             f"📥 [MISSED OPPORTUNITY RECORDED] {symbol} {side} via {strategy} [Category: {category.upper()}]. "
-            f"Entry: ${entry_price:.2f}, SL: ${stop_loss:.2f}, TP: ${take_profit:.2f}. Reason: {reason}"
+            f"Entry: ${entry_price:.{p_dec}f}, SL: ${stop_loss:.{p_dec}f}, TP: ${take_profit:.{p_dec}f}. Reason: {reason}"
         )
         return record
 
