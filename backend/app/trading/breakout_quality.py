@@ -84,7 +84,9 @@ class BreakoutQualityAnalyzer:
                     bluff_reasons.append(f"Opposing Bullish 1m candle on weak volume delta (RVOL {rvol:.2f}x).")
 
         # --- BLUFF CHECK 2: Low-Volume Fakeout (Volume Vacuum) ---
-        if rvol < 1.25 and rvol_surge < 1.25:
+        vol_24h = cache._volume_24h.get(symbol, 0.0)
+        is_btc_compass = "btc compass" in strategy.lower()
+        if rvol < 1.25 and rvol_surge < 1.25 and not (is_btc_compass and vol_24h >= 30_000_000.0):
             is_bluff = True
             bluff_reasons.append(f"Low-Volume Fakeout: Volume surge ({max(rvol, rvol_surge):.2f}x < 1.25x threshold) indicates lack of institutional commitment.")
 

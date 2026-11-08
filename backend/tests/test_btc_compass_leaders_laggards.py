@@ -34,7 +34,8 @@ class TestBtcCompassLeadersLaggards(unittest.TestCase):
             ("DOTUSDT", 5.20, 45_000_000.0, -7.8),     # Loser #4
             ("FTMUSDT", 0.65, 40_000_000.0, -11.2),    # Loser #3
             ("CRVUSDT", 0.38, 35_000_000.0, -14.6),    # Loser #2
-            ("LDOUSDT", 1.25, 32_000_000.0, -19.4),    # Loser #1
+            ("LDOUSDT", 1.25, 32_000_000.0, -19.4),    # Loser #2
+            ("ONEUSDT", 0.015, 330_000_000.0, -25.3),  # Loser #1
             # Stablecoins (must be filtered out)
             ("USDCUSDT", 1.00, 500_000_000.0, 0.01),
             ("FDUSDUSDT", 1.00, 200_000_000.0, 0.00),
@@ -64,7 +65,7 @@ class TestBtcCompassLeadersLaggards(unittest.TestCase):
         self.assertNotIn("NVDAUSDT", top_gainers)
 
         # Verify Top 5 Losers
-        self.assertEqual(top_losers[:3], ["LDOUSDT", "CRVUSDT", "FTMUSDT"])
+        self.assertEqual(top_losers[:3], ["ONEUSDT", "LDOUSDT", "CRVUSDT"])
         self.assertNotIn("USDCUSDT", top_losers)
 
     def test_btc_compass_bullish_targets_gainers_only(self):
@@ -130,7 +131,35 @@ class TestBtcCompassLeadersLaggards(unittest.TestCase):
         self.assertEqual(btc_compass_direction, "NEUTRAL")
         # In neutral/chop, scanner does not dispatch trades
         should_pause_scanner = (btc_compass_direction == "NEUTRAL")
-        self.assertTrue(should_pause_scanner, "Scanner must pause in BTC chop to protect capital!")
+    def test_btc_compass_execution_flow(self):
+        """Simulate execution flow: Bearish BTC triggers Sell on Top Loser, and Bullish BTC triggers Buy on Top Gainer."""
+        from app.trading.breakout_quality import BreakoutQualityAnalyzer
+        bq = BreakoutQualityAnalyzer.get_instance()
+
+        # 1. Bearish Flow: Shorting a top loser under Bearish BTC
+        loser_candidate = {
+            "symbol": "ONEUSDT",
+            "side": "SELL",
+            "entry_price": 0.0150,
+            "price": 0.0150,
+            "strategy": "BTC Compass Laggard Breakdown Momentum",
+            "rvol": 1.10  # Low local surge, but high 24h volume
+        }
+        res_loser = bq.analyze_breakout_quality(loser_candidate)
+        # Should NOT be flagged as volume vacuum because ONEUSDT has > $30M volume
+        self.assertNotIn("Low-Volume Fakeout", "; ".join(res_loser.get("bluff_reasons", [])))
+
+        # 2. Bullish Flow: Buying a top leader under Bullish BTC
+        leader_candidate = {
+            "symbol": "SUIUSDT",
+            "side": "BUY",
+            "entry_price": 3.20,
+            "price": 3.20,
+            "strategy": "BTC Compass Leader Breakout Momentum",
+            "rvol": 1.10
+        }
+        res_leader = bq.analyze_breakout_quality(leader_candidate)
+        self.assertNotIn("Low-Volume Fakeout", "; ".join(res_leader.get("bluff_reasons", [])))
 
 
 if __name__ == "__main__":

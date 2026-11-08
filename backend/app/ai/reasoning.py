@@ -196,6 +196,8 @@ class AiReasoningEngine:
                 from app.trading.macro_risk_overlay import MacroRiskOverlayEngine
                 macro_bias = MacroRiskOverlayEngine.get_instance().get_macro_regime_bias()
                 macro_regime = macro_bias.get("macro_regime", "NEUTRAL")
+                if btc_1h_pct == 0.0 or abs(btc_1h_pct) < 1e-4:
+                    btc_1h_pct = macro_bias.get("btc_1h_change_pct", btc_1h_pct)
 
                 btc_ema9 = btc_ta.get("ema9", btc_price)
                 btc_ema21 = btc_ta.get("ema21", btc_price)
@@ -308,19 +310,25 @@ class AiReasoningEngine:
                     # Enforce BTC Compass side constraint:
                     # In BULLISH BTC compass: ONLY take BUY setups on top gainers
                     # In BEARISH BTC compass: ONLY take SELL setups on top losers
-                    if allowed_side == "BUY" and trend_bias != "BULLISH":
-                        continue
-                    if allowed_side == "SELL" and trend_bias != "BEARISH":
-                        continue
+                    change_24h_pct = cache.get_price_change_24h_pct(symbol)
+                    
+                    if allowed_side == "BUY":
+                        # Must be a leader (either bullish TA or positive 24h change)
+                        if trend_bias == "BEARISH" and change_24h_pct <= 0.0:
+                            continue
+                    elif allowed_side == "SELL":
+                        # Must be a laggard (either bearish TA or negative 24h change)
+                        if trend_bias == "BULLISH" and change_24h_pct >= 0.0:
+                            continue
 
                     proposed_side = allowed_side
 
                     # RSI Overbought/Oversold Guard:
-                    # Never long at the top of an overbought extension (RSI > 65)
-                    # Never short into the floor of an oversold dump (RSI < 35)
-                    if proposed_side == "BUY" and (rsi_val > 65.0 or rsi_val < 42.0):
+                    # Never long at the extreme top of an overbought extension (RSI > 78)
+                    # Never short into extreme capitulation exhaustion (RSI < 20)
+                    if proposed_side == "BUY" and (rsi_val > 78.0 or rsi_val < 38.0):
                         continue
-                    if proposed_side == "SELL" and (rsi_val < 35.0 or rsi_val > 58.0):
+                    if proposed_side == "SELL" and (rsi_val < 20.0 or rsi_val > 65.0):
                         continue
 
                     # 1. Check Evaluation Cooldown Guard before running heavy setup detection
@@ -390,6 +398,10 @@ class AiReasoningEngine:
                         strategy = "Volatility Expansion Breakout"
                     elif squeeze_state == "SQUEEZE_FIRING" and rvol >= 1.70:
                         strategy = "Breakout Momentum"
+                    elif btc_compass_direction == "BEARISH" and proposed_side == "SELL":
+                        strategy = "BTC Compass Laggard Breakdown Momentum"
+                    elif btc_compass_direction == "BULLISH" and proposed_side == "BUY":
+                        strategy = "BTC Compass Leader Breakout Momentum"
                     else:
                         # Exclusively trade setups that catch big runs; ignore minor fluctuations
                         continue
@@ -575,7 +587,9 @@ class AiReasoningEngine:
                             (proposed_side == "BUY" and candle_dir == "BEARISH") or
                             (proposed_side == "SELL" and candle_dir == "BULLISH")
                         )
-                        if is_opposed and rvol_surge < 1.50:
+                        vol_24h = cache._volume_24h.get(symbol, 0.0)
+                        is_btc_compass_active = "btc compass" in strategy.lower()
+                        if is_opposed and rvol_surge < 1.50 and not (is_btc_compass_active and vol_24h >= 30_000_000.0):
                             wick_reason = (
                                 f"Anti-Bluff [Opposing Trend]: Opposing 1m candle ({candle_dir}) "
                                 f"lacking breakout surge (RVOL {rvol_surge:.2f}x < 1.50x threshold). Bluff move weeded out."
@@ -584,8 +598,8 @@ class AiReasoningEngine:
                             continue
 
                         # Volume Exhaustion Climax Guard
-                        if (proposed_side == "BUY" and rsi_val >= 75.0 and close_loc < 0.70) or \
-                           (proposed_side == "SELL" and rsi_val <= 25.0 and close_loc > 0.30):
+                        if (proposed_side == "BUY" and rsi_val >= 78.0 and close_loc < 0.70) or \
+                           (proposed_side == "SELL" and rsi_val <= 18.0 and close_loc > 0.30):
                             climax_reason = f"Anti-Bluff [Exhaustion Climax]: Extreme RSI ({rsi_val:.1f}) with stalled candle close ({close_loc*100:.0f}%). Rejection likely."
                             ctx.record_rejection("Candle1MConfirmationGuard", climax_reason, category="EXHAUSTION_CLIMAX")
                             continue
@@ -611,7 +625,7 @@ class AiReasoningEngine:
                     ctx.add_trace("Phase1Guards", "PASS")
 
                     base_confidence = 0.82
-                    regime_confluence_bonus = 0.05 if (market_regime == "TRENDING" and strategy in ["Breakout Momentum", "Volatility Expansion Breakout"]) or (market_regime in ["RANGING", "VOLATILE"] and strategy == "Mean Reversion") else -0.05
+                    regime_confluence_bonus = 0.05 if (market_regime == "TRENDING" and any(k in strategy for k in ["Breakout Momentum", "Volatility Expansion Breakout", "BTC Compass"])) or (market_regime in ["RANGING", "VOLATILE"] and strategy == "Mean Reversion") else -0.05
                     volatility_quality_bonus = 0.03 if (0.008 <= relative_volatility <= 0.013) else -0.02
                     squeeze_bonus = 0.06 if squeeze_state == "SQUEEZE_FIRING" else (-0.03 if squeeze_state == "SQUEEZE_ACTIVE" else 0.0)
                     
