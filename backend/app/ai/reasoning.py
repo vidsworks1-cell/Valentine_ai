@@ -386,9 +386,12 @@ class AiReasoningEngine:
                         rvol >= 1.20
                     )
 
-                    # 1. Big Run Strategy Mapping: Exclusively permit high-conviction momentum expansions
-                    # Filter out low-momentum chop, ranging, or weak trend continuation
-                    if is_htf_breakout and rvol >= 1.60:
+                    # 1. Strategy Mapping: Prioritize BTC Compass Leader/Laggard Momentum for filtered universe
+                    if btc_compass_direction == "BEARISH" and proposed_side == "SELL":
+                        strategy = "BTC Compass Laggard Breakdown Momentum"
+                    elif btc_compass_direction == "BULLISH" and proposed_side == "BUY":
+                        strategy = "BTC Compass Leader Breakout Momentum"
+                    elif is_htf_breakout and rvol >= 1.60:
                         strategy = "Qullamaggie High Tight Flag Breakout"
                     elif is_vcp_apex and rvol >= 1.35:
                         strategy = "Minervini VCP Breakout"
@@ -398,10 +401,6 @@ class AiReasoningEngine:
                         strategy = "Volatility Expansion Breakout"
                     elif squeeze_state == "SQUEEZE_FIRING" and rvol >= 1.70:
                         strategy = "Breakout Momentum"
-                    elif btc_compass_direction == "BEARISH" and proposed_side == "SELL":
-                        strategy = "BTC Compass Laggard Breakdown Momentum"
-                    elif btc_compass_direction == "BULLISH" and proposed_side == "BUY":
-                        strategy = "BTC Compass Leader Breakout Momentum"
                     else:
                         # Exclusively trade setups that catch big runs; ignore minor fluctuations
                         continue

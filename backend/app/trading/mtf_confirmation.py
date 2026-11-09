@@ -91,6 +91,11 @@ class MTFConfirmationGuard:
             tf_5m = trend_bias
             tf_15m = trend_bias
             tf_1h = trend_bias
+        elif change_24h != 0.0:
+            dir_24h = "BUY" if change_24h > 0 else "SELL"
+            tf_5m = side
+            tf_15m = dir_24h
+            tf_1h = dir_24h
         else:
             price_int = int(price * 100)
             tf_5m = side if (price_int + tally) % 5 != 0 else ("SELL" if side == "BUY" else "BUY")
