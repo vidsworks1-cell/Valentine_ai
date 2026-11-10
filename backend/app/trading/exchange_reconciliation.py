@@ -189,6 +189,11 @@ class ExchangeReconciliationEngine:
 
             # Case B: Orphaned Exchange Position (Exists on exchange, missing in Lumina)
             elif exc_pos and not int_pos:
+                from app.trading.order_manager import OrderManager
+                if OrderManager.is_in_flight(sym):
+                    logger.info(f"⏳ [RECONCILIATION] {sym} is currently being executed by OrderManager. Skipping adoption to prevent duplicate trade creation.")
+                    continue
+
                 disc = {
                     "type": "ORPHANED_EXCHANGE_POSITION",
                     "symbol": sym,
@@ -345,7 +350,23 @@ class ExchangeReconciliationEngine:
                                 "profit_loss": pnl,
                                 "status": "RESOLVED"
                             })
-                            
+
+                            # Prevent immediate re-entry churn: apply post-trade cooldown
+                            try:
+                                from app.ai.reasoning import AiReasoningEngine
+                                is_loss = (pnl is not None and float(pnl) < 0.0)
+                                cd_duration = 3600.0 if is_loss else 600.0  # 60m cooldown on loss, 10m on win
+                                AiReasoningEngine.get_instance().set_cooldown(
+                                    symbol=sym,
+                                    side="ALL",
+                                    category="POST_LOSS_COOLDOWN" if is_loss else "POST_TRADE_COOLDOWN",
+                                    duration_seconds=cd_duration,
+                                    reason=f"Reconciliation post-{'loss' if is_loss else 'win'} ({pnl:+.4f} USDT). Cooling down {sym} for {cd_duration/60:.0f}m."
+                                )
+                                logger.info(f"⏳ [RECONCILIATION COOLDOWN] Applied {cd_duration/60:.0f}m cooldown to {sym} after {dbt.outcome} (PnL: {pnl:+.4f}).")
+                            except Exception as cde:
+                                logger.debug(f"Failed to set reconciliation cooldown: {cde}")
+                                
                     await db.commit()
             except Exception as dbe:
                 logger.error(f"[RECONCILIATION] Error reconciling unclosed database trades: {dbe}")

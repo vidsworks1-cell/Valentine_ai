@@ -16,6 +16,7 @@ class OrderManager:
     """Layer 4 Order Manager. Governs risk validation and order pipeline execution."""
     _instance: Optional['OrderManager'] = None
     _lock = asyncio.Lock()
+    _in_flight_symbols: set = set()
 
     def __init__(self):
         self.active_positions: List[Dict[str, Any]] = []
@@ -26,12 +27,24 @@ class OrderManager:
             cls._instance = OrderManager()
         return cls._instance
 
+    @classmethod
+    def is_in_flight(cls, symbol: str) -> bool:
+        return symbol in cls._in_flight_symbols
+
     async def execute_opportunity(self, opportunity: Dict[str, Any], balance: Optional[float] = None):
         """Alias for receive_opportunity for backwards compatibility with historical replay and smart re-entry."""
         return await self.receive_opportunity(opportunity)
 
     async def receive_opportunity(self, opportunity: Dict[str, Any]):
         """Receives a setup from Layer 3, evaluates risk profile, and executes if cleared."""
+        symbol = opportunity.get("symbol", "")
+        self._in_flight_symbols.add(symbol)
+        try:
+            return await self._receive_opportunity_impl(opportunity)
+        finally:
+            self._in_flight_symbols.discard(symbol)
+
+    async def _receive_opportunity_impl(self, opportunity: Dict[str, Any]):
         async with self._lock:
             symbol = opportunity["symbol"]
             side = opportunity["side"]

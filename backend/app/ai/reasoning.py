@@ -308,17 +308,28 @@ class AiReasoningEngine:
                     is_trending = ta.get("is_trending", False)
 
                     # Enforce BTC Compass side constraint:
-                    # In BULLISH BTC compass: ONLY take BUY setups on top gainers
-                    # In BEARISH BTC compass: ONLY take SELL setups on top losers
+                    # In BULLISH BTC compass: ONLY take BUY setups on top gainers that are ACTIVELY trending up
+                    # In BEARISH BTC compass: ONLY take SELL setups on top losers that are ACTIVELY breaking down
                     change_24h_pct = cache.get_price_change_24h_pct(symbol)
+                    ema21_val = float(ta.get("ema21", 0.0))
                     
                     if allowed_side == "BUY":
-                        # Must be a leader (either bullish TA or positive 24h change)
-                        if trend_bias == "BEARISH" and change_24h_pct <= 0.0:
+                        # Must be a TRUE real-time leader:
+                        # 1. 24h change must be positive (> 0.0)
+                        # 2. Real-time intraday trend bias MUST NOT be BEARISH (avoid falling knives after morning pump)
+                        # 3. Price must be at or above EMA21 (not trading underneath moving average)
+                        if trend_bias == "BEARISH" or change_24h_pct <= 0.0:
+                            continue
+                        if ema21_val > 0 and price < ema21_val * 0.998:
                             continue
                     elif allowed_side == "SELL":
-                        # Must be a laggard (either bearish TA or negative 24h change)
-                        if trend_bias == "BULLISH" and change_24h_pct >= 0.0:
+                        # Must be a TRUE real-time laggard:
+                        # 1. 24h change must be negative (< 0.0)
+                        # 2. Real-time intraday trend bias MUST NOT be BULLISH (avoid shorting dead cat bounces)
+                        # 3. Price must be at or below EMA21
+                        if trend_bias == "BULLISH" or change_24h_pct >= 0.0:
+                            continue
+                        if ema21_val > 0 and price > ema21_val * 1.002:
                             continue
 
                     proposed_side = allowed_side
@@ -388,8 +399,12 @@ class AiReasoningEngine:
 
                     # 1. Strategy Mapping: Prioritize BTC Compass Leader/Laggard Momentum for filtered universe
                     if btc_compass_direction == "BEARISH" and proposed_side == "SELL":
+                        if rvol < 1.15:
+                            continue  # Reject breakdowns with low/exhausted volume
                         strategy = "BTC Compass Laggard Breakdown Momentum"
                     elif btc_compass_direction == "BULLISH" and proposed_side == "BUY":
+                        if rvol < 1.15:
+                            continue  # Reject breakouts without volume expansion
                         strategy = "BTC Compass Leader Breakout Momentum"
                     elif is_htf_breakout and rvol >= 1.60:
                         strategy = "Qullamaggie High Tight Flag Breakout"
@@ -415,6 +430,10 @@ class AiReasoningEngine:
                         sl_multiplier = 1.00
                         tp_stage1_mult = 2.00
                         tp_stage2_mult = 5.50
+                    elif strategy in ["BTC Compass Leader Breakout Momentum", "BTC Compass Laggard Breakdown Momentum"]:
+                        sl_multiplier = 0.95  # Tight structural invalidation (under VWAP / 1m swing)
+                        tp_stage1_mult = 2.00  # Ensure average win is at least 2.0R to dominate 1R stop loss
+                        tp_stage2_mult = 5.00  # 5R moonbag runner
                     elif strategy in ["Volatility Expansion Breakout", "High-RVOL Breakout (In Play)"]:
                         sl_multiplier = 1.10
                         tp_stage1_mult = 2.00

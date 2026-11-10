@@ -534,16 +534,19 @@ class PositionManager:
                                     pos_notional = float(pos.get("position_size", 0.0)) * current_price
                                     if pos_notional < 17.50:
                                         if stage == stages[0]:
-                                            be_level = _round_price(entry * 1.0025 if side == "BUY" else entry * 0.9975)
+                                            gain_dist = abs(current_price - entry)
+                                            # Lock in at least 50% of the gain (minimum +0.80% net above entry) so pullbacks bank real profit
+                                            locked_profit_dist = max(gain_dist * 0.50, atr * 0.85, entry * 0.0080)
+                                            be_level = _round_price(entry + locked_profit_dist if side == "BUY" else entry - locked_profit_dist)
                                             if side == "BUY" and float(pos.get("trailing_stop", 0.0)) < be_level:
                                                 pos["trailing_stop"] = be_level
                                                 pos["breakeven_activated"] = True
-                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $17.50). Locked Breakeven at {be_level} (+0.25% net) without splitting below Binance $5 limit.")
+                                                logger.info(f"💎 [MICRO-ACCOUNT TP1 PROFIT LOCK] Position notional (${pos_notional:.2f} < $17.50). Locked +{locked_profit_dist/entry*100:.2f}% profit at {be_level}.")
                                                 await self._sync_exchange_stop_loss(trade_id, pos, be_level)
                                             elif side == "SELL" and (float(pos.get("trailing_stop", 0.0)) > be_level or float(pos.get("trailing_stop", 0.0)) == 0.0):
                                                 pos["trailing_stop"] = be_level
                                                 pos["breakeven_activated"] = True
-                                                logger.info(f"🛡️ [MICRO-ACCOUNT TP1] Position notional (${pos_notional:.2f} < $17.50). Locked Breakeven at {be_level} (+0.25% net) without splitting below Binance $5 limit.")
+                                                logger.info(f"💎 [MICRO-ACCOUNT TP1 PROFIT LOCK] Position notional (${pos_notional:.2f} < $17.50). Locked +{locked_profit_dist/entry*100:.2f}% profit at {be_level}.")
                                                 await self._sync_exchange_stop_loss(trade_id, pos, be_level)
                                         elif len(stages) > 2 and stage == stages[1]:
                                             # TP2 reached: Ratchet trailing stop to bank guaranteed profit (65% of move)
@@ -1408,12 +1411,12 @@ class PositionManager:
                     # - On WIN / BREAKEVEN: 5 minutes (300s) cooldown to allow runner re-entries.
                     try:
                         from app.ai.reasoning import AiReasoningEngine
-                        is_loss = (outcome_type == "LOSS" or (pnl is not None and float(pnl) < -0.001))
-                        cooldown_sec = 1080.0 if is_loss else 300.0
+                        is_loss = (outcome_type in ["LOSS", "STOPPED_OUT", "THESIS_INVALIDATION"] or (pnl is not None and float(pnl) < -0.001))
+                        cooldown_sec = 3600.0 if is_loss else 600.0
                         reason_msg = (
-                            f"Post-loss 18m cooldown on {symbol} to prevent rapid chop re-entry ({outcome})."
+                            f"Post-loss 60m cooldown on {symbol} to prevent rapid chop re-entry ({outcome})."
                             if is_loss else
-                            f"Post-win 5m stabilization cooldown on {symbol} ({outcome})."
+                            f"Post-win 10m stabilization cooldown on {symbol} ({outcome})."
                         )
                         AiReasoningEngine.get_instance().set_cooldown(
                             symbol=symbol,
